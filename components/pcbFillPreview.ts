@@ -2,10 +2,13 @@ import type { BoardLayer, BoardZone, Footprint, Pad, PCB } from '../lib/pcb';
 import { padDrillPosition } from '../lib/pcb-layout';
 import {
   defaultCopperFillClearance,
+  preparePCBFillRules,
   padPolygon,
+  padDrillPolygon,
   polygonPath,
   worldZones,
 } from '../lib/pcb-polygons';
+import type { PCBFillRuleContext } from '../lib/pcb-clearance-sources';
 import type { Point } from '../lib/circuit';
 import { isOwnedProjectNode } from '../lib/immutable-project';
 
@@ -44,8 +47,10 @@ function padGeometry(pad: Pad) {
     pad.type,
     pad.shape,
     pad.size,
+    pad.outline,
     pad.drill,
     pad.drillOffset,
+    pad.drillSlot,
     pad.netId,
     pad.layers,
     pad.roundrectRatio,
@@ -161,7 +166,11 @@ function outlineZones(board: PCB) {
 /** Cheap conservative masks over saved fills during an unaccepted gesture.
  * These paths are presentation, never copper/connectivity or a commit result.
  * Vacated clearances remain empty until the exact accepted refill completes. */
-export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPreview {
+export function preparePCBFillPreview(
+  basis: PCB,
+  candidate: PCB,
+  rules?: PCBFillRuleContext,
+): PCBFillPreview {
   if (basis === candidate || basis.id !== candidate.id) return { changed: false, zones: [] };
   const saved = new Set(
     localZones(basis)
@@ -169,6 +178,7 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
       .map((zone) => zone.id),
   );
   if (!saved.size) return { changed: false, zones: [] };
+  const ruleLimits = preparePCBFillRules(candidate, rules);
   const oldTracks = new Map(basis.tracks.map((track) => [track.id, track]));
   const tracks = candidate.tracks.filter((track) => !sameTrack(oldTracks.get(track.id), track));
   const oldVias = new Map(basis.vias.map((via) => [via.id, via]));
@@ -208,7 +218,8 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
       pad,
       shape,
       bounds: boundsOf(shape.outer),
-      drill: pad.drill ? padDrillPosition(footprint, pad) : undefined,
+      slot: pad.drillSlot ? padDrillPolygon(footprint, pad) : undefined,
+      drill: pad.drill && !pad.drillSlot ? padDrillPosition(footprint, pad) : undefined,
     };
   });
   const changed =
@@ -233,31 +244,42 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
       )
       .map((zone) => {
         const clearance = zone.clearance > 0 ? zone.clearance : defaultCopperFillClearance;
+        const zoneOperand = ruleLimits.zone(zone);
         const bounds = zoneBounds(zone);
         const blockers: PCBFillPreview['zones'][number]['blockers'] = [];
-        for (const track of tracks)
+        for (const track of tracks) {
+          const gap =
+            track.netId !== zone.netId
+              ? ruleLimits.gap(zoneOperand, ruleLimits.track(track), clearance)
+              : clearance;
           if (
             track.layer === zone.layer &&
             track.netId !== zone.netId &&
-            overlaps(
-              bounds,
-              inflate(boundsOf([track.start, track.end]), track.width / 2 + clearance),
-            )
+            overlaps(bounds, inflate(boundsOf([track.start, track.end]), track.width / 2 + gap))
           )
             blockers.push({
               path: `M ${track.start.x} ${track.start.y} L ${track.end.x} ${track.end.y}`,
-              strokeWidth: track.width + 2 * clearance,
+              strokeWidth: track.width + 2 * gap,
             });
+        }
         for (const via of vias) {
+          const gap =
+            via.netId !== zone.netId
+              ? ruleLimits.gap(zoneOperand, ruleLimits.via(via), clearance)
+              : clearance;
           if (
             via.netId !== zone.netId &&
-            overlaps(bounds, circleBounds(via, via.diameter / 2 + clearance))
+            overlaps(bounds, circleBounds(via, via.diameter / 2 + gap))
           )
-            blockers.push({ path: circlePath(via, via.diameter / 2 + clearance), strokeWidth: 0 });
+            blockers.push({ path: circlePath(via, via.diameter / 2 + gap), strokeWidth: 0 });
           if (via.drill > 0 && overlaps(bounds, circleBounds(via, via.drill / 2)))
             blockers.push({ path: circlePath(via, via.drill / 2), strokeWidth: 0 });
         }
-        for (const { footprint, pad, shape, bounds: padBounds, drill } of padShapes) {
+        for (const { footprint, pad, shape, bounds: padBounds, drill, slot } of padShapes) {
+          const gap =
+            pad.netId !== zone.netId || pad.type === 'np_thru_hole'
+              ? ruleLimits.gap(zoneOperand, ruleLimits.pad(footprint, pad), clearance)
+              : clearance;
           const present =
             pad.type !== 'smd' ||
             (pad.layers
@@ -265,7 +287,7 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
               : zone.layer === (footprint.side === 'front' ? 'F.Cu' : 'B.Cu'));
           if (
             present &&
-            overlaps(bounds, inflate(padBounds, clearance)) &&
+            overlaps(bounds, inflate(padBounds, gap)) &&
             (pad.type === 'np_thru_hole' ||
               !pad.netId ||
               pad.netId !== zone.netId ||
@@ -274,8 +296,10 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
           )
             blockers.push({
               path: polygonPath([shape]),
-              strokeWidth: 2 * clearance,
+              strokeWidth: 2 * gap,
             });
+          if (slot && overlaps(bounds, boundsOf(slot)))
+            blockers.push({ path: polygonPath([{ outer: slot, holes: [] }]), strokeWidth: 0 });
           if (
             drill &&
             pad.drill &&

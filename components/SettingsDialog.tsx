@@ -8,9 +8,10 @@ import {
   RotateCw,
   Sun,
   Unplug,
+  PanelsTopLeft,
 } from 'lucide-react';
 import type { Agent } from './Chat';
-import AppearanceSettings, { type useAppearance } from './AppearanceSettings';
+import AppearanceSettings, { ToggleSetting, type useAppearance } from './AppearanceSettings';
 import AgentLogo from './AgentLogo';
 import Dialog from './Dialog';
 import { agentProviders } from '@/lib/agent-providers';
@@ -18,6 +19,7 @@ import { useAgentSettings } from './AgentSettings';
 import Select from './Select';
 import type { FollowUpMode } from '@/lib/agent-settings';
 import RuleSettings, { type RuleSettingsActions, type RuleSettingsProps } from './RuleSettings';
+import WorkspaceModeSelect from './WorkspaceModeSelect';
 
 export default function SettingsDialog({
   appearance,
@@ -25,6 +27,7 @@ export default function SettingsDialog({
   detecting,
   error,
   onDetect,
+  onEnterRawMode,
   onClose,
   initialSection = 'appearance',
   ruleSettings,
@@ -34,8 +37,9 @@ export default function SettingsDialog({
   detecting: boolean;
   error: string;
   onDetect: () => Promise<void>;
+  onEnterRawMode?: () => Promise<void>;
   onClose: () => void;
-  initialSection?: 'appearance' | 'agents' | 'rules';
+  initialSection?: 'appearance' | 'workspace' | 'agents' | 'rules';
   ruleSettings?: RuleSettingsProps;
 }) {
   const [section, setSection] = useState<string>(initialSection);
@@ -47,6 +51,8 @@ export default function SettingsDialog({
     suffix?: string;
   } | null>(null);
   const [cursorError, setCursorError] = useState('');
+  const [switchingMode, setSwitchingMode] = useState(false);
+  const [modeError, setModeError] = useState('');
   const cursorComposing = useRef(false);
   useEffect(() => {
     const status = window.openpe?.cursorCredentialStatus;
@@ -71,9 +77,11 @@ export default function SettingsDialog({
     setSection(next);
   }
   const agentSettings = useAgentSettings();
+  const { layoutPreferences } = appearance;
   const id = useId();
   const sections = [
     { id: 'appearance', label: 'Appearance', icon: Sun },
+    { id: 'workspace', label: 'Workspace', icon: PanelsTopLeft },
     { id: 'rules', label: 'Rule', icon: ClipboardCheck },
     { id: 'agents', label: 'Agents', icon: Bot },
   ];
@@ -151,6 +159,85 @@ export default function SettingsDialog({
         <div
           className="settings-pane"
           role="tabpanel"
+          id={id + '-workspace'}
+          aria-labelledby={id + '-workspace-tab'}
+          hidden={section !== 'workspace'}
+          tabIndex={0}
+        >
+          <div className="settings-pane-content">
+            <div className="settings-section-header">
+              <h3 className="settings-section-heading">Workspace</h3>
+            </div>
+            {onEnterRawMode && (
+              <>
+                <div
+                  className="settings-field"
+                  onPointerDownCapture={(event) => {
+                    if (cursorComposing.current) event.preventDefault();
+                  }}
+                >
+                  <span>Workspace mode</span>
+                  <WorkspaceModeSelect
+                    mode="workbench"
+                    composing={cursorComposing}
+                    disabled={switchingMode}
+                    onChange={async () => {
+                      if (switchingMode) return;
+                      setSwitchingMode(true);
+                      setModeError('');
+                      try {
+                        await onEnterRawMode();
+                        onClose();
+                      } catch (error) {
+                        setModeError((error as Error).message);
+                      } finally {
+                        setSwitchingMode(false);
+                      }
+                    }}
+                  />
+                </div>
+                {modeError && (
+                  <p className="dialog-error" role="alert">
+                    {modeError}
+                  </p>
+                )}
+              </>
+            )}
+            <div className="settings-field">
+              <span>Messages sent while the Agent is running</span>
+              <Select
+                label="Messages sent while running"
+                value={agentSettings.settings.followUpMode}
+                disabled={!agentSettings.ready}
+                onChange={(value) => agentSettings.update({ followUpMode: value as FollowUpMode })}
+                options={[
+                  { value: 'queue', label: 'Queue' },
+                  { value: 'steer', label: 'Steer' },
+                ]}
+              />
+              {agentSettings.error && (
+                <p className="dialog-error" role="alert">
+                  {agentSettings.error}
+                </p>
+              )}
+            </div>
+            <ToggleSetting
+              className="settings-field"
+              label="Layout shadow suggestions"
+              checked={layoutPreferences.enabled}
+              disabled={layoutPreferences.busy}
+              onChange={layoutPreferences.update}
+            />
+            {layoutPreferences.error && (
+              <p className="dialog-error" role="alert">
+                {layoutPreferences.error}
+              </p>
+            )}
+          </div>
+        </div>
+        <div
+          className="settings-pane"
+          role="tabpanel"
           id={id + '-rules'}
           aria-labelledby={id + '-rules-tab'}
           hidden={section !== 'rules'}
@@ -194,24 +281,6 @@ export default function SettingsDialog({
                 {error}
               </p>
             )}
-            <div className="settings-field">
-              <span>Messages sent while the Agent is running</span>
-              <Select
-                label="Messages sent while running"
-                value={agentSettings.settings.followUpMode}
-                disabled={!agentSettings.ready}
-                onChange={(value) => agentSettings.update({ followUpMode: value as FollowUpMode })}
-                options={[
-                  { value: 'queue', label: 'Queue' },
-                  { value: 'steer', label: 'Steer' },
-                ]}
-              />
-              {agentSettings.error && (
-                <p className="dialog-error" role="alert">
-                  {agentSettings.error}
-                </p>
-              )}
-            </div>
             <div className="agent-connections">
               {agentProviders.map(({ id, settingsName }) => {
                 const a = agents.find((a) => a.id === id);
@@ -266,26 +335,27 @@ export default function SettingsDialog({
                               .catch((error: Error) => setCursorError(error.message));
                           }}
                         >
-                          <label>
-                            Cursor API key
-                            <input
-                              type="password"
-                              autoComplete="off"
-                              spellCheck={false}
-                              value={cursorKey}
-                              onChange={(event) => setCursorKey(event.target.value)}
-                              onCompositionStart={() => {
-                                cursorComposing.current = true;
-                              }}
-                              onCompositionEnd={() => {
-                                cursorComposing.current = false;
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-                                  event.preventDefault();
-                              }}
-                            />
-                          </label>
+                          <input
+                            type="password"
+                            aria-label="Cursor API key"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={cursorKey}
+                            onChange={(event) => setCursorKey(event.target.value)}
+                            onCompositionStart={() => {
+                              cursorComposing.current = true;
+                            }}
+                            onCompositionEnd={() => {
+                              cursorComposing.current = false;
+                            }}
+                            onKeyDown={(event) => {
+                              if (
+                                event.nativeEvent.isComposing ||
+                                event.nativeEvent.keyCode === 229
+                              )
+                                event.preventDefault();
+                            }}
+                          />
                           <div className="cursor-key-actions">
                             <button className="dialog-button primary" type="submit">
                               Save key
@@ -298,7 +368,9 @@ export default function SettingsDialog({
                                 if (cursorComposing.current) return;
                                 const remove = window.openpe?.cursorCredentialRemove;
                                 if (!remove) {
-                                  setCursorError('Cursor API key storage requires the desktop app.');
+                                  setCursorError(
+                                    'Cursor API key storage requires the desktop app.',
+                                  );
                                   return;
                                 }
                                 void remove()

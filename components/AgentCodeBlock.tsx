@@ -246,7 +246,7 @@ export default function AgentCodeBlock({
               disabled={!validLine}
               onClick={goToLine}
             >
-              Go to line
+              Jump
             </button>
           }
         >

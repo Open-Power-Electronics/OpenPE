@@ -20,7 +20,7 @@ import { prepareModelShaders } from '@/lib/model-shader-warmup';
 
 export const MODEL_RENDER_SAMPLES = 64;
 export const MODEL_RENDER_MAX_DIMENSION = 1920;
-export const MODEL_RENDER_COMPILE_TIMEOUT_MS = 120000;
+const MODEL_RENDER_COMPILE_TIMEOUT_MS = 120000;
 const modelRenderSupersampling = 1.5;
 const MODEL_RENDER_FRAME_BUDGET_MS = 8;
 const MODEL_RENDER_TILES_PER_FRAME = 3;
@@ -113,7 +113,7 @@ const modelDirectLightContribution = /* glsl */ `
   }
 
 `;
-export type ModelStudioRenderOptions = {
+type ModelStudioRenderOptions = {
   dark: boolean;
   bounds: THREE.Box3;
   moving?: boolean;
@@ -121,7 +121,7 @@ export type ModelStudioRenderOptions = {
   /** An accumulation-only tick; explicit view updates and captures omit this. */
   continuation?: boolean;
 };
-export type ModelRenderProgress = { samples: number; complete: boolean };
+type ModelRenderProgress = { samples: number; complete: boolean };
 
 /** Show early progress, then amortize filtering across four complete samples. */
 function modelRenderPresentationSample(samples: number): number {
@@ -512,7 +512,7 @@ export function modelRenderBvhStackDepth(bvh: MeshBVH): number {
 }
 
 /** Constructor, scene uploads and GPU samples all restore the shared renderer on failure. */
-export function withModelRenderState<T>(renderer: THREE.WebGLRenderer, action: () => T): T {
+function withModelRenderState<T>(renderer: THREE.WebGLRenderer, action: () => T): T {
   const previous = {
     target: renderer.getRenderTarget(),
     cubeFace: renderer.getActiveCubeFace(),
@@ -1052,7 +1052,11 @@ function createPathTracingBackend(
       const outputHeight = Math.max(1, Math.min(height, drawingSize.y));
       const downsample = width !== outputWidth || height !== outputHeight;
       if (downsample) {
-        if (!resolvedCurrent || resolved.width !== outputWidth || resolved.height !== outputHeight) {
+        if (
+          !resolvedCurrent ||
+          resolved.width !== outputWidth ||
+          resolved.height !== outputHeight
+        ) {
           resolvedCurrent = false;
           resolved.setSize(outputWidth, outputHeight);
           resolveMaterial.uniforms.sourceSize.value.set(width, height);

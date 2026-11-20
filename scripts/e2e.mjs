@@ -22,6 +22,7 @@ import { closeDisplayDrawer } from './visualization-test-helpers.mjs';
 import { checkInspectorResize, checkFieldProperties } from './schematic-panel-test-helpers.mjs';
 import { watchCanvasResizeFrames } from './check-canvas-resize.mjs';
 import { _electron as electron } from 'playwright';
+import { electronTestLaunch } from './electron-test-launch.mjs';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -49,6 +50,7 @@ const fillSnapshotAsNative = async (page, source) => fillNativeProject(page, par
 async function chooseSelect(page, trigger, value) {
   await trigger.scrollIntoViewIfNeeded();
   await trigger.focus();
+  await settleNativeLayout(page);
   await trigger.press('ArrowDown');
   const target = page.getByRole('option', { name: value, exact: true });
   const index = Number((await target.getAttribute('id')).split('-').at(-1));
@@ -57,6 +59,12 @@ async function chooseSelect(page, trigger, value) {
   for (let i = 0; i < index; i++) await trigger.press('ArrowDown');
   await trigger.press('Enter');
 }
+async function settleNativeLayout(page) {
+  if (process.platform === 'linux')
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+}
 await mkdir('test-results', { recursive: true });
 await Promise.all(
   ['rejected', 'imported', 'rectifier', 'saved', 'closing'].map((name) =>
@@ -64,9 +72,7 @@ await Promise.all(
   ),
 );
 const application = await electron.launch({
-  ...(process.env.OPENPE_EXECUTABLE
-    ? { executablePath: process.env.OPENPE_EXECUTABLE, args: [] }
-    : { args: ['.'] }),
+  ...electronTestLaunch(),
   env: {
     ...process.env,
     OPENPE_TEST: '1',
@@ -119,7 +125,7 @@ async function closeCurrentProject(page) {
     .then((label) => /Unsaved changes/.test(label ?? ''));
   await fileMenuAction(page, 'Close project');
   const dialog = page.getByRole('dialog', { name: 'Save changes?', exact: true });
-  if (unsaved) await dialog.getByRole('button', { name: "Don't save", exact: true }).click();
+  if (unsaved) await dialog.getByRole('button', { name: 'Discard', exact: true }).click();
   await page.waitForFunction(
     ({ selector, expected }) => document.querySelectorAll(selector).length === expected,
     { selector: projectButtonSelector, expected: count - 1 },
@@ -410,7 +416,10 @@ async function checkHome(page) {
   const rectifierPath = path.join(nativeFixtures, 'rectifier', 'rectifier.kicad_sch');
   await writeFile(
     rectifierPath,
-    await readFile(path.join(root, 'tests/fixtures/kicad/kicad-rectifier.kicad_sch'), 'utf8'),
+    await readFile(
+      path.join(root, 'examples/lm2596-to220-5-buck/lm2596-to220-5-buck.kicad_sch'),
+      'utf8',
+    ),
   );
   await application.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
@@ -560,7 +569,12 @@ async function checkAppearance(page) {
       return el.scrollWidth <= el.clientWidth && footer.bottom <= innerHeight;
     }),
   );
-  await dialog.getByRole('combobox', { name: 'Text size', exact: true }).press('ArrowDown');
+  const textSizeMenu = dialog.getByRole('combobox', { name: 'Text size', exact: true });
+  await textSizeMenu.scrollIntoViewIfNeeded();
+  // Native Linux resize/scroll events can arrive after viewport emulation
+  // resolves. Let layout settle before opening a menu that closes on either.
+  await settleNativeLayout(page);
+  await textSizeMenu.press('ArrowDown');
   await page.getByRole('listbox').waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await dialog.isVisible(), true, 'Menu Escape keeps Settings open.');
@@ -1034,6 +1048,7 @@ async function checkDialogs(page) {
   await addComponent.click();
   const search = page.getByLabel('Search components', { exact: true });
   await search.fill('no matching symbol');
+  await search.press('Enter');
   await page.getByText('No matching symbols.', { exact: true }).waitFor();
   await page.keyboard.press('Shift+Tab');
   assert.equal(
@@ -1053,6 +1068,7 @@ async function checkDialogs(page) {
   );
   await page.keyboard.press('Tab');
   await search.fill('');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await capture('test-results/dialog-components.png');
   await search.focus();
   await page.keyboard.press('Escape');
@@ -1779,6 +1795,7 @@ async function checkCanvasNavigation(page) {
   }
   await page.getByRole('button', { name: 'Add component', exact: true }).click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R', { exact: true }) })
@@ -1809,9 +1826,16 @@ async function checkCanvasNavigation(page) {
 }
 try {
   const page = await application.firstWindow();
-  await application.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()[0].showInactive(),
-  );
+  if (process.platform === 'linux')
+    await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
+  else
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].showInactive(),
+    );
   console.log(`Desktop section: ${section}; isolated profile: ${profile}`);
   page.setDefaultTimeout(30_000);
   const errors = [];
@@ -2013,6 +2037,7 @@ try {
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();
     await page.getByRole('button', { name: 'Add component', exact: true }).click();
     await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
     await page
       .locator('.library-results button')
       .filter({ has: page.getByText('R', { exact: true }) })
@@ -2205,7 +2230,10 @@ try {
       },
       { selector: liveTiming, initial: initialElapsed },
     );
-    assert.equal(await page.locator('.agent-process:not([data-running]) .message-timing').count(), 0);
+    assert.equal(
+      await page.locator('.agent-process:not([data-running]) .message-timing').count(),
+      0,
+    );
     await push({
       type: 'timing',
       timings: { resolvedMs: 80, spawnedMs: 100, readyMs: 250, submittedMs: 250, firstTextMs: 650 },

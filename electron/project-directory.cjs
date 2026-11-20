@@ -4,7 +4,10 @@ const { randomUUID } = require('node:crypto');
 const { isUtf8 } = require('node:buffer');
 const { nativeName } = require('./native-project.cjs');
 const { assertContainedPath, canonicalDirectory } = require('../server/host-path.cjs');
-const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
+const {
+  MAX_MODEL_BYTES,
+  inspectSpiceModelLibrary,
+} = require('../plugins/spice-simulation/host/spice-model-declarations.cjs');
 
 const maxEntries = 4096;
 const maxDepth = 12;
@@ -306,7 +309,7 @@ function createProjectDirectoryReader(grants) {
       );
       if (!/\.(?:lib|mod|cir|sp|spice)$/i.test(entry.name))
         throw new Error('Select a SPICE model library.');
-      return spiceModelDeclarations(bytes);
+      return inspectSpiceModelLibrary(bytes, entry.name);
     },
     release: (id) => listings.delete(id),
     clear: () => listings.clear(),

@@ -1,4 +1,6 @@
 'use client';
+import { registerPcbDesignCapability } from '../plugins/pe-layout-skill/renderer/capabilities';
+import { registerRuntimePluginCapabilities } from '../plugins/runtime/client';
 import PropertyDeleteButton from './PropertyDeleteButton';
 import { NumberField } from './LayoutPropertyFields';
 import {
@@ -18,6 +20,14 @@ import {
 import { createPortal } from 'react-dom';
 import { ProjectCore } from '@/core/project-core';
 import { isCommandModifier } from '@/lib/command-modifier';
+import PanelFindController, { type PanelFindHandle } from './PanelFindController';
+import {
+  resolveComponentHighlight,
+  type ComponentHighlightOrigin,
+  type ComponentMode,
+  type ModelComponentFocus,
+} from './component-highlight';
+import type { CanvasMenuAction } from './CanvasContextMenu';
 import { desktopChrome } from '@/lib/desktop-chrome';
 import { createNativeProjectDirtyChecker } from '@/lib/native-project-dirty';
 import { createBlankProject, DEFAULT_PROJECT_FILENAME } from '@/lib/create-blank-project';
@@ -40,10 +50,12 @@ import {
   type ProjectFileCapabilityPorts,
 } from '@/lib/project-file-capabilities';
 import type { AgentThermalContext } from '@/context/agent-thermal-context';
-import ThermalField, { ThermalFieldMarkers } from './ThermalField';
-import ThermalComponentHighlight from './ThermalComponentHighlight';
-import { GitIcon, SymbolIcon, WireIcon } from './EditorIcons';
-import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalLayoutResults';
+import ThermalField, { ThermalFieldMarkers } from '../plugins/layout-thermal/renderer/ThermalField';
+import ThermalComponentHighlight from '../plugins/layout-thermal/renderer/ThermalComponentHighlight';
+import { ComponentHighlightIcon, GitIcon, SymbolIcon, WireIcon } from './EditorIcons';
+import ThermalLayoutResults, {
+  type ThermalLayoutPresentation,
+} from '../plugins/layout-thermal/renderer/ThermalLayoutResults';
 import {
   AlertCircle,
   Blocks,
@@ -68,6 +80,8 @@ import { api } from '@/lib/bridge';
 import { downloadBytes, downloadText } from '@/lib/download';
 import { projectExportFormats, type ProjectExportFormat } from '@/lib/export-formats';
 import { projectPCBDesignRules } from '@/lib/kicad-project';
+import { pcbFillRuleContext } from '@/lib/pcb-clearance-sources';
+import WorkspaceLoading from './WorkspaceLoading';
 import {
   importDocument,
   parseProject,
@@ -139,8 +153,17 @@ const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
 import { type PCB, type Footprint } from '@/lib/pcb';
 import { findPCBGraphic } from '@/lib/pcb-layout';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
+import { loadLibraryFootprint, prepareSchematicPackage } from '@/lib/library-package';
+import { attachOnlineFootprint } from '@/lib/library-project-assets';
+import type { FootprintSource } from '@/lib/pcb-sync';
 import SchematicLayers from './SchematicLayers';
 import { visibleSchematicIds } from '@/lib/schematic-view';
+import {
+  partSchematicSection,
+  schematicSectionIds,
+  type SchematicSectionView,
+} from '@/lib/schematic-section';
+import SchematicSectionSwitch from './SchematicSectionSwitch';
 import {
   defaultSchematicSelectionFilters,
   selectableSchematicIds,
@@ -156,8 +179,16 @@ import DeferredDialog from './DeferredDialog';
 import DesktopTitlebar, {
   titlebarMenuOptions,
   runTitlebarMenuAction,
+  type EditTarget,
   type TitlebarMenu,
 } from './DesktopTitlebar';
+import {
+  dispatchEditKey,
+  runTextEdit,
+  textEditTarget,
+  visibleEditTarget,
+  writableText,
+} from './edit-commands';
 import WorkspaceDivider from './WorkspaceDivider';
 import type { useAppearance } from './AppearanceSettings';
 import PartsList from './PartsList';
@@ -170,7 +201,7 @@ import FootprintModels, { UnassignedModelField } from './FootprintModels';
 import FieldProperties from './FieldProperties';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
 import BottomPanelResize from './BottomPanelResize';
-import type { ProbeTarget } from '@/lib/spice';
+import type { ProbeTarget } from '@/plugins/spice-simulation/domain/spice';
 import AnnotationDialog from './AnnotationDialog';
 import { validateAnnotations, type AgentAnnotation } from '@/lib/agent-annotations';
 import { captureAgentPresentation } from '@/context/agent-presentation';
@@ -179,14 +210,15 @@ import { agentProject, assertAgentSourceDraftSafe } from '@/lib/agent-project-ac
 import type { AgentSimulationContext } from '@/context/agent-simulation-context';
 import {
   LAYOUT_PARASITICS_PLUGIN_ID,
+  EMC_PLUGIN_ID,
   SPICE_PLUGIN_ID,
   THERMAL_PLUGIN_ID,
-  useWorkbenchPlugins,
-  registerLayoutParasiticsCapability,
-  registerWorkbenchPluginCapabilities,
-} from '@/lib/workbench-plugins';
+} from '../plugins/catalog.mjs';
+import { useWorkbenchPlugins, registerWorkbenchPluginCapabilities } from '@/lib/workbench-plugins';
+import { registerLayoutParasiticsCapability } from '../plugins/layout-parasitics/renderer/capabilities';
+import { registerEmcCapabilities } from '../plugins/emc-analysis/renderer/capabilities';
 import { schematicTexts } from '@/lib/schematic-text';
-import { displayPartValue, partFields } from '@/lib/library';
+import { displayPartValue, onlineFootprintLibrary, partFields, partFootprint } from '@/lib/library';
 import { preparePartGeometry, preparePartProperties } from '@/lib/part-properties';
 import { val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
@@ -211,9 +243,16 @@ import {
 } from '@/lib/design-rule-checks';
 
 const SourceEditor = lazy(() => import('./SourceEditor'));
-const SimulationDialog = lazy(() => import('./SimulationDialog'));
-const ThermalSimulation = lazy(() => import('./ThermalSimulation'));
-const LayoutParasiticsPanel = lazy(() => import('./LayoutParasiticsPanel'));
+const SimulationDialog = lazy(
+  () => import('../plugins/spice-simulation/renderer/SimulationDialog'),
+);
+const ThermalSimulation = lazy(
+  () => import('../plugins/layout-thermal/renderer/ThermalSimulation'),
+);
+const LayoutParasiticsPanel = lazy(
+  () => import('../plugins/layout-parasitics/renderer/LayoutParasiticsPanel'),
+);
+const EmcAnalysisPanel = lazy(() => import('../plugins/emc-analysis/renderer/EmcAnalysisPanel'));
 const RuleCheckPanel = lazy(() => import('./RuleCheckPanel'));
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 const ComponentDrawingEditor = lazy(() => import('./ComponentDrawingEditor'));
@@ -271,6 +310,7 @@ type Modal =
   | null;
 type Confirmation = {
   kind: ConfirmationKind;
+  documentTitle?: string;
   action: (saveFirst?: boolean) => void | Promise<void>;
 };
 function ToolButton({
@@ -279,6 +319,8 @@ function ToolButton({
   active,
   disabled,
   buttonRef,
+  onKeyDown,
+  onPointerDown,
   onClick,
   children,
 }: {
@@ -287,6 +329,8 @@ function ToolButton({
   active?: boolean;
   disabled?: boolean;
   buttonRef?: React.Ref<HTMLButtonElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -298,6 +342,8 @@ function ToolButton({
       title={hint}
       aria-pressed={active}
       disabled={disabled}
+      onKeyDown={onKeyDown}
+      onPointerDown={onPointerDown}
       onClick={onClick}
     >
       {children}
@@ -335,6 +381,8 @@ export default function Workbench({
   appearanceSettings,
   startupError,
   draftStatus,
+  rawMode = false,
+  onEnterRawMode,
 }: {
   documentId: string;
   active: boolean;
@@ -374,11 +422,15 @@ export default function Workbench({
   appearanceSettings: ReturnType<typeof useAppearance>;
   startupError: string;
   draftStatus?: string;
+  rawMode?: boolean;
+  onEnterRawMode?: () => Promise<void>;
 }) {
   // Workspace supplies a stable accessor so recovery reports do not become
   // render props or retain a second initial conversation/source snapshot.
   const initialState = getInitialState?.(documentId) ?? providedInitialState;
-  const prepareProject = useRef<(next: Project) => Project>((next) => next);
+  const prepareProject = useRef<(next: Project, previous: Project | null) => Project>(
+    (next) => next,
+  );
   const [core] = useState(
     () =>
       new ProjectCore(
@@ -389,7 +441,7 @@ export default function Workbench({
         {
           draft: initialState?.sourceDraft,
           nativeEntryName: initialState ? projectFilename(initialState.filename) : undefined,
-          prepare: (next) => prepareProject.current(next),
+          prepare: (next, previous) => prepareProject.current(next, previous),
         },
       ),
   );
@@ -438,6 +490,18 @@ export default function Workbench({
   closedSchematicIdsRef.current = closedSchematicIds;
   const activeSchematicRef = useRef(doc?.id);
   activeSchematicRef.current = doc?.id;
+  const [schematicSections, setSchematicSections] = useState<Record<string, SchematicSectionView>>(
+    {},
+  );
+  const schematicSection = schematicSections[doc?.id ?? ''] ?? 'all';
+  const schematicSectionRef = useRef(schematicSection);
+  schematicSectionRef.current = schematicSection;
+  const schematicComposing = useRef(false);
+  const editComposing = useRef(false);
+  const propertiesPending = useRef(false);
+  const onPropertiesPendingChange = useCallback((pending: boolean) => {
+    propertiesPending.current = pending;
+  }, []);
   const projectRef = useRef(project);
   projectRef.current = project;
   const source = coreSnapshot.source;
@@ -469,12 +533,13 @@ export default function Workbench({
     const id = activeSchematicRef.current;
     if (!id) return;
     setFileSelections((previous) => {
-      const current = previous[id] ?? emptySelection;
+      const key = id;
+      const current = previous[key] ?? emptySelection;
       const value = typeof next === 'function' ? next(current) : next;
       return value === current ||
         (value.length === current.length && value.every((item, index) => item === current[index]))
         ? previous
-        : { ...previous, [id]: value };
+        : { ...previous, [key]: value };
     });
   }, []);
   const [inspectedPartId, setInspectedPartId] = useState<string | null>(null);
@@ -523,7 +588,15 @@ export default function Workbench({
   const parasiticsAvailable = !!workbenchPlugins.catalog?.plugins.some(
     (plugin) => plugin.id === LAYOUT_PARASITICS_PLUGIN_ID && plugin.installed && plugin.enabled,
   );
-  const [layoutAnalysis, setLayoutAnalysis] = useState<'thermal' | 'parasitics' | null>(null);
+  const emcAvailable = !!workbenchPlugins.catalog?.plugins.some(
+    (plugin) => plugin.id === EMC_PLUGIN_ID && plugin.installed && plugin.enabled,
+  );
+  const [layoutAnalysis, setLayoutAnalysis] = useState<'thermal' | 'parasitics' | 'emc' | null>(
+    null,
+  );
+  const emcButton = useRef<HTMLButtonElement>(null);
+  const emcLocateRef = useRef<((objectId: string) => boolean) | null>(null);
+  const [emcSelectedNetId, setEmcSelectedNetId] = useState<string>();
   const thermalEnabled = layoutAnalysis === 'thermal';
   const parasiticsButton = useRef<HTMLButtonElement>(null);
   const closeThermal = useCallback(
@@ -566,8 +639,27 @@ export default function Workbench({
         : null,
     [spiceAvailable, simulationOpened, project, doc],
   );
-  const [placement, setPlacement] = useState<{ symbol: SExpr; unit: number }>();
+  const [placement, setPlacement] = useState<{
+    symbol: SExpr;
+    unit: number;
+    unavailableFootprint?: string;
+  }>();
   const [modal, setModal] = useState<Modal>(null);
+  const workspaceElement = useRef<HTMLDivElement>(null);
+  const panelFindControl = useRef<PanelFindHandle | null>(null);
+  const openPanelFind = useCallback(() => panelFindControl.current?.open(), []);
+  const findAgent = useCallback(() => panelFindControl.current?.open('agent'), []);
+  const [canvasFocus, setCanvasFocus] = useState<
+    (RuleCheckFocus & { kind: 'erc' | 'drc'; revision: number; sheetId?: string }) | null
+  >(null);
+  const [modelComponentFocus, setModelComponentFocus] = useState<
+    (ModelComponentFocus & { revision: number }) | null
+  >(null);
+  useEffect(() => {
+    if (active && screen === 'workspace') return;
+    setCanvasFocus(null);
+    setModelComponentFocus(null);
+  }, [active, screen]);
   const [annotationTarget, setAnnotationTarget] = useState<(Point & { id?: string }) | null>(null);
   const propertiesInspector = useRef<HTMLElement>(null);
   const propertiesDock = useRef<HTMLDivElement>(null);
@@ -592,6 +684,11 @@ export default function Workbench({
         ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [active, screen, doc?.id]);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  useEffect(() => {
+    if (!modal && !confirmation) return;
+    setCanvasFocus(null);
+    setModelComponentFocus(null);
+  }, [modal, confirmation]);
   const confirmationRef = useRef(confirmation);
   confirmationRef.current = confirmation;
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -611,6 +708,17 @@ export default function Workbench({
     if (!canShowParasitics)
       setLayoutAnalysis((current) => (current === 'parasitics' ? null : current));
   }, [canShowParasitics]);
+  const canShowEmc =
+    active &&
+    screen === 'workspace' &&
+    view === 'layout' &&
+    emcAvailable &&
+    !sourcePending &&
+    !coreSnapshot.editingBlocked &&
+    Boolean(project?.pcb);
+  useEffect(() => {
+    if (!canShowEmc) setLayoutAnalysis((current) => (current === 'emc' ? null : current));
+  }, [canShowEmc]);
   // Source stays mounted after first use, retaining its text history across views.
   const [sourceOpened, setSourceOpened] = useState(sourceDraft !== null);
   const [gitOpened, setGitOpened] = useState(false);
@@ -692,6 +800,7 @@ export default function Workbench({
   const simulationVisible = spiceAvailable && simulationEnabled && view === 'canvas';
   const thermalVisible = thermalAvailable && thermalEnabled && view === 'layout';
   const parasiticsVisible = canShowParasitics && layoutAnalysis === 'parasitics';
+  const emcVisible = canShowEmc && layoutAnalysis === 'emc';
   const [parasiticsTerminals, setParasiticsTerminals] = useState<
     readonly { id: string; netId: string }[]
   >([]);
@@ -699,7 +808,7 @@ export default function Workbench({
   useLayoutEffect(() => {
     setParasiticsTerminals((current) => (current.length ? [] : current));
   }, [parasiticsVisible, coreSnapshot.revision]);
-  const layoutAnalysisVisible = thermalVisible || parasiticsVisible;
+  const layoutAnalysisVisible = thermalVisible || parasiticsVisible || emcVisible;
   const showLayoutSidebar = useCallback(() => {
     setLayoutAnalysis(null);
     showRightSidebar();
@@ -749,6 +858,7 @@ export default function Workbench({
   });
   const [drcSeverities, setDRCSeverities] = useState<PCBDesignRuleConfig['severities']>({});
   const nativeFiles = project?.nativeFiles;
+  const fillRules = useMemo(() => pcbFillRuleContext({ nativeFiles }), [nativeFiles]);
   const drcSettings = useMemo(
     () => ({ ...projectPCBDesignRules(nativeFiles), severities: drcSeverities }),
     [nativeFiles, drcSeverities],
@@ -816,6 +926,39 @@ export default function Workbench({
     null,
   );
   const ruleFocusSequence = useRef(0);
+  const handledCanvasFocus = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      modal ||
+      !canvasFocus ||
+      canvasFocus.revision !== coreSnapshot.revision ||
+      coreSnapshot.editingBlocked ||
+      handledCanvasFocus.current === canvasFocus.request
+    )
+      return;
+    if (
+      (canvasFocus.kind === 'erc' && (view !== 'canvas' || canvasFocus.sheetId !== doc?.id)) ||
+      (canvasFocus.kind === 'drc' && view !== 'layout')
+    )
+      return;
+    handledCanvasFocus.current = canvasFocus.request;
+    workspaceElement.current
+      ?.querySelector<HTMLElement | SVGSVGElement>(
+        canvasFocus.kind === 'erc' ? '.canvas-wrap > svg' : '[data-testid="layout-canvas"]',
+      )
+      ?.focus({ preventScroll: true });
+  }, [
+    active,
+    screen,
+    modal,
+    canvasFocus,
+    coreSnapshot.revision,
+    coreSnapshot.editingBlocked,
+    view,
+    doc?.id,
+  ]);
   const ruleWork = useRef<AbortController | null>(null);
   const ruleInput = useRef({
     lastActivity: -Infinity,
@@ -1011,7 +1154,9 @@ export default function Workbench({
       rulesOpen === 'model' ||
       ruleReportStale ||
       sourcePending ||
-      coreSnapshot.editingBlocked
+      coreSnapshot.editingBlocked ||
+      schematicComposing.current ||
+      (rulesOpen === 'erc' && propertiesDraftPending())
     )
       return;
     const kind = rulesOpen;
@@ -1026,13 +1171,21 @@ export default function Workbench({
       core.getSnapshot().editingBlocked ||
       activeSchematicRef.current !== schematicId ||
       !ruleLifetime.current.active ||
-      ruleLifetime.current.screen !== 'workspace'
+      ruleLifetime.current.screen !== 'workspace' ||
+      schematicComposing.current ||
+      (kind === 'erc' && propertiesDraftPending())
     )
       return;
     if (kind === 'erc') {
       setTool('select');
-      const selectable = selectableSchematicIds(doc!, layers, selectionFilters);
-      setSelection(issue.objectIds.filter((id) => selectable.has(id)));
+      const section = revealSchematicTargets(doc!, issue.objectIds);
+      const selectable = selectableSchematicIds(doc!, layers, selectionFilters, section);
+      setFileSelections((previous) => ({
+        ...previous,
+        [doc!.id]: issue.objectIds.filter((id) => selectable.has(id)),
+      }));
+      setInspectedPartId(null);
+      setExplicitPropertiesId(null);
       setPropertiesDismissed(true);
     }
     setRuleFocus({
@@ -1226,8 +1379,8 @@ export default function Workbench({
   const layoutGridSpacing = appearanceSettings.appearance.layoutGridSpacing;
   const modelGridSpacing = appearanceSettings.appearance.modelGridSpacing;
   const selectableIds = useMemo(
-    () => (doc ? selectableSchematicIds(doc, layers, selectionFilters) : null),
-    [doc, layers, selectionFilters],
+    () => (doc ? selectableSchematicIds(doc, layers, selectionFilters, schematicSection) : null),
+    [doc, layers, selectionFilters, schematicSection],
   );
   useEffect(() => {
     if (!selectableIds) return;
@@ -1260,9 +1413,9 @@ export default function Workbench({
         : next;
     });
   }, []);
-  prepareProject.current = (next) => {
+  prepareProject.current = (next, previous) => {
     try {
-      const synced = pcbSync.current.prepare(next);
+      const synced = pcbSync.current.prepare(next, previous);
       if (synced) {
         setLayoutSyncStatus({ pending: false, error: '', warnings: synced.warnings });
         return synced.project;
@@ -1328,12 +1481,7 @@ export default function Workbench({
       });
       return () => controller.abort();
     }
-    const promise = pcbSync.current.resolve(
-      project,
-      async (id, signal) =>
-        (await api(`libraries/footprints?id=${encodeURIComponent(id)}`, { signal })).json(),
-      controller.signal,
-    );
+    const promise = pcbSync.current.resolve(project, loadLibraryFootprint, controller.signal);
     pcbSyncTask.current = { basis: project, promise, controller };
     setLayoutSyncStatus((s) => ({ ...s, pending: true, error: '' }));
     void promise
@@ -1355,8 +1503,7 @@ export default function Workbench({
         ? await task.promise
         : await pcbSync.current.resolve(
             snapshot,
-            async (id, signal) =>
-              (await api(`libraries/footprints?id=${encodeURIComponent(id)}`, { signal })).json(),
+            loadLibraryFootprint,
             new AbortController().signal,
           );
     if (core.getSnapshot().sourceDraft !== null)
@@ -1396,12 +1543,27 @@ export default function Workbench({
       prepareModelCad: (objects, signal) => prepareModelCadObjects(core, objects, signal),
     });
     const disposePlugins = registerWorkbenchPluginCapabilities(capabilityHost);
-    const disposeParasitics = registerLayoutParasiticsCapability(capabilityHost, core.getSnapshot);
+    const disposeGuidance = registerPcbDesignCapability(capabilityHost);
+    const disposeRuntime = registerRuntimePluginCapabilities(capabilityHost);
+    const disposeParasitics = registerLayoutParasiticsCapability(
+      capabilityHost,
+      core.getSnapshot,
+      (next) => core.commitProject(next),
+    );
+    const disposeEmc = registerEmcCapabilities(capabilityHost, core.getSnapshot);
     const disposeProviderPlugins = registerProviderPluginCapabilities(capabilityHost);
     const disposeLibraries = registerLibraryCapabilities(capabilityHost, core, {
       available: () => resourcePorts.current.available?.() ?? false,
       spiceAvailable: () => resourcePorts.current.spiceAvailable?.() ?? false,
       getFileId: () => resourcePorts.current.getFileId?.(),
+      stageFootprint: (source) => {
+        const previous = pcbSync.current.sources.get(source.id);
+        pcbSync.current.sources.set(source.id, source);
+        return () => {
+          if (previous) pcbSync.current.sources.set(source.id, previous);
+          else pcbSync.current.sources.delete(source.id);
+        };
+      },
       get chooseComponentModel() {
         return resourcePorts.current.chooseComponentModel;
       },
@@ -1420,7 +1582,10 @@ export default function Workbench({
       disposeFiles();
       disposeLibraries();
       disposeProviderPlugins();
+      disposeRuntime();
+      disposeGuidance();
       disposeParasitics();
+      disposeEmc();
       disposePlugins();
       disposeCore();
     };
@@ -1511,6 +1676,17 @@ export default function Workbench({
         setScreen('workspace');
       },
       snapshot: readCloseSnapshot,
+      suspendForRawKiCad: () => {
+        if (nativeFileBusy.current || directoryEditorRef.current.saving || closingDocument.current)
+          throw new Error('Wait for the project file operation to finish before switching modes.');
+        const reason = 'The workbench is paused in Raw KiCad mode.';
+        core.setEditingBlocked(reason);
+        capabilityHost.suspend(reason);
+        return () => {
+          core.setEditingBlocked(null);
+          capabilityHost.resume();
+        };
+      },
       notify,
       fileAction: (action) => fileActionRef.current(action),
       requestClose: (done, cancel) => {
@@ -1530,7 +1706,7 @@ export default function Workbench({
       },
     });
     return () => registerController(documentId, null);
-  }, [documentId, registerController, readCloseSnapshot]);
+  }, [documentId, registerController, readCloseSnapshot, core, capabilityHost]);
   useEffect(() => {
     if (initialNotice) notify(initialNotice);
     else if (recovered) notify('Recovered your previous project draft.', 'recovery');
@@ -1544,9 +1720,9 @@ export default function Workbench({
     }
   }
   const commit = useCallback(
-    (next: Circuit) => {
+    (next: Circuit, nativeFiles?: Project['nativeFiles']) => {
       try {
-        return core.replaceSchematic(next);
+        return core.replaceSchematic(next, nativeFiles);
       } catch (error) {
         notify((error as Error).message);
         return false;
@@ -1555,9 +1731,14 @@ export default function Workbench({
     [core, notify],
   );
   const commitBoard = useCallback(
-    (board: PCB) => {
+    (board: PCB, source?: FootprintSource) => {
       try {
-        return core.replaceBoard(board);
+        const snapshot = core.getSnapshot();
+        if (!snapshot.project) return false;
+        const packaged = source
+          ? attachOnlineFootprint({ ...snapshot.project, pcb: board }, source)
+          : snapshot.project;
+        return core.replaceBoard(board, packaged.nativeFiles);
       } catch (error) {
         notify((error as Error).message);
         return false;
@@ -1570,6 +1751,8 @@ export default function Workbench({
   function cancelPendingNavigation() {
     navigationIntent.current++;
     sourcePreparation.current?.abort();
+    setCanvasFocus(null);
+    setModelComponentFocus(null);
     return navigationIntent.current;
   }
   useLayoutEffect(
@@ -1633,13 +1816,22 @@ export default function Workbench({
     if (intent !== navigationIntent.current) return false;
     if (next === 'source') setSourceOpened(true);
     if (next === '3d') setObjectOpened(true);
-    if (next === 'layout') {
-      setLayoutOpened(true);
-      if (layoutSyncStatus.error) setLayoutRetry((value) => value + 1);
-    }
+    if (next === 'layout') setLayoutOpened(true);
+    if (next === 'layout' || next === '3d') retryLayoutSync();
     if (next !== view) setModal(null);
     setView(next);
     return true;
+  }
+  function retryLayoutSync() {
+    const snapshot = core.getSnapshot();
+    if (
+      !layoutSyncStatus.error ||
+      layoutSyncStatus.pending ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked !== null
+    )
+      return;
+    setLayoutRetry((value) => value + 1);
   }
   async function openProjectHistory(signal?: AbortSignal) {
     signal?.throwIfAborted();
@@ -1661,6 +1853,83 @@ export default function Workbench({
     setActiveSchematicId(id);
     setView('canvas');
   }
+  const changeSchematicSection = useCallback(
+    (next: SchematicSectionView) => {
+      const state = core.getSnapshot();
+      const id = activeSchematicRef.current;
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        view !== 'canvas' ||
+        !id ||
+        modal ||
+        confirmation ||
+        document.querySelector('dialog[open]') ||
+        state.sourceDraft !== null ||
+        state.editingBlocked ||
+        schematicComposing.current
+      )
+        return false;
+      if (propertiesDraftPending()) {
+        notify('Apply or discard the Properties edits before switching section.');
+        return false;
+      }
+      if (next === schematicSectionRef.current) return true;
+      cancelPendingNavigation();
+      setSchematicMoveRequest(null);
+      setSchematicNavigationRequest(null);
+      setRuleFocus(null);
+      setCanvasFocus(null);
+      setPropertiesFocusRequest(null);
+      setInspectedPartId(null);
+      setExplicitPropertiesId(null);
+      setPropertiesDismissed(false);
+      setTool('select');
+      setSchematicSections((previous) => ({ ...previous, [id]: next }));
+      return true;
+    },
+    [active, screen, view, modal, confirmation, core, notify],
+  );
+  function revealSchematicTargets(
+    sheet: Circuit,
+    objectIds: readonly string[],
+  ): SchematicSectionView {
+    const section =
+      sheet.id === activeSchematicRef.current
+        ? schematicSectionRef.current
+        : (schematicSections[sheet.id] ?? 'all');
+    if (section === 'all') return section;
+    const ids = schematicSectionIds(sheet, section);
+    if (objectIds.every((id) => ids.has(id))) return section;
+    setSchematicMoveRequest(null);
+    setSchematicNavigationRequest(null);
+    setRuleFocus(null);
+    setCanvasFocus(null);
+    setPropertiesFocusRequest(null);
+    setSchematicSections((previous) => ({ ...previous, [sheet.id]: 'all' }));
+    return 'all';
+  }
+  function followSchematicPartSection(schematicId: string, partId: string) {
+    const snapshot = core.getSnapshot();
+    const sheet = snapshot.project ? findSchematic(snapshot.project, schematicId) : null;
+    const part = sheet?.parts.find((part) => part.id === partId);
+    if (!sheet || !part || activeSchematicRef.current !== schematicId) return false;
+    const previous = schematicSectionRef.current;
+    const section = previous === 'all' ? 'all' : partSchematicSection(part);
+    if (section !== previous) {
+      setSchematicMoveRequest(null);
+      setSchematicNavigationRequest(null);
+      setRuleFocus(null);
+      setCanvasFocus(null);
+      setPropertiesFocusRequest(null);
+      setSchematicSections((previous) => ({ ...previous, [sheet.id]: section }));
+    }
+    setFileSelections((previous) => ({ ...previous, [sheet.id]: [part.id] }));
+    setPropertiesDismissed(false);
+    setInspectedPartId(null);
+    setExplicitPropertiesId(null);
+    return true;
+  }
   async function newSchematicFile() {
     const intent = cancelPendingNavigation();
     if (!(await applySource())) return;
@@ -1673,6 +1942,37 @@ export default function Workbench({
     } catch (error) {
       notify((error as Error).message);
     }
+  }
+  function requestSchematicRemoval() {
+    const snapshot = core.getSnapshot();
+    if (
+      !doc ||
+      nativeActionAvailability() !== true ||
+      view !== 'canvas' ||
+      modal ||
+      editComposing.current ||
+      schematicComposing.current ||
+      snapshot.sourceDraft !== null ||
+      !snapshot.project ||
+      (snapshot.project.pcb && doc.id === snapshot.project.schematic.id)
+    )
+      return;
+    if (propertiesDraftPending()) {
+      notify('Apply or discard the Properties edits before removing the schematic.');
+      return;
+    }
+    setConfirmError('');
+    setConfirmation({
+      kind: 'remove-schematic',
+      documentTitle: doc.title,
+      action: () => {
+        core.execute(
+          'schematic.remove',
+          { schematicId: doc.id },
+          { expectedRevision: snapshot.revision },
+        );
+      },
+    });
   }
   async function closeSchematicFile(id: string) {
     if (!openSchematicFiles.some((file) => file.id === id)) return false;
@@ -1760,16 +2060,19 @@ export default function Workbench({
     }
   }, [core, setSelected, notify]);
   function remove(targets: string[] = selection) {
-    if (!doc || sourcePending || !targets.length) return;
+    if (!doc || sourcePending || !targets.length) return false;
     const ids = targets.filter((id) => !selectedField(id));
     if (!ids.length) {
       notify('Component text fields cannot be deleted.');
-      return;
+      return false;
     }
     try {
-      if (commit(removeSelection(doc, ids))) setSelected(null);
+      if (!commit(removeSelection(doc, ids))) return false;
+      setSelected(null);
+      return true;
     } catch (error) {
       notify((error as Error).message);
+      return false;
     }
   }
   function rotate() {
@@ -1785,16 +2088,18 @@ export default function Workbench({
     const result = duplicateSelection(doc, selection);
     if (result.selection.length && commit(result.circuit)) setSelection(result.selection);
   }
-  function copySelection() {
-    if (!doc || !selection.some((id) => !selectedField(id))) return;
-    clipboard.current = {
-      doc: structuredClone(doc),
-      ids: selection.filter((id) => !selectedField(id)),
-    };
-    notify('Selection copied.');
+  function copySelection(cut = false) {
+    const snapshot = core.getSnapshot();
+    if (!doc || snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
+    const ids = selection.filter((id) => !selectedField(id));
+    if (!ids.length || (cut && (tool === 'annotate' || propertiesDraftPending()))) return;
+    const clip = { doc: structuredClone(doc), ids };
+    if (cut && !remove(ids)) return;
+    clipboard.current = clip;
+    notify(cut ? 'Selection cut.' : 'Selection copied.');
   }
   function pasteSelection() {
-    if (!doc || !clipboard.current) return;
+    if (!doc || !clipboard.current || propertiesDraftPending()) return;
     const clip = clipboard.current;
     try {
       const result = pasteSchematicSelection(doc, clip.doc, clip.ids);
@@ -2059,17 +2364,49 @@ export default function Workbench({
     })();
   }
   async function openProperties(id: string) {
-    if (simulationEnabled || !doc || !(await changeView('canvas'))) return;
+    if (
+      simulationEnabled ||
+      !doc ||
+      !active ||
+      screen !== 'workspace' ||
+      schematicComposing.current ||
+      propertiesDraftPending()
+    )
+      return;
+    const schematicId = doc.id;
+    if (!(await changeView('canvas'))) return;
+    const snapshot = core.getSnapshot();
+    const sheet = snapshot.project ? findSchematic(snapshot.project, schematicId) : null;
+    if (
+      !contextActive.current ||
+      activeSchematicRef.current !== schematicId ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked ||
+      schematicComposing.current ||
+      propertiesDraftPending() ||
+      !sheet?.parts.some((part) => part.id === id)
+    )
+      return;
+    const section = revealSchematicTargets(sheet, [id]);
     showRightSidebar();
     setPropertiesExpanded(true);
-    setSelection(visibleSchematicIds(doc, layers).has(id) ? [id] : []);
+    setFileSelections((previous) => ({
+      ...previous,
+      [sheet.id]: visibleSchematicIds(sheet, layers, section).has(id) ? [id] : [],
+    }));
+    setPropertiesDismissed(false);
+    setExplicitPropertiesId(null);
     setInspectedPartId(id);
     setTool('select');
     setModal(null);
-    setPropertiesFocusRequest({ schematicId: doc.id, objectId: id });
+    setPropertiesFocusRequest({ schematicId: sheet.id, objectId: id });
   }
   function openObjectProperties(id: string) {
-    if (!doc || sourcePending || !selectableSchematicIds(doc, layers, selectionFilters).has(id))
+    if (
+      !doc ||
+      sourcePending ||
+      !selectableSchematicIds(doc, layers, selectionFilters, schematicSection).has(id)
+    )
       return;
     const field = selectedField(id);
     if (simulationEnabled && field?.field !== 'Sim.Params') return;
@@ -2124,7 +2461,18 @@ export default function Workbench({
         );
     }
     const assignment = (fields.Footprint || '').trim();
-    if (footprintDetail && assignment !== (partFields(selectedPart).Footprint || '').trim()) {
+    const previousAssignment = (partFields(selectedPart).Footprint || '').trim();
+    const commitFields = () => {
+      const accepted = commit(d);
+      if (accepted && assignment !== previousAssignment && view === 'canvas')
+        followSchematicPartSection(sourceCircuit.id, selectedPart.id);
+      return accepted;
+    };
+    if (
+      footprintDetail &&
+      !onlineFootprintLibrary(assignment) &&
+      assignment !== previousAssignment
+    ) {
       const latest = core.getSnapshot().project;
       if (!latest || latest.schematic !== sourceCircuit) return false;
       const previous = pcbSync.current.sources.get(assignment);
@@ -2138,7 +2486,7 @@ export default function Workbench({
         pcbSync.current.sources.set(assignment, footprintDetail);
         if (!pcbSync.current.prepare({ ...latest, schematic: d }))
           throw new Error('Wait for Layout synchronization before assigning this footprint.');
-        const accepted = commit(d);
+        const accepted = commitFields();
         if (!accepted) restore();
         return accepted;
       } catch (error) {
@@ -2147,7 +2495,7 @@ export default function Workbench({
         return false;
       }
     }
-    return commit(d);
+    return commitFields();
   }
   function patchGeometry(
     key: 'x' | 'y' | 'rotation',
@@ -2195,13 +2543,74 @@ export default function Workbench({
       return false;
     }
   }
+  const canUseEditCommands = useEditorAction(
+    () =>
+      active &&
+      !editComposing.current &&
+      !modal &&
+      !confirmation &&
+      !core.getSnapshot().editingBlocked &&
+      !hasOpenOverlay(),
+  );
+  const showSettings = useEditorAction(() => {
+    if (canUseEditCommands()) setModal('settings');
+  });
+  useEffect(() => {
+    if (!active) return;
+    const start = () => {
+      editComposing.current = true;
+    };
+    const end = () => {
+      editComposing.current = false;
+    };
+    const commandKey = (event: KeyboardEvent) => {
+      if (!isCommandModifier(event)) return;
+      if (
+        (editComposing.current || event.isComposing || event.keyCode === 229) &&
+        ['a', 'c', 'f', 'v', 'x', 'y', 'z', ','].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (
+        event.key !== ',' ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        !canUseEditCommands()
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) showSettings();
+    };
+    window.addEventListener('compositionstart', start, true);
+    window.addEventListener('compositionend', end, true);
+    window.addEventListener('blur', end);
+    window.addEventListener('keydown', commandKey, true);
+    return () => {
+      end();
+      window.removeEventListener('compositionstart', start, true);
+      window.removeEventListener('compositionend', end, true);
+      window.removeEventListener('blur', end);
+      window.removeEventListener('keydown', commandKey, true);
+    };
+  }, [active, canUseEditCommands, showSettings]);
   useEffect(() => {
     function key(e: KeyboardEvent) {
       const el = e.target as HTMLElement;
       const input = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
-      if (!active || e.defaultPrevented || e.isComposing || e.keyCode === 229 || hasOpenOverlay())
+      if (
+        !active ||
+        e.defaultPrevented ||
+        e.isComposing ||
+        e.keyCode === 229 ||
+        editComposing.current ||
+        hasOpenOverlay()
+      )
         return;
-      if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
+      if (isCommandModifier(e) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (screen === 'workspace') void save(e.shiftKey);
         return;
@@ -2221,15 +2630,19 @@ export default function Workbench({
           e.preventDefault();
           return;
         }
-        if (view === 'canvas' && screen === 'workspace' && el.matches('.canvas-wrap > svg')) {
-          if (k === 'c') {
+        if (
+          view === 'canvas' &&
+          screen === 'workspace' &&
+          el.matches('[data-testid="schematic-canvas"]')
+        ) {
+          if (!e.shiftKey && (k === 'c' || k === 'x')) {
             e.preventDefault();
-            copySelection();
+            if (!e.repeat) copySelection(k === 'x');
             return;
           }
-          if (k === 'v') {
+          if (!e.shiftKey && k === 'v') {
             e.preventDefault();
-            pasteSelection();
+            if (!e.repeat) pasteSelection();
             return;
           }
           if (k === 'd') {
@@ -2239,7 +2652,7 @@ export default function Workbench({
           }
           if (k === 'a' && doc) {
             e.preventDefault();
-            const visible = selectableSchematicIds(doc, layers, selectionFilters);
+            const visible = selectableSchematicIds(doc, layers, selectionFilters, schematicSection);
             setSelection(
               [...visible].filter((id) => {
                 const field = selectedField(id);
@@ -2249,9 +2662,12 @@ export default function Workbench({
             return;
           }
         }
-        if (k === 'z' && screen === 'workspace') {
+        if ((k === 'z' || (k === 'y' && !e.shiftKey)) && screen === 'workspace') {
           e.preventDefault();
-          e.shiftKey ? redoStep() : undoStep();
+          if (!e.repeat && canUseEditCommands()) {
+            if (k === 'y' || e.shiftKey) redoStep();
+            else undoStep();
+          }
         }
         if (k === 'o') {
           e.preventDefault();
@@ -2312,6 +2728,16 @@ export default function Workbench({
     !sourcePending &&
     !coreSnapshot.editingBlocked;
   const canEditProperties = () => propertiesActive && current.current === doc;
+  function propertiesDraftPending() {
+    const inspector = propertiesInspector.current;
+    return (
+      propertiesPending.current ||
+      !!inspector?.querySelector('[data-pending-edit="true"]') ||
+      Array.from(
+        inspector?.querySelectorAll<HTMLInputElement>('input[aria-label="Net name"]') ?? [],
+      ).some((input) => input.value !== input.defaultValue)
+    );
+  }
   const propertiesDeleteAction = !inspectedField ? (
     <PropertyDeleteButton
       disabled={
@@ -2451,6 +2877,7 @@ export default function Workbench({
         mode: tool === 'annotate' ? 'annotation' : 'interaction',
         tool,
         activeSchematicId: schematic.id,
+        schematicSection,
         selection,
         inspectedPartId,
         filename,
@@ -2532,7 +2959,12 @@ export default function Workbench({
         snapshot.sourceDraft !== null &&
         ((id === 'workbench.view' && input.view !== 'source') ||
           (id === 'workbench.panel' && ['layers', 'history'].includes(String(input.panel))) ||
-          ['workbench.sheet', 'simulation.show', 'thermal.show'].includes(id))
+          [
+            'workbench.sheet',
+            'workbench.schematicSection',
+            'simulation.show',
+            'thermal.show',
+          ].includes(id))
       )
         throw new Error('Apply the pending Source edits before changing the workspace view.');
     },
@@ -2540,6 +2972,10 @@ export default function Workbench({
     datasheet: readProjectDatasheet,
     datasheetPage: readProjectDatasheetPage,
     view: changeView,
+    schematicSection: (section, signal) => {
+      signal.throwIfAborted();
+      return changeSchematicSection(section);
+    },
     sheet: async (id, signal) => {
       if (!projectRef.current || !findSchematic(projectRef.current, id))
         throw new Error('Choose a schematic in this project.');
@@ -2549,7 +2985,7 @@ export default function Workbench({
     },
     selection: (ids) => {
       if (!doc) throw new Error('Open a schematic before selecting objects.');
-      const visible = selectableSchematicIds(doc, layers, selectionFilters);
+      const visible = selectableSchematicIds(doc, layers, selectionFilters, schematicSection);
       if (ids.some((id) => !visible.has(id)))
         throw new Error(
           'Choose visible objects allowed by the active schematic selection filters.',
@@ -2774,8 +3210,139 @@ export default function Workbench({
     sourcePending,
   ]);
   const canAddSchematicFile = Boolean(doc && schematicFiles.length < MAX_SCHEMATIC_FILES);
+  const canRemoveSchematicFile = Boolean(
+    doc && project && view === 'canvas' && (!project.pcb || doc.id !== project.schematic.id),
+  );
   const canExportBoard = Boolean(project?.pcb);
   const canExportModel = Boolean(modelCad?.objects.length);
+  function editMenu(origin: EditTarget | null, mac: boolean) {
+    if (
+      !active ||
+      modal ||
+      confirmation ||
+      core.getSnapshot().editingBlocked ||
+      editComposing.current
+    )
+      return [];
+    const target = visibleEditTarget(origin) ? origin : null;
+    const text = textEditTarget(target);
+    const writable = Boolean(text && writableText(text));
+    const inConversation = Boolean(target?.closest('.chat-panel'));
+    const design = screen === 'workspace' && Boolean(doc) && !text && !inConversation;
+    const snapshot = core.getSnapshot();
+    const canEditDesign = design && snapshot.sourceDraft === null;
+    const schematic = canEditDesign && view === 'canvas' && tool !== 'annotate';
+    const picked = schematic && selection.some((id) => !selectedField(id));
+    const mutableSelection = picked && !propertiesDraftPending();
+    const drawing = canEditDesign
+      ? (workspaceElement.current?.querySelector<EditTarget>(
+          '.file-editor-surface:not([hidden]) :is([data-testid="schematic-canvas"], [data-testid="layout-canvas"], .pcb-model-canvas)',
+        ) ?? null)
+      : null;
+    const layoutSelect = view === 'layout' && drawing?.dataset.layoutEdit === 'select';
+    const drawingDelete = layoutSelect
+      ? Number(drawing?.dataset.layoutSelectionCount) > 0
+      : view === '3d' && drawing?.dataset.cadDeleteAvailable === 'true';
+    const modifier = mac ? 'Meta' : 'Control';
+    function runText(command: Parameters<typeof runTextEdit>[1]) {
+      if (!text) return;
+      void runTextEdit(text, command, mac, canUseEditCommands).catch(() => {
+        if (canUseEditCommands() && document.activeElement === text)
+          notify('Could not access the clipboard.');
+      });
+    }
+    function runDesign(action: () => void) {
+      if (!canUseEditCommands() || core.getSnapshot().sourceDraft !== null) return;
+      if (visibleEditTarget(drawing)) drawing.focus({ preventScroll: true });
+      action();
+    }
+    function runHistory(redo: boolean) {
+      runDesign(() => {
+        if (drawing) dispatchEditKey(drawing, redo ? (mac ? 'Z' : 'y') : 'z', mac, mac && redo);
+        else if (redo) redoStep();
+        else undoStep();
+      });
+    }
+    return [
+      {
+        label: 'Undo',
+        keyShortcuts: `${modifier}+Z`,
+        disabled: !writable && !(canEditDesign && (snapshot.canUndo || drawing?.dataset.wireUndo)),
+        run: () => (text ? runText('undo') : runHistory(false)),
+      },
+      {
+        label: 'Redo',
+        keyShortcuts: mac ? 'Meta+Shift+Z' : 'Control+Y',
+        disabled: !writable && !(canEditDesign && (snapshot.canRedo || drawing?.dataset.wireRedo)),
+        run: () => (text ? runText('redo') : runHistory(true)),
+      },
+      {
+        label: 'Cut',
+        keyShortcuts: `${modifier}+X`,
+        separatorBefore: true,
+        disabled: !writable && !mutableSelection,
+        run: () => (text ? runText('cut') : runDesign(() => copySelection(true))),
+      },
+      {
+        label: 'Copy',
+        keyShortcuts: `${modifier}+C`,
+        disabled: !text && !picked,
+        run: () => (text ? runText('copy') : runDesign(copySelection)),
+      },
+      {
+        label: 'Paste',
+        keyShortcuts: `${modifier}+V`,
+        disabled: !writable && !(schematic && clipboard.current && !propertiesDraftPending()),
+        run: () => (text ? runText('paste') : runDesign(pasteSelection)),
+      },
+      {
+        label: 'Delete',
+        keyShortcuts: 'Delete',
+        disabled: !writable && !mutableSelection && !drawingDelete,
+        run: () =>
+          text
+            ? runText('forwardDelete')
+            : runDesign(() => {
+                if (view === 'canvas') remove();
+                else if (drawing) dispatchEditKey(drawing, 'Delete');
+              }),
+      },
+      {
+        label: 'Select all',
+        keyShortcuts: `${modifier}+A`,
+        separatorBefore: true,
+        disabled: !text && !(layoutSelect || (schematic && selectableIds?.size)),
+        run: () =>
+          text
+            ? runText('selectAll')
+            : runDesign(() => {
+                if (drawing) dispatchEditKey(drawing, 'a', mac);
+              }),
+      },
+      ...(schematic && selection.length
+        ? [
+            { label: 'Duplicate', separatorBefore: true, run: () => runDesign(duplicate) },
+            { label: 'Move', run: () => runDesign(() => requestSchematicMove(false)) },
+            { label: 'Drag connected', run: () => runDesign(() => requestSchematicMove(true)) },
+          ]
+        : []),
+      ...(screen === 'workspace' && doc
+        ? [
+            {
+              label: 'Find',
+              keyShortcuts: `${modifier}+F`,
+              separatorBefore: true,
+              run: () => {
+                if (!canUseEditCommands()) return;
+                if (target && target !== document.body) target.focus({ preventScroll: true });
+                openPanelFind();
+              },
+            },
+          ]
+        : []),
+      { label: 'Settings', keyShortcuts: `${modifier}+,`, separatorBefore: true, run: showSettings },
+    ];
+  }
   const titlebarMenus: TitlebarMenu[] = [
     {
       label: 'File',
@@ -2808,11 +3375,21 @@ export default function Workbench({
               },
             ]
           : []),
+        ...(canRemoveSchematicFile
+          ? [
+              {
+                label: 'Remove schematic',
+                separatorBefore: !canAddSchematicFile,
+                disabled: sourcePending || Boolean(coreSnapshot.editingBlocked),
+                run: requestSchematicRemoval,
+              },
+            ]
+          : []),
         ...(doc
           ? [
               {
                 label: 'Save',
-                separatorBefore: !canAddSchematicFile,
+                separatorBefore: !canAddSchematicFile && !canRemoveSchematicFile,
                 run: () => {
                   void save();
                 },
@@ -2840,32 +3417,6 @@ export default function Workbench({
               { label: 'Close project', run: requestProjectClose, separatorBefore: true },
             ]
           : []),
-      ],
-    },
-    {
-      label: 'Edit',
-      items: [
-        ...(screen === 'workspace' && doc && !sourcePending
-          ? [
-              ...(coreSnapshot.canUndo ? [{ label: 'Undo', run: undoStep }] : []),
-              ...(coreSnapshot.canRedo ? [{ label: 'Redo', run: redoStep }] : []),
-              ...(view === 'canvas' && selection.length
-                ? [{ label: 'Copy', run: copySelection, separatorBefore: true }]
-                : []),
-              ...(view === 'canvas' && clipboard.current
-                ? [{ label: 'Paste', run: pasteSelection, separatorBefore: !selection.length }]
-                : []),
-              ...(view === 'canvas' && selection.length
-                ? [
-                    { label: 'Duplicate', run: duplicate },
-                    { label: 'Move', run: () => requestSchematicMove(false) },
-                    { label: 'Drag connected', run: () => requestSchematicMove(true) },
-                    { label: 'Delete', run: remove },
-                  ]
-                : []),
-            ]
-          : []),
-        { label: 'Settings', run: () => setModal('settings'), separatorBefore: true },
       ],
     },
     {
@@ -2939,6 +3490,49 @@ export default function Workbench({
     view === 'layout' ? layoutGridSpacingOptions : gridSpacingOptions;
   const canvasProperties = useEditorAction(openObjectProperties);
   const canvasDelete = useEditorAction(remove);
+  const canPlaceCanvasPart = useEditorAction(
+    (schematicId: string, snapshot: ReturnType<typeof core.getSnapshot>) => {
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        view !== 'canvas' ||
+        tool !== 'place' ||
+        modal ||
+        confirmation ||
+        snapshot.sourceDraft !== null ||
+        snapshot.editingBlocked ||
+        schematicComposing.current ||
+        activeSchematicRef.current !== schematicId ||
+        !snapshot.project ||
+        findSchematic(snapshot.project, schematicId) !== doc
+      )
+        return false;
+      if (propertiesDraftPending()) {
+        notify('Apply or discard the Properties edits before placing a component.');
+        return false;
+      }
+      return true;
+    },
+  );
+  const placeCanvasPart = useEditorAction((next: Circuit, id: string, signal: AbortSignal) => {
+    const basis = core.getSnapshot();
+    const part = next.parts.find((item) => item.id === id);
+    if (!part || !basis.project || !canPlaceCanvasPart(next.id, basis)) return false;
+    const place = (nativeFiles?: Project['nativeFiles']) => {
+      if (!commit(next, nativeFiles)) return false;
+      followSchematicPartSection(next.id, id);
+      return true;
+    };
+    const footprint = partFootprint(part);
+    if (!onlineFootprintLibrary(footprint) || footprint === placement?.unavailableFootprint)
+      return place();
+    return prepareSchematicPackage(basis.project, footprint, signal).then((nativeFiles) => {
+      signal.throwIfAborted();
+      if (core.getSnapshot() !== basis)
+        throw new Error('The project changed while preparing the symbol. Try again.');
+      return canPlaceCanvasPart(next.id, basis) && place(nativeFiles);
+    });
+  });
   const canvasViewport = useMemo(
     () => (doc ? fileViewports.current.get(doc.id) : undefined),
     [doc?.id],
@@ -3032,6 +3626,31 @@ export default function Workbench({
     dismissParasitics();
     parasiticsButton.current?.focus({ preventScroll: true });
   }, [dismissParasitics]);
+  const openEmc = useEditorAction(() => {
+    if (schematicComposing.current) return;
+    if (layoutAnalysis === 'emc') {
+      setLayoutAnalysis(null);
+      return;
+    }
+    const board = core.getSnapshot().project?.pcb;
+    if (!canShowEmc || !board) return;
+    const context = layoutAgentContext.current;
+    const selection = context?.boardId === board.id ? context.selection : null;
+    const netIds = new Set<string>();
+    if (Array.isArray(selection)) {
+      for (const target of selection) {
+        const netId =
+          target?.kind === 'track'
+            ? board.tracks.find((track) => track.id === target.id)?.netId
+            : target?.kind === 'via'
+              ? board.vias.find((via) => via.id === target.id)?.netId
+              : undefined;
+        if (netId && board.nets.some((net) => net.id === netId)) netIds.add(netId);
+      }
+    }
+    setEmcSelectedNetId(netIds.size === 1 ? [...netIds][0] : undefined);
+    setLayoutAnalysis('emc');
+  });
   const parasiticsProbe = useMemo(
     () =>
       parasiticsVisible
@@ -3180,7 +3799,7 @@ export default function Workbench({
   );
   const layoutPluginActions = useMemo(
     () =>
-      thermalAvailable || parasiticsAvailable ? (
+      thermalAvailable || parasiticsAvailable || emcAvailable ? (
         <>
           {thermalAvailable && (
             <ToolButton
@@ -3205,6 +3824,33 @@ export default function Workbench({
               <PluginLogo id={LAYOUT_PARASITICS_PLUGIN_ID} />
             </ToolButton>
           )}
+          {emcAvailable && (
+            <ToolButton
+              label="EMC Analysis"
+              active={emcVisible}
+              buttonRef={emcButton}
+              disabled={!canShowEmc}
+              onKeyDown={(event) => {
+                if (
+                  schematicComposing.current ||
+                  event.nativeEvent.isComposing ||
+                  event.nativeEvent.keyCode === 229
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onPointerDown={(event) => {
+                if (schematicComposing.current) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onClick={openEmc}
+            >
+              <PluginLogo id={EMC_PLUGIN_ID} />
+            </ToolButton>
+          )}
         </>
       ) : null,
     [
@@ -3213,9 +3859,13 @@ export default function Workbench({
       parasiticsAvailable,
       parasiticsVisible,
       canShowParasitics,
+      emcAvailable,
+      emcVisible,
+      canShowEmc,
       sourcePending,
       project?.pcb,
       openThermal,
+      openEmc,
     ],
   );
   const ruleStatus = useMemo(() => {
@@ -3494,6 +4144,135 @@ export default function Workbench({
       notify,
     ],
   );
+  const highlightComponent = useEditorAction(
+    async (origin: ComponentHighlightOrigin, mode: ComponentMode) => {
+      const snapshot = core.getSnapshot();
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        !snapshot.project ||
+        snapshot.sourceDraft !== null ||
+        snapshot.editingBlocked ||
+        modelDrawingBlocked ||
+        layoutSyncStatus.pending ||
+        layoutSyncStatus.error ||
+        schematicComposing.current ||
+        propertiesDraftPending()
+      )
+        return;
+      const target = resolveComponentHighlight(snapshot.project, origin, mode);
+      setModelCheckFocus(null);
+      if (target.view === 'canvas') await selectSchematic(target.sheetId);
+      else if (!(await changeView(target.view))) return;
+      const current = core.getSnapshot();
+      if (
+        !contextActive.current ||
+        current.revision !== snapshot.revision ||
+        current.sourceDraft !== null ||
+        current.editingBlocked ||
+        schematicComposing.current ||
+        propertiesDraftPending()
+      )
+        return;
+      if (target.view === '3d') {
+        setModelComponentFocus({
+          request: ++ruleFocusSequence.current,
+          revision: snapshot.revision,
+          board: target.board,
+          footprintId: target.footprintId,
+        });
+        return;
+      }
+      if (target.view === 'canvas') {
+        const sheet = findSchematic(current.project!, target.sheetId);
+        if (!sheet) return;
+        const targetSection = revealSchematicTargets(sheet, [target.partId]);
+        const eligible = selectableSchematicIds(sheet, layers, selectionFilters, targetSection);
+        setFileSelections((previous) => ({
+          ...previous,
+          [sheet.id]: eligible.has(target.partId) ? [target.partId] : [],
+        }));
+        setInspectedPartId(null);
+        setExplicitPropertiesId(null);
+        setPropertiesDismissed(true);
+        setTool('select');
+      }
+      setCanvasFocus({
+        request: ++ruleFocusSequence.current,
+        revision: snapshot.revision,
+        kind: target.view === 'canvas' ? 'erc' : 'drc',
+        objectIds: [target.view === 'canvas' ? target.partId : target.footprintId],
+        location: target.location,
+        ...(target.view === 'canvas' ? { sheetId: target.sheetId } : {}),
+      });
+    },
+  );
+  const componentActions = useCallback(
+    (origin: ComponentHighlightOrigin): CanvasMenuAction[] => {
+      const snapshot = core.getSnapshot();
+      if (!snapshot.project) return [];
+      return (['canvas', 'layout', '3d'] as const)
+        .filter((mode) => mode !== origin.view)
+        .map((mode) => {
+          let reason =
+            !active || screen !== 'workspace' || snapshot.editingBlocked
+              ? 'The project is not available for navigation.'
+              : snapshot.sourceDraft !== null
+                ? 'Apply or discard Source drafts before highlighting a component.'
+                : schematicComposing.current
+                  ? 'Finish composing text before highlighting a component.'
+                  : propertiesDraftPending()
+                    ? 'Apply or discard the Properties edits before highlighting a component.'
+                    : modelDrawingBlocked
+                      ? 'Finish the Model draft before highlighting a component.'
+                      : layoutSyncStatus.pending || layoutSyncStatus.error
+                        ? 'Wait for PCB synchronization before highlighting a component.'
+                        : '';
+          if (!reason) {
+            try {
+              resolveComponentHighlight(snapshot.project!, origin, mode);
+            } catch (error) {
+              reason =
+                error instanceof Error ? error.message : 'The linked component is unavailable.';
+            }
+          }
+          return {
+            id: `highlight-${mode}`,
+            label: `Highlight in ${mode === 'canvas' ? 'Schematic' : mode === 'layout' ? 'Layout' : 'Model'}`,
+            icon: ComponentHighlightIcon,
+            disabled: !!reason,
+            description: reason || undefined,
+            run: async () => {
+              await highlightComponent(origin, mode);
+            },
+          };
+        });
+    },
+    [
+      core,
+      project,
+      coreSnapshot.sourceDraft !== null,
+      coreSnapshot.editingBlocked,
+      active,
+      screen,
+      modelDrawingBlocked,
+      layoutSyncStatus.pending,
+      layoutSyncStatus.error,
+      highlightComponent,
+    ],
+  );
+  const schematicComponentActions = useCallback(
+    (id: string) => componentActions({ view: 'canvas', sheetId: doc?.id ?? '', id }),
+    [componentActions, doc?.id],
+  );
+  const layoutComponentActions = useCallback(
+    (id: string) => componentActions({ view: 'layout', id }),
+    [componentActions],
+  );
+  const modelComponentActions = useCallback(
+    (id: string) => componentActions({ view: '3d', id }),
+    [componentActions],
+  );
   const openPartsList = useEditorAction(async () => {
     if (!(await applySource())) return;
     setPropertiesDismissed(true);
@@ -3625,7 +4404,16 @@ export default function Workbench({
   // Keep fallback labels aligned with the latest menu indices used by the guarded actions.
   const headerFileOptions = useMemo(
     () => titlebarMenuOptions(titlebarMenus[0].items),
-    [hasDocument, canAddSchematicFile, canExportBoard, canExportModel, exampleList.sections],
+    [
+      hasDocument,
+      canAddSchematicFile,
+      canRemoveSchematicFile,
+      canExportBoard,
+      canExportModel,
+      exampleList.sections,
+      sourcePending,
+      coreSnapshot.editingBlocked,
+    ],
   );
   const appHeader = useMemo(
     () => (
@@ -3739,8 +4527,16 @@ export default function Workbench({
     void save(saveAs);
   });
   const saveCurrentPartProperties = useEditorAction(
-    (id: string, ref: string, value: string, fields: Record<string, string>) =>
-      canEditProperties() && part?.id === id ? saveFields(ref, value, fields, id) : false,
+    (
+      id: string,
+      ref: string,
+      value: string,
+      fields: Record<string, string>,
+      footprintDetail?: FootprintDetail,
+    ) =>
+      canEditProperties() && part?.id === id
+        ? saveFields(ref, value, fields, id, doc, footprintDetail)
+        : false,
   );
   const editFootprintText = useEditorAction(
     (board: PCB, schematic: Circuit, id: string, value: string) => {
@@ -3788,8 +4584,15 @@ export default function Workbench({
   const propertiesFootprint = propertiesBoard?.footprints.find((f) => f.symbolId === part?.id);
   const getPropertiesRevision = useCallback(() => core.getSnapshot().revision, [core]);
   const saveSelectedPartProperties = useCallback(
-    (ref: string, value: string, fields: Record<string, string>) =>
-      propertiesPartId ? saveCurrentPartProperties(propertiesPartId, ref, value, fields) : false,
+    (
+      ref: string,
+      value: string,
+      fields: Record<string, string>,
+      footprintDetail?: FootprintDetail,
+    ) =>
+      propertiesPartId
+        ? saveCurrentPartProperties(propertiesPartId, ref, value, fields, footprintDetail)
+        : false,
     [propertiesPartId, saveCurrentPartProperties],
   );
   const saveModelBoardThickness = useEditorAction((basis: PCB, thickness: number) => {
@@ -3812,7 +4615,7 @@ export default function Workbench({
     if (
       !active ||
       screen !== 'workspace' ||
-      !['schematic', 'layout', '3d'].includes(view) ||
+      !['canvas', 'layout', '3d'].includes(view) ||
       !rightSidebarVisible ||
       modal ||
       confirmation ||
@@ -3840,7 +4643,7 @@ export default function Workbench({
       if (
         !active ||
         screen !== 'workspace' ||
-        !['schematic', 'layout', '3d'].includes(view) ||
+        !['canvas', 'layout', '3d'].includes(view) ||
         !rightSidebarVisible ||
         layoutAnalysisVisible ||
         modal ||
@@ -3859,7 +4662,7 @@ export default function Workbench({
   const drawingStatusBar = useMemo(
     () => (
       <EditorStatusBar
-        className={view === '3d' ? 'model-editor-status' : undefined}
+        className={view === '3d' ? 'model-editor-status' : 'schematic-editor-status'}
         hidden={view !== 'canvas' && view !== '3d'}
         active={active && screen === 'workspace'}
         ruleStatus={ruleStatus}
@@ -3894,10 +4697,25 @@ export default function Workbench({
             <ModelSketchCoordinates coordinates={modelSketchCoordinates} />
           ) : undefined
         }
-        controls={view === 'canvas' ? gridDensityControl : undefined}
         status={draftStatus || undefined}
         actions={
-          view === '3d' ? (
+          view === 'canvas' ? (
+            <span className="layout-status-selects">
+              <SchematicSectionSwitch
+                value={schematicSection}
+                onChange={changeSchematicSection}
+                composing={schematicComposing}
+                disabled={
+                  !active ||
+                  sourcePending ||
+                  !!coreSnapshot.editingBlocked ||
+                  !!modal ||
+                  !!confirmation
+                }
+              />
+              {gridDensityControl}
+            </span>
+          ) : view === '3d' ? (
             <>
               <span className="model-error-target" ref={setModelErrorTarget} />
               {gridDensityControl}
@@ -3920,8 +4738,31 @@ export default function Workbench({
       gridDensityControl,
       draftStatus,
       ruleStatus,
+      schematicSection,
+      changeSchematicSection,
+      sourcePending,
+      coreSnapshot.editingBlocked,
+      modal,
+      confirmation,
     ],
   );
+  const schematicViewFocus =
+    canvasFocus?.kind === 'erc' &&
+    canvasFocus.revision === coreSnapshot.revision &&
+    (!ruleFocus || canvasFocus.request > ruleFocus.request) &&
+    canvasFocus.sheetId === doc?.id
+      ? canvasFocus
+      : ruleFocus?.kind === 'erc' && !ruleReportStale
+        ? ruleFocus
+        : null;
+  const layoutViewFocus =
+    canvasFocus?.kind === 'drc' &&
+    canvasFocus.revision === coreSnapshot.revision &&
+    (!ruleFocus || canvasFocus.request > ruleFocus.request)
+      ? canvasFocus
+      : ruleFocus?.kind === 'drc' && !ruleReportStale
+        ? ruleFocus
+        : null;
   const rulePanel = rulesOpen && rulePanelVisible && (
     <Suspense fallback={null}>
       <RuleCheckPanel
@@ -3956,8 +4797,22 @@ export default function Workbench({
   );
   return (
     <>
+      <PanelFindController
+        workspace={workspaceElement}
+        control={panelFindControl}
+        active={
+          active &&
+          screen === 'workspace' &&
+          !coreSnapshot.editingBlocked &&
+          !modal &&
+          !confirmation
+        }
+        scopeKey={`${activeSessionId}:${view}:${sidebarVisible}`}
+      />
       <DesktopTitlebar
         menus={titlebarMenus}
+        editMenu={editMenu}
+        composing={editComposing}
         onBack={navigation.index > 0 ? () => navigateHistory(-1) : undefined}
         onForward={
           navigation.index < navigation.entries.length - 1 ? () => navigateHistory(1) : undefined
@@ -4008,7 +4863,17 @@ export default function Workbench({
           />
         )}
         {doc && (
-          <div className="workspace" hidden={screen !== 'workspace'}>
+          <div
+            ref={workspaceElement}
+            className="workspace"
+            hidden={screen !== 'workspace'}
+            onCompositionStartCapture={() => {
+              schematicComposing.current = true;
+            }}
+            onCompositionEndCapture={() => {
+              schematicComposing.current = false;
+            }}
+          >
             <nav className="nav-rail" aria-label="Workspace navigation">
               {!sidebarVisible && (
                 <SidebarToggle
@@ -4039,8 +4904,10 @@ export default function Workbench({
               <ConversationSession
                 key={documentKey + ':' + session.id}
                 active={active && screen === 'workspace' && session.id === activeSessionId}
+                workbenchSuspended={rawMode}
                 onRunningChange={onRunningChange}
                 session={session}
+                onFind={findAgent}
                 setSessions={setSessions}
                 getDesign={getChatDesign}
                 annotationDesign={session.annotations?.length ? chatAnnotationDesign : undefined}
@@ -4245,9 +5112,12 @@ export default function Workbench({
                     </RetainedSchematicToolbar>
                     <div className="schematic-canvas-area">
                       <SchematicCanvas
-                        ruleFocus={ruleFocus?.kind === 'erc' && !ruleReportStale ? ruleFocus : null}
+                        capabilityHost={capabilityHost}
+                        getComponentActions={schematicComponentActions}
+                        ruleFocus={schematicViewFocus}
+                        showRuleMarker={schematicViewFocus !== canvasFocus}
                         active={active && screen === 'workspace' && view === 'canvas'}
-                        editingBlocked={sourcePending}
+                        editingBlocked={sourcePending || Boolean(coreSnapshot.editingBlocked)}
                         moveRequest={schematicMoveRequest}
                         onMoveStateChange={setSchematicMoveMode}
                         onMoveRequestHandled={onMoveRequestHandled}
@@ -4256,6 +5126,7 @@ export default function Workbench({
                         }
                         onNavigationRequestHandled={onNavigationRequestHandled}
                         key={doc.id}
+                        sectionView={schematicSection}
                         initialViewport={canvasViewport}
                         onViewportChange={onCanvasViewportChange}
                         doc={doc}
@@ -4274,6 +5145,7 @@ export default function Workbench({
                         onAnnotationsChange={onAnnotationsChange}
                         onAnnotationAdd={onAnnotationAdd}
                         onCommit={commit}
+                        onPlacePart={placeCanvasPart}
                         setTool={setTool}
                         fitKey={fitKey}
                         onPosition={coordinates.update}
@@ -4433,9 +5305,11 @@ export default function Workbench({
                                       active={propertiesActive}
                                       spiceAvailable={spiceAvailable}
                                       fileId={fileId}
+                                      projectSource={source}
                                       getRevision={getPropertiesRevision}
                                       onRequestSave={requestPropertiesSave}
                                       capabilityHost={capabilityHost}
+                                      onDraftPendingChange={onPropertiesPendingChange}
                                       key={part.id}
                                       part={part}
                                       tabAction={propertiesDeleteAction}
@@ -4524,7 +5398,7 @@ export default function Workbench({
                                         e.stopPropagation();
                                         return;
                                       }
-                                      if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
+                                      if (isCommandModifier(e) && e.key.toLowerCase() === 's') {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         if (saveNetName(e.currentTarget.value))
@@ -4634,24 +5508,35 @@ export default function Workbench({
                 </div>
                 {layoutOpened && project && (
                   <div className="file-editor-surface" hidden={view !== 'layout'}>
-                    <Suspense fallback={<p role="status">Loading layout editor…</p>}>
+                    <Suspense fallback={<WorkspaceLoading panel label="Loading layout editor" />}>
                       <RetainedLayoutEditor
+                        fillRules={fillRules}
+                        getComponentActions={layoutComponentActions}
                         visible={active && screen === 'workspace' && view === 'layout'}
                         sidebarVisible={rightSidebarVisible && !layoutAnalysisVisible}
                         onShowSidebar={showLayoutSidebar}
                         onToggleSidebar={toggleRightSidebar}
-                        ruleFocus={ruleFocus?.kind === 'drc' && !ruleReportStale ? ruleFocus : null}
+                        ruleFocus={layoutViewFocus}
+                        showRuleMarker={layoutViewFocus !== canvasFocus}
                         capabilityHost={capabilityHost}
                         agentContextRef={layoutAgentContext}
                         board={project.pcb ?? undefined}
                         schematic={project.schematic}
                         grid={grid}
                         gridSpacing={layoutGridSpacing}
+                        placementSuggestionRevision={
+                          appearanceSettings.layoutPreferences.enabled &&
+                          !sourcePending &&
+                          !coreSnapshot.editingBlocked
+                            ? coreSnapshot.revision
+                            : undefined
+                        }
                         leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
                         gridControl={view === 'layout' ? gridDensityControl : undefined}
                         ruleStatus={view === 'layout' ? ruleStatus : undefined}
                         rulePanel={view === 'layout' ? rulePanel : undefined}
                         draftStatus={draftStatus || undefined}
+                        imageExportBlocked={sourcePending || Boolean(coreSnapshot.editingBlocked)}
                         active={
                           active &&
                           screen === 'workspace' &&
@@ -4685,6 +5570,7 @@ export default function Workbench({
                         analysisPanel={layoutAnalysisPanelMount}
                         analysisPanelVisible={layoutAnalysisVisible}
                         analysisLocateRef={thermalLocateRef}
+                        analysisObjectLocateRef={emcLocateRef}
                         onAnalysisProbe={
                           currentThermalPresentation?.probing
                             ? currentThermalPresentation.probeAt
@@ -4703,17 +5589,115 @@ export default function Workbench({
                       createPortal(
                         <>
                           {thermalPanel}
-                          {parasiticsVisible && project.pcb && (
+                          {emcVisible && project.pcb && (
+                            <Suspense fallback={null}>
+                              <EmcAnalysisPanel
+                                host={capabilityHost}
+                                revision={coreSnapshot.revision}
+                                board={project.pcb}
+                                selectedNetId={emcSelectedNetId}
+                                onLocate={(objectId) => {
+                                  const current = core.getSnapshot();
+                                  if (
+                                    !emcVisible ||
+                                    !contextActive.current ||
+                                    modal ||
+                                    confirmation ||
+                                    current.sourceDraft !== null ||
+                                    current.editingBlocked ||
+                                    current.revision !== coreSnapshot.revision ||
+                                    current.project?.pcb !== project.pcb ||
+                                    schematicComposing.current ||
+                                    propertiesDraftPending()
+                                  )
+                                    return false;
+                                  return emcLocateRef.current?.(objectId) ?? false;
+                                }}
+                                onClose={() => {
+                                  setLayoutAnalysis((current) =>
+                                    current === 'emc' ? null : current,
+                                  );
+                                  emcButton.current?.focus({ preventScroll: true });
+                                }}
+                              />
+                            </Suspense>
+                          )}
+                          {parasiticsVisible && project.pcb && doc && (
                             <Suspense fallback={null}>
                               <LayoutParasiticsPanel
                                 board={project.pcb}
                                 schematic={project.schematic}
+                                schematicId={doc.id}
                                 host={capabilityHost}
                                 revision={coreSnapshot.revision}
                                 startId={parasiticsTerminals[0]?.id}
                                 endId={parasiticsTerminals[1]?.id}
                                 composing={parasiticsComposing}
                                 onReset={() => setParasiticsTerminals([])}
+                                onAdded={(id, blockIds) => {
+                                  const current = core.getSnapshot();
+                                  const target =
+                                    current.project && findSchematic(current.project, id);
+                                  if (!target || current.editingBlocked) return;
+                                  if (propertiesDraftPending()) {
+                                    notify(
+                                      'Parasitic components added. Finish the Properties edits before switching section.',
+                                    );
+                                    return;
+                                  }
+                                  const present = new Set(
+                                    [
+                                      ...target.parts,
+                                      ...target.wires,
+                                      ...target.labels,
+                                      ...target.junctions,
+                                    ].map((object) => object.id),
+                                  );
+                                  const objectIds = blockIds.filter((objectId) =>
+                                    present.has(objectId),
+                                  );
+                                  void selectSchematic(id)
+                                    .then(() => {
+                                      const latest = core.getSnapshot();
+                                      if (
+                                        !contextActive.current ||
+                                        latest.revision !== current.revision ||
+                                        latest.sourceDraft !== null ||
+                                        latest.editingBlocked
+                                      )
+                                        return;
+                                      setPropertiesFocusRequest(null);
+                                      setInspectedPartId(null);
+                                      setExplicitPropertiesId(null);
+                                      setPropertiesDismissed(true);
+                                      const eligible = selectableSchematicIds(
+                                        target,
+                                        layers,
+                                        selectionFilters,
+                                        'simulation',
+                                      );
+                                      setSchematicSections((previous) => ({
+                                        ...previous,
+                                        [id]: 'simulation',
+                                      }));
+                                      setFileSelections((previous) => ({
+                                        ...previous,
+                                        [id]: objectIds.filter((objectId) =>
+                                          eligible.has(objectId),
+                                        ),
+                                      }));
+                                      setTool('select');
+                                      setSchematicNavigationRequest({
+                                        id: ++navigationRequestSequence.current,
+                                        basis: target,
+                                        revision: latest.revision,
+                                        tool: 'select',
+                                        objectIds,
+                                        cancelPending: true,
+                                      });
+                                    })
+                                    .catch((error: Error) => notify(error.message));
+                                }}
                                 onClose={closeParasitics}
                               />
                             </Suspense>
@@ -4725,68 +5709,108 @@ export default function Workbench({
                 )}
                 {objectOpened && project && (
                   <div className="file-editor-surface pcb-3d-surface" hidden={view !== '3d'}>
-                    {project.pcb ? (
-                      <Suspense fallback={<p role="status">Loading 3D board…</p>}>
-                        <RetainedModelPreview
-                          visible={active && screen === 'workspace' && view === '3d'}
-                          sidebarVisible={rightSidebarVisible}
-                          onShowSidebar={showRightSidebar}
-                          onToggleSidebar={toggleRightSidebar}
-                          active={
-                            active &&
-                            screen === 'workspace' &&
-                            view === '3d' &&
-                            !modal &&
-                            !confirmation
-                          }
-                          board={project.pcb}
-                          fileId={fileId}
-                          projectSource={source}
-                          getRevision={getPropertiesRevision}
-                          spiceAvailable={spiceAvailable}
-                          onSavePartProperties={saveLayoutPartProperties}
-                          onFootprintChange={saveComponentFootprint}
-                          onRequestSave={requestPropertiesSave}
-                          onBoardThicknessChange={saveModelBoardThickness}
-                          onModeChange={setModelMode}
-                          onSketchPointerChange={modelSketchCoordinates.update}
-                          onEditingDraftChange={setModelDrawingBlocked}
-                          distanceMeasurement={modelMeasurement}
-                          schematic={project.schematic}
-                          grid={grid}
-                          gridSpacing={modelGridSpacing}
-                          viewState={pcb3DView}
-                          statusBar={view === '3d' ? drawingStatusBar : undefined}
-                          rulePanel={view === '3d' ? rulePanel : undefined}
-                          errorTarget={modelErrorTarget}
-                          annotationProps={modelAnnotationProps}
-                          modelCad={modelCad}
-                          undoDepth={coreSnapshot.undoDepth}
-                          redoDepth={coreSnapshot.redoDepth}
-                          capabilityHost={capabilityHost}
-                          revision={String(coreSnapshot.revision)}
-                          sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
-                          onModelChecksChange={onModelChecksChange}
-                          modelCheckFocus={modelCheckFocus}
-                        />
-                      </Suspense>
-                    ) : (
-                      <div className="pcb-model-preview">
-                        <div className="pcb-3d-empty">
-                          <p>No PCB layout in this project.</p>
-                          <button className="secondary" onClick={() => changeView('layout')}>
-                            Open Layout
+                    {(layoutSyncStatus.pending || layoutSyncStatus.error) && (
+                      <div
+                        className="layout-sync-status model-sync-status"
+                        role={layoutSyncStatus.error ? 'alert' : 'status'}
+                      >
+                        <span>
+                          {layoutSyncStatus.pending
+                            ? 'Loading assigned footprints…'
+                            : layoutSyncStatus.error}
+                        </span>
+                        {layoutSyncStatus.error && (
+                          <button
+                            className="secondary"
+                            aria-label="Retry footprint synchronization"
+                            disabled={sourceDraft !== null || Boolean(coreSnapshot.editingBlocked)}
+                            onKeyDown={(event) => {
+                              if (
+                                event.nativeEvent.isComposing ||
+                                event.nativeEvent.keyCode === 229
+                              ) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }
+                            }}
+                            onClick={retryLayoutSync}
+                          >
+                            <RotateCw size={16} aria-hidden="true" />
+                            Retry
                           </button>
-                        </div>
-                        {view === '3d' && rulePanel}
-                        {view === '3d' && drawingStatusBar}
+                        )}
                       </div>
                     )}
+                    <div className="pcb-3d-preview-surface">
+                      {project.pcb ? (
+                        <Suspense fallback={<WorkspaceLoading panel label="Loading 3D board" />}>
+                          <RetainedModelPreview
+                            getComponentActions={modelComponentActions}
+                            componentFocus={
+                              modelComponentFocus?.revision === coreSnapshot.revision
+                                ? modelComponentFocus
+                                : null
+                            }
+                            visible={active && screen === 'workspace' && view === '3d'}
+                            sidebarVisible={rightSidebarVisible}
+                            onShowSidebar={showRightSidebar}
+                            onToggleSidebar={toggleRightSidebar}
+                            active={
+                              active &&
+                              screen === 'workspace' &&
+                              view === '3d' &&
+                              !modal &&
+                              !confirmation
+                            }
+                            board={project.pcb}
+                            fileId={fileId}
+                            projectSource={source}
+                            getRevision={getPropertiesRevision}
+                            spiceAvailable={spiceAvailable}
+                            onSavePartProperties={saveLayoutPartProperties}
+                            onFootprintChange={saveComponentFootprint}
+                            onRequestSave={requestPropertiesSave}
+                            onBoardThicknessChange={saveModelBoardThickness}
+                            onModeChange={setModelMode}
+                            onSketchPointerChange={modelSketchCoordinates.update}
+                            onEditingDraftChange={setModelDrawingBlocked}
+                            distanceMeasurement={modelMeasurement}
+                            schematic={project.schematic}
+                            grid={grid}
+                            gridSpacing={modelGridSpacing}
+                            viewState={pcb3DView}
+                            statusBar={view === '3d' ? drawingStatusBar : undefined}
+                            rulePanel={view === '3d' ? rulePanel : undefined}
+                            errorTarget={modelErrorTarget}
+                            annotationProps={modelAnnotationProps}
+                            modelCad={modelCad}
+                            undoDepth={coreSnapshot.undoDepth}
+                            redoDepth={coreSnapshot.redoDepth}
+                            capabilityHost={capabilityHost}
+                            revision={String(coreSnapshot.revision)}
+                            sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
+                            onModelChecksChange={onModelChecksChange}
+                            modelCheckFocus={modelCheckFocus}
+                          />
+                        </Suspense>
+                      ) : (
+                        <div className="pcb-model-preview">
+                          <div className="pcb-3d-empty">
+                            <p>No PCB layout in this project.</p>
+                            <button className="secondary" onClick={() => changeView('layout')}>
+                              Open Layout
+                            </button>
+                          </div>
+                          {view === '3d' && rulePanel}
+                          {view === '3d' && drawingStatusBar}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="file-editor-surface" hidden={view !== 'source'}>
                   {sourceOpened && (
-                    <Suspense fallback={<p role="status">Loading source editor…</p>}>
+                    <Suspense fallback={<WorkspaceLoading panel label="Loading source editor" />}>
                       <RetainedSourceEditor
                         ruleStatus={view === 'source' ? ruleStatus : undefined}
                         rulePanel={view === 'source' ? rulePanel : undefined}
@@ -4965,7 +5989,7 @@ export default function Workbench({
                 onClick={() => setModal('settings')}
               />
             </nav>
-            <Suspense fallback={<p role="status">Loading plugins…</p>}>
+            <Suspense fallback={<WorkspaceLoading panel label="Loading plugins" />}>
               <PluginsPage
                 capabilityHost={capabilityHost}
                 onBack={() => setScreen(beforePlugins.current)}
@@ -4984,7 +6008,7 @@ export default function Workbench({
               onClose={() => setModal(null)}
               onApplied={(kind, id) => {
                 if (kind === 'symbol' && id) {
-                  setSelected(id);
+                  followSchematicPartSection(doc.id, id);
                   setTool('select');
                   void changeView('canvas');
                 } else if (kind === 'footprint') void changeView('layout');
@@ -5003,7 +6027,12 @@ export default function Workbench({
                 if (!('symbol' in detail) || detail.error) return;
                 setModal(null);
                 if (!(await changeView('canvas'))) return;
-                setPlacement({ symbol: detail.symbol, unit });
+                setPlacement({
+                  symbol: detail.symbol,
+                  unit,
+                  unavailableFootprint:
+                    detail.footprintPreview === 'unavailable' ? detail.footprint : undefined,
+                });
                 setTool('place');
                 queueSchematicNavigation('place');
               }}
@@ -5035,8 +6064,30 @@ export default function Workbench({
             selected={selected}
             onEdit={openProperties}
             onLocate={async (id) => {
+              if (schematicComposing.current || propertiesDraftPending()) return;
+              const schematicId = doc.id;
               if (!(await changeView('canvas'))) return;
-              setSelected(id);
+              const snapshot = core.getSnapshot();
+              const sheet = snapshot.project ? findSchematic(snapshot.project, schematicId) : null;
+              if (
+                !contextActive.current ||
+                activeSchematicRef.current !== schematicId ||
+                snapshot.sourceDraft !== null ||
+                snapshot.editingBlocked ||
+                schematicComposing.current ||
+                propertiesDraftPending() ||
+                !sheet?.parts.some((part) => part.id === id)
+              )
+                return;
+              const section = revealSchematicTargets(sheet, [id]);
+              const selectable = selectableSchematicIds(sheet, layers, selectionFilters, section);
+              setFileSelections((previous) => ({
+                ...previous,
+                [sheet.id]: selectable.has(id) ? [id] : [],
+              }));
+              setPropertiesDismissed(false);
+              setInspectedPartId(null);
+              setExplicitPropertiesId(null);
               setTool('select');
               setModal(null);
               queueSchematicNavigation('select', id);
@@ -5069,11 +6120,20 @@ export default function Workbench({
                   snapshot.editingBlocked ||
                   snapshot.revision !== coreSnapshot.revision ||
                   activeSchematicRef.current !== simulationProject.schematic.id ||
+                  schematicComposing.current ||
+                  propertiesDraftPending() ||
                   !doc ||
-                  !selectableSchematicIds(doc, layers, selectionFilters).has(id)
+                  !selectableSchematicIds(doc, layers, selectionFilters, 'all').has(id)
                 )
                   return false;
-                setSelected(id);
+                revealSchematicTargets(doc, [id]);
+                setFileSelections((previous) => ({
+                  ...previous,
+                  [doc.id]: [id],
+                }));
+                setPropertiesDismissed(false);
+                setInspectedPartId(null);
+                setExplicitPropertiesId(null);
                 setTool('select');
                 queueSchematicNavigation('select', id, true);
                 return true;
@@ -5120,7 +6180,7 @@ export default function Workbench({
           </Suspense>
         )}
         {modal === 'about' && (
-          <DeferredDialog title="About OpenPE" onClose={() => setModal(null)}>
+          <DeferredDialog title="About OpenPE" onClose={() => setModal(null)} compact wide>
             <AboutDialog onClose={() => setModal(null)} />
           </DeferredDialog>
         )}
@@ -5156,6 +6216,7 @@ export default function Workbench({
               detecting={detecting}
               error={agentError}
               onDetect={detectAgents}
+              onEnterRawMode={onEnterRawMode}
               onClose={() => setModal(null)}
             />
           </DeferredDialog>
@@ -5163,7 +6224,8 @@ export default function Workbench({
         {confirmation && (
           <ConfirmationDialog
             key={confirmation.kind}
-            documentTitle={project?.name ?? project?.schematic.title}
+            kind={confirmation.kind}
+            documentTitle={confirmation.documentTitle ?? project?.name ?? project?.schematic.title}
             busy={confirmBusy}
             error={confirmError}
             onCancel={cancelConfirmation}

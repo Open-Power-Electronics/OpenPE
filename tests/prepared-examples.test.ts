@@ -75,14 +75,17 @@ test('packaging retains the original examples tree including documents and optio
     'emc-flyback/emc-flyback.kicad_dru',
     'emc-flyback/footprints/EMC_Demo.pretty/device.kicad_mod',
     'emc-flyback/models/device.step',
+    'emc-flyback/models/control.lib',
     'emc-flyback/datasheets/controller.pdf',
   ]) {
     assert.ok(includes(projectResources.filter, file), file);
     assert.equal(includes(examples.filter, 'project/' + file), false, file);
   }
   for (const file of [
-    'spice/circuit.raw',
-    'thermal/circuit.vtu',
+    'spice-simulation/circuit.raw',
+    'layout-thermal/circuit.vtu',
+    'spice-simulation/circuit.example-model-0.lib',
+    'spice-simulation/other-results/circuit.cir',
     '.git/config',
     'history.git/config',
     'circuit.kicad_prl',
@@ -151,6 +154,10 @@ test('ngspice packaging matches each platform lock and keeps Windows files on wi
   assert.deepEqual(
     ngspiceFilter(configuration.build.mac.extraResources),
     Object.keys(lock.platforms['darwin-arm64'].files),
+  );
+  assert.deepEqual(
+    ngspiceFilter(configuration.build.linux.extraResources),
+    Object.keys(lock.platforms['linux-x64'].files),
   );
   assert.deepEqual(ngspiceFilter(configuration.build.extraResources), [
     'manifest.json',

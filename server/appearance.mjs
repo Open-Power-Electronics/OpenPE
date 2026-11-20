@@ -1,28 +1,30 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { defaultAppearance, parseAppearance, validateAppearance } from './appearance-format.mjs';
+import {
+  defaultAppearance,
+  defaultLayoutPreferences,
+  validateAppearance,
+  validateLayoutPreferences,
+} from './appearance-format.mjs';
 
-export function registerAppearance(app, dataDir, atomicWrite) {
-  const file = path.join(dataDir, 'appearance-v1.json');
+function registerPreference(app, atomicWrite, { route, file, label, defaults, validate }) {
   let saves = Promise.resolve();
-  app.get('/api/appearance', async (_req, res) => {
+  app.get(route, async (_req, res) => {
     await saves;
     try {
-      res.json(parseAppearance(await readFile(file, 'utf8')));
+      res.json(validate(JSON.parse(await readFile(file, 'utf8'))));
     } catch (error) {
-      if (error.code === 'ENOENT') res.json(defaultAppearance);
+      if (error.code === 'ENOENT') res.json(defaults);
       else
-        res
-          .status(500)
-          .json({ error: 'Could not read appearance settings. The saved file was preserved.' });
+        res.status(500).json({ error: `Could not read ${label}. The saved file was preserved.` });
     }
   });
-  app.post('/api/appearance', async (req, res) => {
+  app.post(route, async (req, res) => {
     let settings;
     try {
-      settings = validateAppearance(req.body);
+      settings = validate(req.body);
     } catch {
-      return res.status(400).json({ error: 'Invalid appearance settings.' });
+      return res.status(400).json({ error: `Invalid ${label}.` });
     }
     const write = saves.then(() => atomicWrite(file, JSON.stringify(settings)));
     saves = write.catch(() => {});
@@ -30,7 +32,24 @@ export function registerAppearance(app, dataDir, atomicWrite) {
       await write;
       res.json(settings);
     } catch {
-      res.status(500).json({ error: 'Could not save appearance settings. Try again.' });
+      res.status(500).json({ error: `Could not save ${label}. Try again.` });
     }
+  });
+}
+
+export function registerAppearance(app, dataDir, atomicWrite) {
+  registerPreference(app, atomicWrite, {
+    route: '/api/appearance',
+    file: path.join(dataDir, 'appearance-v1.json'),
+    label: 'appearance settings',
+    defaults: defaultAppearance,
+    validate: validateAppearance,
+  });
+  registerPreference(app, atomicWrite, {
+    route: '/api/layout-preferences',
+    file: path.join(dataDir, 'layout-preferences-v1.json'),
+    label: 'layout preferences',
+    defaults: defaultLayoutPreferences,
+    validate: validateLayoutPreferences,
   });
 }

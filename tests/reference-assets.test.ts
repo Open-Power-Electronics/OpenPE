@@ -9,6 +9,7 @@ import path from 'node:path';
 import manifest from '../resources/example-catalog/manifest.json';
 import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
 import assets from '../resources/example-catalog/footprints/manifest.json';
+import emcAssets from '../resources/example-catalog/emc-flyback-assets.json';
 import { parseProject, projectNativeFiles } from '../lib/project';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
 import {
@@ -16,6 +17,7 @@ import {
   exampleModelBytes,
   prepareExampleFootprints,
 } from '../server/example-footprints.mjs';
+import { createLibraryService } from '../server/libraries.mjs';
 
 const root = 'resources/example-catalog/footprints';
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -127,20 +129,61 @@ test('custom WE-DD package retains its four physical terminals and loads from th
   assert.equal(detail.models[0].path, '${KIPRJMOD}/models/L_Wurth_WE-DD-7345straight.step');
 });
 
-test('other Reference regression inputs retain current-format projects and accurate pinned source paths outside examples', () => {
-  const directory = 'tests/fixtures/reference-retired';
-  for (const file of readdirSync(directory).filter((name) => name.endsWith('.openpe.json'))) {
-    const project = parseProject(readFileSync(`${directory}/${file}`, 'utf8'));
-    const provenance = project.extensions['org.openpe.reference-example'] as {
-      source: {
-        schematic: { path: string; sha256: string };
-        pcb: { path: string; sha256: string };
-      };
-    };
-    for (const source of [provenance.source.schematic, provenance.source.pcb]) {
-      assert.ok(source.path.startsWith(`${directory}/upstream/`));
-      assert.equal(digest(readFileSync(source.path)), source.sha256);
+test('KiCad searches official and pinned example footprints and STEP models together offline', async () => {
+  const service = createLibraryService({ allowModelDownloads: false });
+  try {
+    const search = (query: string, library = '') =>
+      service.request({ action: 'search', kind: 'footprints', query, library });
+    const categories = await service.request({
+      action: 'categories',
+      kind: 'footprints',
+      source: 'KiCad',
+    });
+    const pinned = [...assets.footprints, ...emcAssets.footprints];
+    const namespaces = new Set(categories.categories.map(({ id }: { id: string }) => id));
+    const wurth = pinned.filter(({ id }) => /wuerth|wurth/i.test(id));
+    assert.equal(wurth.length, 7);
+    assert.equal(
+      (await search('T_EFD25_SMD.step')).entries[0]?.id,
+      'EMC_Demo:Wurth_750311591_EFD25',
+    );
+    for (const entry of pinned.filter((entry) => 'file' in entry || wurth.includes(entry))) {
+      const [library] = entry.id.split(':');
+      assert.ok(namespaces.has(library), library);
+      assert.equal((await search(entry.id)).entries[0]?.id, entry.id);
+      assert.equal((await search(entry.id, library)).entries[0]?.id, entry.id);
     }
+    const shared = 'Diode_SMD:D_SMA';
+    assert.equal((await search(shared, 'Diode_SMD')).entries[0]?.id, shared);
+    const snapshot = await service.request({ action: 'snapshot' });
+    assert.ok(
+      !snapshot.catalogs.footprints.some(({ id }: { id: string }) => id.startsWith('EMC_Demo:')),
+    );
+    const models = [
+      ...assets.footprints.map(({ id, models }) => ({ id, paths: models })),
+      ...emcAssets.footprints.map(({ id, models }) => ({ id, paths: models.map(({ path }) => path) })),
+    ];
+    for (const { id, paths } of models) {
+      const detail = await service.request({ action: 'detail', kind: 'footprints', id });
+      for (const reference of paths) {
+        const filename = reference.split('/').at(-1)!;
+        const expectedHash = modelReferenceKey(reference);
+        const matches = await search(filename, id.split(':')[0]);
+        assert.equal(
+          matches.entries.filter((entry: { id: string }) => entry.id === id).length,
+          1,
+          reference,
+        );
+        const index = detail.models.findIndex(
+          ({ path }: { path: string }) => modelReferenceKey(path) === expectedHash,
+        );
+        assert.ok(index >= 0, `${id} should offer ${reference}.`);
+        assert.equal(digest(await service.componentModelBytes(id, index)), expectedHash, reference);
+      }
+    }
+    assert.equal((await search('MECH1')).total, 0);
+  } finally {
+    service.close();
   }
 });
 

@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 
 const { createPart, emptyCircuit } = await tsImport('../lib/circuit.ts', import.meta.url);
-const { createExample } = await tsImport('../lib/examples.ts', import.meta.url);
+const { parameterizedHomeProject } = await tsImport('../tests/fixtures/model-parameters.ts', import.meta.url);
 const { createHomeExample } = await tsImport('../lib/create-home-example.ts', import.meta.url);
 
 // Isolated renderer and real document owner: no Electron, service, provider or solver.
@@ -336,11 +336,12 @@ try {
     });
   }
 
-  const buck = createExample('kicad-buck').schematic;
-  for (const [ref, label] of [
-    ['V102', 'Voltage (V)'],
-    ['V101', 'Pulsed voltage (V)'],
+  for (const [type, label] of [
+    ['DC', 'Voltage (V)'],
+    ['PULSE', 'Pulsed voltage (V)'],
   ]) {
+    const buck = parameterizedHomeProject(type).schematic;
+    const ref = 'V1';
     await inspectSpice(
       buck.parts.find((part) => part.ref === ref),
       async (html) => {
@@ -389,7 +390,7 @@ try {
   await inspectSpice(external, async (html) => {
     const file = disclosure.getByLabel('Model library', { exact: true });
     assert.equal(await file.inputValue(), 'LM2596-5.lib');
-    assert.equal(await file.getAttribute('title'), 'circuits/LM2596-5.lib');
+    assert.equal(await file.getAttribute('title'), 'models/LM2596-5.lib');
     assert.equal(await file.isEditable(), false);
     const model = disclosure.getByRole('combobox', { name: 'Simulation model', exact: true });
     assert.equal(await disclosure.getByRole('combobox').count(), 1);
@@ -418,7 +419,7 @@ try {
       ...part.fields,
       'Sim.Device': kind,
       'Sim.Name': 'VENDOR_' + kind,
-      'Sim.Library': 'circuits/storage.lib',
+      'Sim.Library': 'models/storage.lib',
       'Sim.Pins': '1=+ 2=-',
       'OpenPE.ModelSource': 'external',
       [key]: value,

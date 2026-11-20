@@ -6015,7 +6015,7 @@
     "files": [
       {
         "name": "lm2596-to220-5-buck.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2596-to220-5-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2596 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM2596-5.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2596-to220-5-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2596 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LM2596-5.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lm2596-to220-5-buck.kicad_sym",
@@ -6039,7 +6039,7 @@
     {
       "id": "lm2596-5",
       "sha256": "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134",
-      "file": "circuits/LM2596-5.lib"
+      "file": "models/LM2596-5.lib"
     }
   ]
 }

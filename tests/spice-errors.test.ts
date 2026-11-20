@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spiceFailure, publicSpiceFailure } from '../server/spice-errors.mjs';
+import {
+  spiceFailure,
+  publicSpiceFailure,
+} from '../plugins/spice-simulation/host/spice-errors.mjs';
 import { startServer } from '../server/index.mjs';
 import { createProject, serializeProject } from '../lib/project';
-import { defaultTransient } from '../lib/spice';
-import { readSimulationEvents } from '../lib/simulation-stream';
+import { defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import { readSimulationEvents } from '../plugins/spice-simulation/renderer/simulation-stream';
 import { switchingStageFixture } from './fixtures/switching-stage';
 
 const diagnostic =

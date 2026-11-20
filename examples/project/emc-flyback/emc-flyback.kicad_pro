@@ -3,6 +3,8 @@
     "3dviewports": [],
     "design_settings": {
       "defaults": {
+        "apply_defaults_to_fp_barcodes": false,
+        "apply_defaults_to_fp_dimensions": false,
         "apply_defaults_to_fp_fields": false,
         "apply_defaults_to_fp_shapes": false,
         "apply_defaults_to_fp_text": false,
@@ -26,14 +28,14 @@
         },
         "fab_line_width": 0.1,
         "fab_text_italic": false,
-        "fab_text_size_h": 1,
-        "fab_text_size_v": 1,
+        "fab_text_size_h": 1.0,
+        "fab_text_size_v": 1.0,
         "fab_text_thickness": 0.15,
         "fab_text_upright": false,
         "other_line_width": 0.1,
         "other_text_italic": false,
-        "other_text_size_h": 1,
-        "other_text_size_v": 1,
+        "other_text_size_h": 1.0,
+        "other_text_size_v": 1.0,
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
@@ -43,8 +45,8 @@
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
-        "silk_text_size_h": 1,
-        "silk_text_size_v": 1,
+        "silk_text_size_h": 1.0,
+        "silk_text_size_v": 1.0,
         "silk_text_thickness": 0.1,
         "silk_text_upright": false,
         "zones": {
@@ -71,6 +73,7 @@
         "extra_footprint": "warning",
         "footprint": "error",
         "footprint_filters_mismatch": "ignore",
+        "footprint_symbol_field_mismatch": "warning",
         "footprint_symbol_mismatch": "warning",
         "footprint_type_mismatch": "ignore",
         "hole_clearance": "error",
@@ -89,6 +92,7 @@
         "mirrored_text_on_front_layer": "warning",
         "missing_courtyard": "ignore",
         "missing_footprint": "warning",
+        "missing_tuning_profile": "warning",
         "net_conflict": "warning",
         "nonmirrored_text_on_back_layer": "warning",
         "npth_inside_courtyard": "ignore",
@@ -108,9 +112,12 @@
         "too_many_vias": "error",
         "track_angle": "error",
         "track_dangling": "warning",
+        "track_not_centered_on_via": "ignore",
+        "track_on_post_machined_layer": "error",
         "track_segment_length": "error",
         "track_width": "error",
         "tracks_crossing": "error",
+        "tuning_profile_track_geometries": "ignore",
         "unconnected_items": "error",
         "unresolved_variable": "error",
         "via_dangling": "warning",
@@ -118,23 +125,23 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0,
-        "min_connection": 0,
+        "min_clearance": 0.0,
+        "min_connection": 0.0,
         "min_copper_edge_clearance": 0.5,
-        "min_groove_width": 0,
+        "min_groove_width": 0.0,
         "min_hole_clearance": 0.25,
         "min_hole_to_hole": 0.25,
         "min_microvia_diameter": 0.2,
         "min_microvia_drill": 0.1,
         "min_resolved_spokes": 2,
-        "min_silk_clearance": 0,
+        "min_silk_clearance": 0.0,
         "min_text_height": 0.8,
         "min_text_thickness": 0.08,
         "min_through_hole_diameter": 0.3,
-        "min_track_width": 0,
+        "min_track_width": 0.0,
         "min_via_annular_width": 0.1,
         "min_via_diameter": 0.5,
-        "solder_mask_to_copper_clearance": 0,
+        "solder_mask_to_copper_clearance": 0.0,
         "use_height_for_length_calcs": true
       },
       "teardrop_options": [
@@ -150,10 +157,10 @@
         {
           "td_allow_use_two_tracks": true,
           "td_curve_segcount": 1,
-          "td_height_ratio": 1,
+          "td_height_ratio": 1.0,
           "td_length_ratio": 0.5,
-          "td_maxheight": 2,
-          "td_maxlen": 1,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
           "td_on_pad_in_zone": false,
           "td_target_name": "td_round_shape",
           "td_width_to_size_filter_ratio": 0.9
@@ -161,10 +168,10 @@
         {
           "td_allow_use_two_tracks": true,
           "td_curve_segcount": 1,
-          "td_height_ratio": 1,
+          "td_height_ratio": 1.0,
           "td_length_ratio": 0.5,
-          "td_maxheight": 2,
-          "td_maxlen": 1,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
           "td_on_pad_in_zone": false,
           "td_target_name": "td_rect_shape",
           "td_width_to_size_filter_ratio": 0.9
@@ -172,10 +179,10 @@
         {
           "td_allow_use_two_tracks": true,
           "td_curve_segcount": 1,
-          "td_height_ratio": 1,
+          "td_height_ratio": 1.0,
           "td_length_ratio": 0.5,
-          "td_maxheight": 2,
-          "td_maxlen": 1,
+          "td_maxheight": 2.0,
+          "td_maxlen": 1.0,
           "td_on_pad_in_zone": false,
           "td_target_name": "td_track_end",
           "td_width_to_size_filter_ratio": 0.9
@@ -186,15 +193,15 @@
         "diff_pair_defaults": {
           "corner_radius_percentage": 80,
           "corner_style": 1,
-          "max_amplitude": 1,
+          "max_amplitude": 1.0,
           "min_amplitude": 0.2,
           "single_sided": false,
-          "spacing": 1
+          "spacing": 1.0
         },
         "diff_pair_skew_defaults": {
           "corner_radius_percentage": 80,
           "corner_style": 1,
-          "max_amplitude": 1,
+          "max_amplitude": 1.0,
           "min_amplitude": 0.2,
           "single_sided": false,
           "spacing": 0.6
@@ -202,7 +209,7 @@
         "single_track_defaults": {
           "corner_radius_percentage": 80,
           "corner_style": 1,
-          "max_amplitude": 1,
+          "max_amplitude": 1.0,
           "min_amplitude": 0.2,
           "single_sided": false,
           "spacing": 0.6
@@ -212,17 +219,28 @@
       "zones_allow_external_fillets": false
     },
     "ipc2581": {
+      "bom_rev": "",
       "dist": "",
       "distpn": "",
       "internal_id": "",
       "mfg": "",
-      "mpn": ""
+      "mpn": "",
+      "sch_revision": ""
     },
     "layer_pairs": [],
     "layer_presets": [],
     "viewports": []
   },
   "boards": [],
+  "component_class_settings": {
+    "assignments": [],
+    "meta": {
+      "version": 0
+    },
+    "sheet_component_classes": {
+      "enabled": false
+    }
+  },
   "cvpcb": {
     "equivalence_files": []
   },
@@ -470,6 +488,7 @@
         "priority": 2147483647,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.2,
+        "tuning_profile": "",
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
@@ -487,8 +506,9 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 0,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 1,
-        "via_diameter": 1,
+        "track_width": 1.0,
+        "tuning_profile": "",
+        "via_diameter": 1.0,
         "via_drill": 0.5,
         "wire_width": 6
       },
@@ -506,7 +526,8 @@
         "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 1.5,
-        "via_diameter": 1,
+        "tuning_profile": "",
+        "via_diameter": 1.0,
         "via_drill": 0.5,
         "wire_width": 6
       },
@@ -523,8 +544,9 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 2,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 1,
-        "via_diameter": 1,
+        "track_width": 1.0,
+        "tuning_profile": "",
+        "via_diameter": 1.0,
         "via_drill": 0.5,
         "wire_width": 6
       },
@@ -541,8 +563,9 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 3,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 1,
-        "via_diameter": 1,
+        "track_width": 1.0,
+        "tuning_profile": "",
+        "via_diameter": 1.0,
         "via_drill": 0.5,
         "wire_width": 6
       },
@@ -560,6 +583,7 @@
         "priority": 4,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.3,
+        "tuning_profile": "",
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
@@ -578,7 +602,8 @@
         "priority": 5,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 1.5,
-        "via_diameter": 1,
+        "tuning_profile": "",
+        "via_diameter": 1.0,
         "via_drill": 0.5,
         "wire_width": 6
       },
@@ -596,13 +621,14 @@
         "priority": 6,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 0.3,
+        "tuning_profile": "",
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
       }
     ],
     "meta": {
-      "version": 4
+      "version": 5
     },
     "net_colors": null,
     "netclass_assignments": null,
@@ -856,6 +882,7 @@
       "sort_asc": true,
       "sort_field": "Reference"
     },
+    "bus_aliases": {},
     "connection_grid_size": 50,
     "drawing": {
       "dashed_lines_dash_length_ratio": 12,
@@ -894,7 +921,14 @@
     "spice_save_all_dissipations": false,
     "spice_save_all_voltages": false,
     "subpart_first_id": 65,
-    "subpart_id_separator": 0
+    "subpart_id_separator": 0,
+    "top_level_sheets": [
+      {
+        "filename": "emc-flyback.kicad_sch",
+        "name": "emc-flyback",
+        "uuid": "00000000-0000-0000-0000-000000000000"
+      }
+    ]
   },
   "sheets": [
     [
@@ -903,7 +937,13 @@
     ]
   ],
   "text_variables": {
-    "OPENPE_SIMULATION_MODELS": "[\"circuits/EMC_flyback_control.lib\",\"circuits/EMC_IRF520N.lib\",\"circuits/EMC_ES2D.lib\",\"circuits/EMC_SS510C.lib\"]",
-    "OPENPE_MODEL_CAD": "{\"version\":1,\"objects\":[{\"id\":\"5680ae25-cddf-5bf0-a9a9-64305bf92754\",\"name\":\"Aluminium base\",\"kind\":\"boolean\",\"position\":{\"x\":100,\"y\":88,\"z\":-10.3},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":94,\"z\":3},\"material\":\"aluminium\",\"opacity\":1,\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"profile\":{\"kind\":\"rectangle\"}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-46.2,\"y\":-34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":46.2,\"y\":34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":46.2,\"y\":-34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-46.2,\"y\":34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},{\"id\":\"babbfe37-a511-56d4-aca1-7273b12f0602\",\"name\":\"Aluminium front wall\",\"kind\":\"box\",\"position\":{\"x\":100,\"y\":42.5,\"z\":6.2},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":3,\"z\":30},\"material\":\"aluminium\",\"opacity\":1},{\"id\":\"c8e8796f-b29a-5660-a4ae-04063ef18a50\",\"name\":\"Aluminium back wall\",\"kind\":\"box\",\"position\":{\"x\":100,\"y\":133.5,\"z\":6.2},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":3,\"z\":30},\"material\":\"aluminium\",\"opacity\":1},{\"id\":\"368c5813-ae8b-56e3-a735-c26178bc1f81\",\"name\":\"Transparent cover\",\"kind\":\"boolean\",\"position\":{\"x\":100,\"y\":88,\"z\":22.7},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":94,\"z\":3},\"material\":\"pmma\",\"opacity\":0.3,\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"profile\":{\"kind\":\"rectangle\"}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-48,\"y\":-41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-48,\"y\":41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":48,\"y\":-41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":48,\"y\":41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}}]}"
+    "OPENPE_MODEL_CAD": "{\"version\":1,\"objects\":[{\"id\":\"5680ae25-cddf-5bf0-a9a9-64305bf92754\",\"name\":\"Aluminium base\",\"kind\":\"boolean\",\"position\":{\"x\":100,\"y\":88,\"z\":-10.3},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":94,\"z\":3},\"material\":\"aluminium\",\"opacity\":1,\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"profile\":{\"kind\":\"rectangle\"}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-46.2,\"y\":-34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":46.2,\"y\":34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":46.2,\"y\":-34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-46.2,\"y\":34.2,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},{\"id\":\"babbfe37-a511-56d4-aca1-7273b12f0602\",\"name\":\"Aluminium front wall\",\"kind\":\"box\",\"position\":{\"x\":100,\"y\":42.5,\"z\":6.2},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":3,\"z\":30},\"material\":\"aluminium\",\"opacity\":1},{\"id\":\"c8e8796f-b29a-5660-a4ae-04063ef18a50\",\"name\":\"Aluminium back wall\",\"kind\":\"box\",\"position\":{\"x\":100,\"y\":133.5,\"z\":6.2},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":3,\"z\":30},\"material\":\"aluminium\",\"opacity\":1},{\"id\":\"368c5813-ae8b-56e3-a735-c26178bc1f81\",\"name\":\"Transparent cover\",\"kind\":\"boolean\",\"position\":{\"x\":100,\"y\":88,\"z\":22.7},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"size\":{\"x\":112,\"y\":94,\"z\":3},\"material\":\"pmma\",\"opacity\":0.3,\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"boolean\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"boolean\":{\"operation\":\"difference\",\"operands\":[{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":112,\"y\":94,\"z\":3},\"profile\":{\"kind\":\"rectangle\"}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-48,\"y\":-41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":-48,\"y\":41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":48,\"y\":-41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}},\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}},{\"shape\":{\"kind\":\"extrusion\",\"size\":{\"x\":3.2,\"y\":3.2,\"z\":3},\"profile\":{\"kind\":\"circle\"}},\"position\":{\"x\":48,\"y\":41,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0}}]}}]}",
+    "OPENPE_SIMULATION_MODELS": "[\"models/EMC_flyback_control.lib\",\"models/EMC_IRF520N.lib\",\"models/EMC_ES2D.lib\",\"models/EMC_SS510C.lib\"]"
+  },
+  "tuning_profiles": {
+    "meta": {
+      "version": 0
+    },
+    "tuning_profiles_impedance_geometric": []
   }
 }

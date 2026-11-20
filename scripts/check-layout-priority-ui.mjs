@@ -139,11 +139,13 @@ board.footprints = [
         number: '3',
         x: 0,
         y: 5,
-        rotation: 0,
+        rotation: 90,
         type: 'thru_hole',
         shape: 'circle',
         size: { x: 2, y: 2 },
         drill: 0.8,
+        drillSlot: { axis: 'y', length: 1.5 },
+        drillOffset: { x: 0.1, y: 0 },
         netId: 'pour',
         layers: ['*.Cu'],
       },
@@ -382,7 +384,11 @@ try {
     if (airwires) await setLayoutVisibility(page, 'Airwires', false);
     const drills = canvas.locator('[data-layout-drills]');
     assert.equal(await drills.count(), 1);
-    assert.equal(await drills.locator('[data-pad-drill="through-pad"]').count(), 1);
+    const slot = drills.locator('rect[data-pad-drill="through-pad"]');
+    assert.equal(await slot.count(), 1);
+    assert.equal(await slot.getAttribute('width'), '0.8');
+    assert.equal(await slot.getAttribute('height'), '1.5');
+    assert.equal(await slot.getAttribute('rx'), '0.4');
     assert.equal(await drills.locator('[data-via-drill="through-via"]').count(), 1);
     assert.equal(await canvas.locator('[data-pad-id="through-pad"]').count(), 1);
     assert.equal(
@@ -390,7 +396,7 @@ try {
       1,
     );
     for (const [position, selector] of [
-      [{ x: 22, y: 27 }, '[data-pad-drill="through-pad"]'],
+      [{ x: 22.6, y: 26.9 }, '[data-pad-drill="through-pad"]'],
       [{ x: 43, y: 27 }, '[data-via-drill="through-via"]'],
     ])
       await expectPaint(

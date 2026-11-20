@@ -2,7 +2,7 @@ Texas Instruments simulation models
 
 TI PSpice model bytes are excluded from the source repository. Example preparation
 downloads the original unencrypted archives from www.ti.com into a private cache
-and saves separate verified model files beside the example JSON. The allowlisted
+and saves separate verified model files beside the native Home projects. The allowlisted
 models required by Home are included as separate application resources, prepared
 before examples open; Run does not download referenced models. The original archive and model
 copyright and warranty notices are preserved. These models are not KiCad library
@@ -14,7 +14,7 @@ TI describes these models as customer design aids, supplied as-is without warran
 TI's Standard Terms and Conditions for Evaluation Items apply, as linked from:
 https://www.ti.com/product/LM2596
 
-Sources: SNVMA65 (3.3 V), SNVMA62 (5 V), SNVMA63 (12 V).
+Source: SNVMA62 (5 V).
 Home LM2596 Buck uses an OpenPE-derived adjustable controller based on SNVMA62.
 It is not a TI-issued ADJ model. The private OPENPE_DERIVED_LM2596_ADJ_TRANS
 removes the internal feedback divider and senses external FB directly, retaining
@@ -25,10 +25,9 @@ OpenPE verifies both archive and extracted model SHA-256 hashes. A changed or
 corrupt model is rejected. Simulation uses ngspice's PSpice compatibility mode;
 TI has not validated or endorsed these OpenPE/ngspice results.
 
-The TI example circuits are authored by OpenPE and use official KiCad symbols
-and package assignments. They are conceptual examples, not TI reference designs
-or production-validated hardware. These six internal fixtures have no PCB layout. Home reference designs retain
-their source PCB layouts and use the separate bounded official-model profiles. Symbol and footprint licenses are recorded in kicad-libraries.txt.
+Home reference designs retain their source PCB layouts and use bounded
+official-model profiles. Symbol and footprint licenses are recorded in
+kicad-libraries.txt.
 
 Home reference model sources (original copyright/warranty notices preserved in cache):
 LM2735Y: TI SNVM840, https://www.ti.com/product/LM2735

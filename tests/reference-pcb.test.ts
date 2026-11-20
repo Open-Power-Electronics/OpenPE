@@ -124,10 +124,7 @@ test('rounded and chamfered pads keep distinct drawing geometry', () => {
     .pcb!.footprints.flatMap((f) => f.pads)
     .find((p) => p.shape === 'roundrect')!;
   assert.ok(pad.roundrectRatio! > 0);
-  assert.notEqual(
-    pcbPadPath(pad),
-    pcbPadPath({ ...pad, shape: 'rect', roundrectRatio: undefined }),
-  );
+  assert.notEqual(pcbPadPath(pad), pcbPadPath({ size: pad.size }));
   const chamfered = { ...pad, chamfer: ['top_left'] as 'top_left'[], chamferRatio: 0.2 };
   assert.notEqual(pcbPadPath(chamfered), pcbPadPath(pad));
 });

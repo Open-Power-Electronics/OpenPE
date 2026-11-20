@@ -11,14 +11,13 @@ import {
   prepareThermalModel,
   type ThermalModel,
   type ThermalResult,
-} from '../lib/thermal';
+} from '../plugins/layout-thermal/domain/thermal';
 import { startServer } from '../server/index.mjs';
+import { createWorkbenchPlugins, bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 import {
-  createWorkbenchPlugins,
-  bundledWorkbenchCatalog,
-  spicePluginId,
-  thermalPluginId,
-} from '../server/workbench-plugins.mjs';
+  SPICE_PLUGIN_ID as spicePluginId,
+  THERMAL_PLUGIN_ID as thermalPluginId,
+} from '../plugins/catalog.mjs';
 
 function fixture() {
   const project = createProject();
@@ -118,11 +117,11 @@ test('current complete lifecycle preserves independent SPICE and Layout Thermal 
     const thermal = catalog.plugins.find((p: { id: string }) => p.id === thermalPluginId);
     assert.equal(thermal?.name, 'Layout Thermal');
     assert.equal(thermal?.enabled, true);
-    await service.requireThermal();
-    await assert.rejects(service.requireSpice(), /SPICE/);
+    await service.require('pcb-thermal@openpe');
+    await assert.rejects(service.require('spice-simulation@openpe'), /SPICE/);
     assert.equal(await readFile(filename, 'utf8'), bytes);
     await service.change('disable', thermalPluginId);
-    await assert.rejects(service.requireThermal(), /Layout Thermal/);
+    await assert.rejects(service.require('pcb-thermal@openpe'), /Layout Thermal/);
     const saved = JSON.parse(await readFile(filename, 'utf8'));
     assert.deepEqual(
       saved.plugins.map((plugin: { id: string }) => plugin.id),

@@ -20,8 +20,7 @@ export function useExampleList(active: boolean, screen: string) {
       if (!current || token !== request) return;
       const [examplesResult, recentResult] = results;
       if (examplesResult.status === 'fulfilled') setDiscovered(examplesResult.value.entries);
-      if (recentResult.status === 'fulfilled')
-        setRecent(recentResult.value.initialized ? recentResult.value.entries : homeRecent);
+      if (recentResult.status === 'fulfilled') setRecent(recentResult.value.entries);
       else setRecent([]);
       setRevision((value) => value + 1);
       setError(

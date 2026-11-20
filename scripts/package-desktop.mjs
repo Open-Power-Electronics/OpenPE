@@ -8,11 +8,14 @@ const target =
     ? ['--win', 'dir', 'nsis']
     : platform === 'darwin' && arch === 'arm64'
       ? ['--mac', 'dir', 'dmg']
-      : null;
+      : platform === 'linux' && arch === 'x64'
+        ? ['--linux', 'dir', 'AppImage', 'deb']
+        : null;
 if (!target)
   throw new Error(
-    `Unsupported package host ${platform} ${arch}. OpenPE packages Windows x64 and macOS arm64 only.`,
+    `Unsupported package host ${platform} ${arch}. OpenPE packages Windows x64, macOS arm64 and Linux x64.`,
   );
+if (platform === 'linux') process.umask(0o022);
 
 function run(args) {
   return new Promise((resolve, reject) => {

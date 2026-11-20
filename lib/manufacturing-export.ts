@@ -1,12 +1,14 @@
 import { validateProject, type Project } from './project';
+import type { Point } from './circuit';
 import { projectNativeFiles } from './kicad-project';
 import { parseKiCadPCBTree } from './kicad-pcb';
 import { child, children, parseSExpr, val, type SExpr } from './sexpr';
 import { resolvePCBGraphic, type BoardLayer, type Footprint, type PCB } from './pcb';
-import { footprintPoint, padDrillPosition } from './pcb-layout';
+import { footprintPoint, padDrillLine } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
 import { boardPolygons, worldZones } from './pcb-polygons';
 import { GerberLayer } from './manufacturing-gerber';
+import { padApertureLayers } from './pcb-pad-role';
 import { exportModelCadScad } from './model-cad-scad';
 import { modelCadFromProject } from './model-cad';
 import { exportZip } from './export-zip';
@@ -258,6 +260,15 @@ function gerberFiles(
       for (const via of board.vias) plot.circle(via, via.diameter);
     for (const f of board.footprints) {
       for (const p of f.pads) {
+        if (
+          layer.endsWith('.Cu') &&
+          p.type === 'np_thru_hole' &&
+          p.shape === 'circle' &&
+          p.drill === p.size.x &&
+          !p.drillOffset &&
+          !p.drillSlot
+        )
+          continue;
         const padLayers =
           p.layers ??
           (p.type === 'smd'
@@ -276,7 +287,9 @@ function gerberFiles(
           )
         )
           continue;
-        if (layer.endsWith('.Mask')) {
+        if (padApertureLayers(p)) {
+          plot.pad(f, p);
+        } else if (layer.endsWith('.Mask')) {
           const margin =
             p.solderMaskMargin ?? f.solderMaskMargin ?? setting('pad_to_mask_clearance');
           plot.pad(f, p, margin);
@@ -314,12 +327,15 @@ const assemblyNotes =
 function drillFiles(board: PCB, stem: string): ManufacturingFile[] {
   const files: ManufacturingFile[] = [];
   for (const plated of [true, false]) {
+    const coordinate = (point: Point) => `X${point.x.toFixed(6)}Y${(-point.y).toFixed(6)}`;
     const holes = board.footprints.flatMap((f) =>
       f.pads
         .filter((p) => p.drill && (p.type !== 'np_thru_hole') === plated)
-        .map((p) => ({ ...padDrillPosition(f, p), diameter: p.drill! })),
+        .map((p) => ({ line: padDrillLine(f, p), diameter: p.drill!, slot: !!p.drillSlot })),
     );
-    if (plated) holes.push(...board.vias.map((v) => ({ ...v, diameter: v.drill })));
+    if (plated)
+      for (const via of board.vias)
+        holes.push({ line: [via, via], diameter: via.drill, slot: false });
     const diameters = [...new Set(holes.map((h) => number(h.diameter)))].sort(
       (a, b) => Number(a) - Number(b),
     );
@@ -335,8 +351,12 @@ function drillFiles(board: PCB, stem: string): ManufacturingFile[] {
     ];
     for (const [i, d] of diameters.entries()) {
       commands.push(`T${i + 1}`);
-      for (const h of holes.filter((h) => number(h.diameter) === d))
-        commands.push(`X${h.x.toFixed(6)}Y${(-h.y).toFixed(6)}`);
+      for (const {
+        line: [start, end],
+        slot,
+      } of holes.filter((h) => number(h.diameter) === d))
+        if (slot) commands.push(`${coordinate(start)}G85${coordinate(end)}`, 'G05');
+        else commands.push(coordinate(start));
     }
     files.push({
       name: `${stem}-${plated ? 'PTH' : 'NPTH'}.drl`,

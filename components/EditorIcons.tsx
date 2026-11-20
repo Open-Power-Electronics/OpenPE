@@ -22,10 +22,19 @@ export const SchematicIcon = createLucideIcon('Schematic', [
   ['path', { d: 'M14 20h8l-4 3Z', key: 'ground' }],
 ]);
 
-// An IEC resistor and leads identify an electrical symbol rather than a physical package.
+// A broad IEC resistor body and two leads stay legible at toolbar sizes.
 export const SymbolIcon = createLucideIcon('Symbol', [
-  ['rect', { x: '7', y: '8', width: '10', height: '8', key: 'resistor' }],
-  ['path', { d: 'M2 12h5m10 0h5', key: 'terminals' }],
+  ['rect', { x: '6', y: '7', width: '12', height: '10', key: 'resistor' }],
+  ['path', { d: 'M2 12h4m12 0h4', key: 'terminals' }],
+]);
+
+// Original cross-view glyph: a component lead points into the destination view.
+// The solid node identifies the highlighted target without implying a design edit.
+export const ComponentHighlightIcon = createLucideIcon('ComponentHighlight', [
+  ['rect', { x: '3', y: '9', width: '5', height: '6', rx: '1', key: 'component' }],
+  ['path', { d: 'M1 12h2m5 0h6m-3-3 3 3-3 3', key: 'association' }],
+  ['path', { d: 'M12 7V4h9v16h-9v-3', key: 'destination' }],
+  ['circle', { cx: '17.5', cy: '12', r: '1.5', fill: 'currentColor', stroke: 'none', key: 'target' }],
 ]);
 
 export const ModelIcon = createLucideIcon('Model', [

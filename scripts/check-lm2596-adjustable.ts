@@ -2,11 +2,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { lm2596AdjustableDerivedModel as model } from '../lib/ti-dcdc';
-import { deriveLm2596AdjustableModel } from '../server/spice-lm2596-adj.mjs';
-import { adaptSpiceModels } from '../server/spice-model-adapters.mjs';
-import { runSimulation } from '../server/spice.mjs';
-import type { SpiceDeck, SimulationResult } from '../lib/spice';
+import { lm2596AdjustableDerivedModel as model } from '../lib/reference-models';
+import { deriveLm2596AdjustableModel } from '../plugins/spice-simulation/host/spice-lm2596-adj.mjs';
+import { adaptSpiceModels } from '../plugins/spice-simulation/host/spice-model-adapters.mjs';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
+import type { SpiceDeck, SimulationResult } from '../plugins/spice-simulation/domain/spice';
 import { verifyHomeOutput, voltageWindow } from './home-simulation-verification';
 
 const directory = 'test-results/lm2596-adjustable';

@@ -6,9 +6,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { referenceExamples } from '../lib/reference-examples';
 import { homeExampleNativePath } from '../lib/home-examples';
 import { projectFromNativeFiles } from '../lib/project';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
-import { runSimulation } from '../server/spice.mjs';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
 import { readProjectModelFile } from '../server/project-model-files.mjs';
 import { projectSimulationModels } from '../server/project-models.mjs';
 

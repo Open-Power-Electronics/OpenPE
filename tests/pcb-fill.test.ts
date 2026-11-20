@@ -29,6 +29,7 @@ import { referenceExamples, createReferenceExample } from '../lib/reference-exam
 import { runPCBDesignRules } from '../lib/pcb-drc';
 import { isOwnedPCB, ownProjectData } from '../lib/immutable-project';
 import { parseKiCadPCB } from '../lib/kicad-pcb';
+import { readPCBDesignRuleSourceTexts } from '../lib/pcb-clearance-sources';
 
 const rectangle = (x: number, y: number, w: number, h: number) => [
   { x, y },
@@ -85,6 +86,136 @@ function fixture() {
   board.vias = [{ id: uid(), netId: board.nets[1].id, x: 10, y: 5, diameter: 1, drill: 0.5 }];
   return board;
 }
+
+test('refill applies native pair rules in both operand orders and never lowers the board minimum', () => {
+  const board = fixture();
+  const context = {
+    projectSource: JSON.stringify({
+      board: { design_settings: { rules: { min_clearance: 0.1 } } },
+      net_settings: {
+        classes: [
+          { name: 'Default', clearance: 0.2 },
+          { name: 'Power', clearance: 0.6 },
+        ],
+        netclass_patterns: [{ pattern: 'Signal', netclass: 'Power' }],
+      },
+    }),
+    rulesSource: `(version 1)
+      (rule "power pour" (condition "A.NetClass == 'Power' && B.Type == 'Zone'") (constraint clearance (min 0.9mm)))
+      (rule "via exception" (condition "A.Type == 'Zone' && B.Type == 'Via'") (constraint clearance (min 0.55mm)))`,
+  };
+  const before = structuredClone(board);
+  const filled = fillCopperZones(board, undefined, context);
+  const copper = filledCopperPolygons(filled).get(board.zones[0].id)!;
+  assert.equal(
+    contains(copper, 15, 11.05),
+    false,
+    'Track clearance uses the 0.9 mm conditional rule.',
+  );
+  assert.equal(contains(copper, 15, 11.15), true, 'Other copper is not globally over-cleared.');
+  assert.equal(contains(copper, 11, 5), false);
+  assert.equal(contains(copper, 11.1, 5), true, 'The last matching via rule controls its pair.');
+  const sources = readPCBDesignRuleSourceTexts(filled, context.projectSource, context.rulesSource);
+  const report = runPCBDesignRules(
+    filled,
+    { scopes: ['clearance'], clearance: 0.1, useKiCadClearance: true },
+    undefined,
+    sources,
+  );
+  assert.deepEqual(report.issues, []);
+
+  const tighter = {
+    ...context,
+    projectSource: context.projectSource.replace('"min_clearance":0.1', '"min_clearance":0.8'),
+  };
+  const refreshed = refreshPCBFill(filled, filled, true, tighter, context);
+  const strict = filledCopperPolygons(refreshed).get(board.zones[0].id)!;
+  assert.equal(contains(strict, 11.25, 5), false, 'A rule edit refreshes an unchanged board.');
+  assert.equal(contains(strict, 11.35, 5), true);
+  assert.equal(
+    refreshed.zones[0].clearance,
+    board.zones[0].clearance,
+    'Native pair limits do not overwrite the zone setting.',
+  );
+  assert.deepEqual(board, before);
+  assert.throws(
+    () =>
+      fillCopperZones(board, undefined, {
+        ...context,
+        rulesSource:
+          '(version 1)(rule "unsupported" (condition "A.Unknown == \'x\'") (constraint clearance (min 2mm)))',
+      }),
+    /unsupported KiCad clearance/,
+  );
+  assert.deepEqual(board, before, 'Unsupported rules reject before any accepted fill changes.');
+});
+
+test('pour rules use current pad courtyards and reject unsupported Zone courtyard predicates atomically', () => {
+  const board = fixture();
+  board.footprints.push({
+    id: uid(),
+    symbolId: null,
+    libraryId: 'Test:Courtyard',
+    reference: 'J1',
+    x: 18,
+    y: 4,
+    rotation: 0,
+    side: 'front',
+    pads: [
+      {
+        id: uid(),
+        number: '1',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        shape: 'rect',
+        size: { x: 1, y: 1 },
+        type: 'smd',
+        netId: board.nets[1].id,
+      },
+    ],
+    graphics: [
+      {
+        id: uid(),
+        layer: 'F.CrtYd',
+        kind: 'polygon',
+        start: { x: -2, y: -2 },
+        end: { x: -2, y: 2 },
+        points: [
+          { x: 2, y: -2 },
+          { x: 2, y: 2 },
+        ],
+        width: 0.05,
+      },
+    ],
+  });
+  const rules = {
+    rulesSource: `(version 1)(rule "pad courtyard" (condition "A.Type == 'Zone' && B.intersectsCourtyard('J1')") (constraint clearance (min 1.2mm)))`,
+  };
+  const before = structuredClone(board);
+  const filled = fillCopperZones(board, undefined, rules);
+  const copper = filledCopperPolygons(filled).get(board.zones[0].id)!;
+  assert.equal(contains(copper, 18, 5.65), false);
+  assert.equal(contains(copper, 18, 5.8), true);
+  const sources = readPCBDesignRuleSourceTexts(filled, undefined, rules.rulesSource);
+  assert.deepEqual(
+    runPCBDesignRules(
+      filled,
+      { scopes: ['clearance'], useKiCadClearance: true },
+      undefined,
+      sources,
+    ).issues,
+    [],
+  );
+  assert.throws(
+    () =>
+      fillCopperZones(board, undefined, {
+        rulesSource: `(version 1)(rule "zone courtyard" (condition "A.Type == 'Zone' && A.intersectsCourtyard('J1')") (constraint clearance (min 1mm)))`,
+      }),
+    /courtyard conditions on Zone/,
+  );
+  assert.deepEqual(board, before);
+});
 
 test('selected zone fill enables exactly that zone, preserves unrelated fills and rejects missing or unassigned targets', () => {
   const board = fixture();
@@ -657,7 +788,11 @@ test('dynamic fills refresh embedded zones in their owner coordinates and retain
   delete disabled.filledPolygons;
   const beforeFill = { ...filled, zones: [...filled.zones, disabled] };
   const selectedFill = fillCopperZone(beforeFill, disabled.id);
-  assert.equal(selectedFill.zones[0].filledPolygons, undefined);
+  assert.deepEqual(
+    selectedFill.zones[0].filledPolygons,
+    filled.zones[0].filledPolygons,
+    'Enabling another pour retains accepted copper instead of publishing cleared fills.',
+  );
   const allActive = refreshPCBFill(beforeFill, selectedFill);
   assert.ok(allActive.zones.every((zone) => zone.filledPolygons!.length));
   assert.ok(allActive.footprints[0].zones![0].filledPolygons!.length);

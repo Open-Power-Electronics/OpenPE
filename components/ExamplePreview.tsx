@@ -4,7 +4,8 @@ import { pinPositions } from '@/lib/circuit';
 import { partTransform } from '@/lib/schematic-edit';
 import SymbolGraphic from './SymbolGraphic';
 import SchematicText from './SchematicText';
-import { schematicTexts, schematicPolylines } from '@/lib/schematic-text';
+import { schematicTexts, schematicPolylines, schematicNoteBoxCorners } from '@/lib/schematic-text';
+import { schematicImageCorners } from '@/lib/schematic-image';
 import { visibleJunctions } from '@/lib/schematic-view';
 import { partFields } from '@/lib/library';
 import { symbolRole } from '@/lib/symbol-role';
@@ -30,6 +31,8 @@ export default memo(function ExamplePreview({ circuit: d }: { circuit: Circuit }
     ...d.labels,
     ...schematicTexts(d.original),
     ...schematicPolylines(d.original).flatMap((line) => line.points),
+    ...schematicNoteBoxCorners(d.original),
+    ...schematicImageCorners(d.original),
   ];
   if (!points.length) points.push({ x: 0, y: 0 });
   const left = Math.min(...points.map((p) => p.x)) - 10;

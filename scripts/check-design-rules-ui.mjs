@@ -7,6 +7,7 @@ import { tsImport } from 'tsx/esm/api';
 import { setTimeout as delay } from 'node:timers/promises';
 import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { setLayoutVisibility, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 
 // Real DesktopWorkspace, Core and deferred engines. All native/service state is
@@ -1080,6 +1081,7 @@ try {
     await categories.waitFor();
     assert.deepEqual(await categories.getByRole('tab').allTextContents(), [
       'Appearance',
+      'Workspace',
       'Rule',
       'Agents',
     ]);

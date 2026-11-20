@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createExample } from '../lib/examples';
+import { createReferenceExample } from '../lib/reference-examples';
 import { createHomeExample } from '../lib/create-home-example';
 import { displayPartValue, partFields } from '../lib/library';
 import { prepareSourceConversion } from '../lib/simulation-source-conversion';
 import { simulationSourceProperties } from '../lib/part-properties';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { ProjectCore } from '../core/project-core';
 import { exportKiCad, importDocument } from '../lib/project';
 
@@ -31,12 +31,12 @@ function convert(core: ProjectCore, ref: string, type: 'DC' | 'PULSE' | 'SIN') {
 }
 
 test('source waveform conversion compiles the selected type, preserves geometry and is one undo edit', () => {
-  const project = createExample('kicad-buck'),
+  const project = createReferenceExample('reference-lm2598-to220-7-buck'),
     core = new ProjectCore(project);
   const before = core.getSnapshot();
-  const original = before.project!.schematic.parts.find((p) => p.ref === 'V102')!;
+  const original = before.project!.schematic.parts.find((p) => p.ref === 'V1')!;
   for (const type of ['PULSE', 'SIN', 'DC'] as const) {
-    const changed = convert(core, 'V102', type);
+    const changed = convert(core, 'V1', type);
     assert.equal(changed.id, original.id);
     assert.equal(changed.libId, original.libId);
     assert.deepEqual(
@@ -55,7 +55,7 @@ test('source waveform conversion compiles the selected type, preserves geometry 
     assert.match(deck.netlist, new RegExp(type === 'DC' ? ' DC ' : ` ${type}\\(`));
     const reopened = importDocument(exportKiCad(state.project!, 'schematic'));
     assert.equal(
-      simulationSourceProperties(reopened.schematic.parts.find((p) => p.ref === 'V102')!)!.type,
+      simulationSourceProperties(reopened.schematic.parts.find((p) => p.ref === 'V1')!)!.type,
       type,
     );
   }
@@ -66,7 +66,7 @@ test('source waveform conversion compiles the selected type, preserves geometry 
   assert.equal(core.getSnapshot().source, before.source);
 });
 
-test('official reference inputs use converted source fields, while the IRF gate stays bounded to PULSE', () => {
+test('Home reference inputs compile the converted native source fields', () => {
   const core = new ProjectCore(createHomeExample('reference-lm2598-to220-7-buck'));
   for (const type of ['PULSE', 'SIN', 'DC'] as const) {
     convert(core, 'V1', type);
@@ -76,18 +76,11 @@ test('official reference inputs use converted source fields, while the IRF gate 
       new RegExp(type === 'DC' ? ' DC ' : ` ${type}\\(`),
     );
   }
-  const buck = new ProjectCore(createExample('kicad-buck'));
-  convert(buck, 'V101', 'DC');
-  const d = buck.getSnapshot().project!.schematic;
-  assert.throws(
-    () => buildSpiceDeck(d, defaultTransient(d)),
-    /unsupported simulation device or type/,
-  );
 });
 
 test('invalid source drafts and cross-family changes never convert or mutate the accepted source', () => {
-  const project = createExample('kicad-buck'),
-    part = project.schematic.parts.find((p) => p.ref === 'V102')!;
+  const project = createReferenceExample('reference-lm2598-to220-7-buck'),
+    part = project.schematic.parts.find((p) => p.ref === 'V1')!;
   const before = structuredClone(part);
   const rows = [
     ...Object.entries(partFields(part)).map(([name, value]) => ({ name, value })),

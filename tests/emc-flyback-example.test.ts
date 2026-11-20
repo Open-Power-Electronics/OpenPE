@@ -26,11 +26,11 @@ import {
 } from '../lib/project';
 import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
 import { schematicPolylines, schematicTexts } from '../lib/schematic-text';
-import { defaultTransient, simulationSupportError } from '../lib/spice';
+import { defaultTransient, simulationSupportError } from '../plugins/spice-simulation/domain/spice';
 import { modelCadFromProject, MODEL_CAD_NATIVE_VARIABLE } from '../lib/model-cad';
 import { arrangeExampleText } from '../lib/example-layout';
 import { parseCircuit, serializeCircuit } from '../lib/circuit';
-import { buildSpiceDeck } from '../lib/spice';
+import { buildSpiceDeck } from '../plugins/spice-simulation/domain/spice';
 import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
 import { prepareEmcFlybackModelBindings } from '../scripts/emc-flyback-model-bindings';
 import { prepareEmcFlybackTestbench } from '../scripts/emc-flyback-testbench';
@@ -305,16 +305,18 @@ test('EMC enclosure exists only in Model CAD, outside PCB footprints and project
     before.splice(before.indexOf(segment), 1, ...expectedLegs);
   }
   const withoutCasesOrFills = (board: ReturnType<typeof parseSExpr>) =>
-    board.filter(
-      (node) =>
-        !Array.isArray(node) ||
-        node[0] !== 'footprint' ||
-        !['MECH1', 'MECH2'].includes(reference(node)),
-    ).map((node) =>
-      Array.isArray(node) && node[0] === 'zone'
-        ? node.filter((item) => !Array.isArray(item) || item[0] !== 'filled_polygon')
-        : node,
-    );
+    board
+      .filter(
+        (node) =>
+          !Array.isArray(node) ||
+          node[0] !== 'footprint' ||
+          !['MECH1', 'MECH2'].includes(reference(node)),
+      )
+      .map((node) =>
+        Array.isArray(node) && node[0] === 'zone'
+          ? node.filter((item) => !Array.isArray(item) || item[0] !== 'filled_polygon')
+          : node,
+      );
   const expected = withoutCasesOrFills(before);
   const actual = withoutCasesOrFills(generated);
   assert.equal(actual.length, expected.length);

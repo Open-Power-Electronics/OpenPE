@@ -28,7 +28,7 @@ After an intentional master change, regenerate assets from the repository root:
 node scripts/brand-assets.mjs
 ```
 
-The script writes SVG variants/lockups and transparent PNG/ICO production assets under `public/brand/` and `build/`, plus the three OpenPE preview files listed above. It does not recreate the Open Design research snapshots. Preserve the original Signal E mark on both light and dark application surfaces; generated reversed variants do not imply automatic theme switching.
+The script writes SVG variants/lockups and transparent PNG/ICO production assets under `public/brand/` and `build/`, plus the three OpenPE preview files listed above. It does not recreate the Open Design research snapshots. Use the original charcoal Signal E mark on both light and dark application surfaces. Light and reversed logo variants are not generated or delivered.
 
 The logo presentation sheet supplies its own backgrounds. Production marks retain transparency. The title preview illustrates product identity; the actual Windows caption-toolbar layout is specified in DESIGN.md and implemented in `electron/main.cjs` and the renderer.
 

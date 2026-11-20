@@ -6,6 +6,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { tsImport } from 'tsx/esm/api';
 import { readSource, fillSource } from './source-editor-test-helpers.mjs';
 import { openSchematicPanel } from './schematic-visualization-test-helpers.mjs';
@@ -17,7 +18,10 @@ const { createProject, serializeProject, parseProject } = await tsImport(
   '../lib/project.ts',
   import.meta.url,
 );
-const { buildSpiceDeck } = await tsImport('../lib/spice.ts', import.meta.url);
+const { buildSpiceDeck } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
 const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const { projectNativeFiles } = await tsImport('../lib/kicad-project.ts', import.meta.url);
 const { children, parseSExpr, quote, val, writeSExpr } = await tsImport(
@@ -949,7 +953,7 @@ try {
   await button('Source').click();
   const schematicName = await selectSchematicSource();
   const buckNative = projectNativeFiles(
-    parseProject(await readFile('tests/fixtures/kicad/kicad-buck.openpe.json', 'utf8')),
+    parseProject(await readFile('tests/fixtures/reference/lm2598-to220-7-buck.json', 'utf8')),
     'buck.kicad_pro',
   );
   const buckSchematic = buckNative.files.find((file) => file.name === 'buck.kicad_sch');

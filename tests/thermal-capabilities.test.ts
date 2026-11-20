@@ -1,10 +1,13 @@
+import { prepareWorkbenchPlugins } from './fixtures/workbench-plugins';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityHost } from '../api/capabilities';
 import {
   registerThermalCapabilities,
   type ThermalCapabilityAdapter,
-} from '../lib/thermal-capabilities';
+} from '../plugins/layout-thermal/renderer/thermal-capabilities';
+
+await prepareWorkbenchPlugins();
 
 function fixture() {
   const host = createCapabilityHost();

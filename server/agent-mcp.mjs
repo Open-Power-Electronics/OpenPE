@@ -7,7 +7,7 @@ import {
   agentCapabilityContent,
 } from './agent-capabilities.mjs';
 
-export const cursorQuestionTool = {
+const cursorQuestionTool = {
   name: 'openpe_ask_user',
   description:
     'Ask the user a clarification question and wait for the explicit answer. The answer grants no file, shell, or host permission.',
@@ -73,7 +73,7 @@ export function agentMCPConnection(env = process.env) {
 /** Question calls use a separate per-turn token. A partial environment fails closed.
  * @param {Record<string,string|undefined>} env
  */
-export function agentQuestionConnection(env = process.env) {
+function agentQuestionConnection(env = process.env) {
   const url = new URL(env.OPENPE_QUESTIONS_URL || 'about:blank');
   if (
     url.protocol !== 'http:' ||

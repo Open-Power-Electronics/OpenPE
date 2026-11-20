@@ -10,16 +10,16 @@ type Component = NonNullable<Sheet['components']>[number];
 type Ordered<T> = T & { order: number };
 type Model = Omit<FootprintModel, 'offset' | 'scale' | 'rotation'> &
   Partial<Pick<FootprintModel, 'offset' | 'scale' | 'rotation'>>;
-export type ObjectFootprint = Ordered<
+type ObjectFootprint = Ordered<
   Omit<Footprint, 'symbolId' | 'models'> & { models?: Model[] }
 >;
-export type ObjectSimulation = Partial<Record<keyof typeof simulationFieldNames, string>> & {
+type ObjectSimulation = Partial<Record<keyof typeof simulationFieldNames, string>> & {
   valueFormat?: string;
   excluded?: boolean;
   nativeOrder?: number;
   fields?: Record<string, string>;
 };
-export type ObjectComponent = Omit<Component, 'simulation'> & {
+type ObjectComponent = Omit<Component, 'simulation'> & {
   simulation?: ObjectSimulation;
   footprints?: ObjectFootprint[];
   /** Only needed for source fields interleaved across design and simulation. */
@@ -57,7 +57,7 @@ function retainNetworkDrawing(drawing: NetworkDrawing, reuse: boolean): NetworkD
   ownedNetworkDrawings.set(first, owned);
   return owned;
 }
-export type ObjectNet = {
+type ObjectNet = {
   id: string;
   name?: string;
   schematic?: NetworkDrawing;
@@ -72,7 +72,7 @@ export type ObjectSchematic = Omit<Sheet, 'components' | 'wires' | 'junctions' |
   components?: ObjectComponent[];
   nets?: ObjectNet[];
 };
-export type ObjectBoard = Pick<PCB, 'id' | 'thickness' | 'layers'> & {
+type ObjectBoard = Pick<PCB, 'id' | 'thickness' | 'layers'> & {
   /** Only unlinked mechanical packages remain at board level. */
   footprints?: ObjectFootprint[];
   graphics?: PCB['graphics'];

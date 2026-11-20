@@ -5,6 +5,8 @@ import { createDevLogger } from './dev-output.mjs';
 import { withDevPreparationCache } from './dev-preparation-cache.mjs';
 
 const rendererURL = 'http://127.0.0.1:3000';
+const ngspicePreparation = ['scripts/prepare-ngspice.mjs'];
+const thermalPreparation = ['scripts/prepare-thermal.mjs'];
 /** Node argument lists shared by development startup and `scripts/build.mjs`. */
 export const formatPreparation = ['Preparing project formats', [['scripts/build-format.mjs']]];
 export const examplePreparation = [
@@ -18,9 +20,8 @@ export const examplePreparation = [
 ];
 export const solverVerification = [
   'Verifying solver resources',
-  [['scripts/prepare-ngspice.mjs'], ['scripts/prepare-thermal.mjs']],
+  [ngspicePreparation, thermalPreparation],
 ];
-const preparations = [formatPreparation, examplePreparation, solverVerification];
 
 function launch(spawnProcess, args, env, logger, label, outputOptions) {
   const child = spawnProcess(process.execPath, args, {
@@ -51,29 +52,42 @@ export async function prepareDevResources({
   cache = true,
   cancelled = () => false,
 } = {}) {
-  const run = async (steps) => {
-    for (const [message, commands] of steps) {
-      logger.status(message);
-      for (const args of commands) {
-        const task = launch(spawnProcess, args, env, logger, 'prepare', { quiet: true });
-        const result = await task.done;
-        if (result.error || result.code !== 0) {
-          task.capture.replayStdout();
-          throw failure(message, result);
-        }
+  const run = async ([message, commands]) => {
+    if (cancelled()) return;
+    logger.status(message);
+    for (const args of commands) {
+      if (cancelled()) return;
+      const task = launch(spawnProcess, args, env, logger, 'prepare', { quiet: true });
+      const result = await task.done;
+      if (result.error || result.code !== 0) {
+        task.capture.replayStdout();
+        throw failure(message, result);
       }
     }
   };
-  const prepare = () => run(preparations.slice(0, 2));
-  if (cache) await withDevPreparationCache({ logger, prepare, cancelled });
-  else await prepare();
-  if (!cancelled()) await run(preparations.slice(2));
+  const thermal = run(['Verifying thermal resources', [thermalPreparation]]);
+  // The two solver bundles share source archives on Linux.
+  const solvers = thermal.then(() => run(['Verifying ngspice resources', [ngspicePreparation]]));
+  const prepare = async () => {
+    await run(formatPreparation);
+    // Missing analytical Home models are generated with the bundled Gmsh.
+    await thermal;
+    await run(examplePreparation);
+  };
+  await Promise.all([
+    solvers,
+    cache ? withDevPreparationCache({ logger, prepare, cancelled }) : prepare(),
+  ]);
 }
 
 export async function runDev({
   verbose = false,
   spawnProcess = spawn,
-  probe = async (url) => (await fetch(url, { signal: AbortSignal.timeout(1000) })).ok,
+  probe = async (url, signal) => {
+    const response = await fetch(url, { signal, redirect: 'error' });
+    await response.body?.cancel();
+    return response.ok;
+  },
   startupTimeoutMs = 60000,
   retryDelayMs = 500,
   processEvents = /** @type {Pick<import('node:events').EventEmitter, 'on' | 'off'>} */ (process),
@@ -138,6 +152,7 @@ export async function runDev({
     // Keep an exit observable while starting, without an unhandled rejection
     // after startup when the desktop owns the remaining session lifetime.
     rendererExit.catch(() => {});
+    const probing = new AbortController();
     let timer;
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error('Renderer startup timed out.')), startupTimeoutMs);
@@ -148,7 +163,7 @@ export async function runDev({
       for (;;) {
         let available = false;
         try {
-          available = await Promise.race([probe(rendererURL), rendererExit, timeout]);
+          available = await Promise.race([probe(rendererURL, probing.signal), rendererExit, timeout]);
         } catch (error) {
           if (rendererResult || error.message === 'Renderer startup timed out.') throw error;
         }
@@ -162,6 +177,7 @@ export async function runDev({
       }
     } finally {
       clearTimeout(timer);
+      probing.abort();
     }
     if (stopping) return 0;
     logger.status(`Renderer ready: ${rendererURL}`);

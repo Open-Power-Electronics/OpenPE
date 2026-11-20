@@ -3,10 +3,8 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { referenceExamples } from '../lib/reference-examples';
 import { homeExampleNativePath } from '../lib/home-examples';
-import { projectExamples } from '../lib/examples';
-import { tiDcdcParts } from '../lib/ti-dcdc';
 import { parseProject, serializeProject } from '../lib/project';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { simulationModelDefinitions } from '../lib/simulation-models';
 import { createSimulationModelStore } from '../server/example-models.mjs';
 import {
@@ -46,15 +44,8 @@ const store = async (id: string, signal: AbortSignal) => {
   return verified;
 };
 
-const files = [
-  ...referenceExamples.map((entry) => `tests/fixtures/reference/${entry.file}.json`),
-  ...(process.argv.includes('--fixtures')
-    ? [
-        ...projectExamples.map((entry) => `tests/fixtures/kicad/${entry.id}.openpe.json`),
-        ...tiDcdcParts.map((entry) => `tests/fixtures/ti/${entry.name}.openpe.json`),
-      ]
-    : []),
-];
+if (process.argv.length > 2) throw new Error('Usage: node --import tsx scripts/download-example-models.ts');
+const files = referenceExamples.map((entry) => `tests/fixtures/reference/${entry.file}.json`);
 for (const file of files) {
   const project = parseProject(await readFile(file, 'utf8'));
   const homeEntry = referenceExamples.find(

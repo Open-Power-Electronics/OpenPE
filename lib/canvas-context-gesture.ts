@@ -1,4 +1,4 @@
-export type ContextPointer<T> = {
+type ContextPointer<T> = {
   id: number;
   button: number;
   x: number;

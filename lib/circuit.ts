@@ -2,7 +2,8 @@ import { parseSExpr, child, children, num, val, quote, writeSExpr, type SExpr } 
 import { KICAD_SCHEMATIC_VERSION } from './kicad-version';
 import { unitGraphics, symbolUnits, symbolAnnotation, createLibraryPart } from './library';
 import officialSymbols from './kicad-starter-symbols.json';
-import { schematicTexts, schematicPolylines } from './schematic-text';
+import { schematicTexts, schematicTextBoxes, schematicPolylines } from './schematic-text';
+import { schematicImages } from './schematic-image';
 import { isOwnedCircuit, isOwnedProjectNode, ownProjectData } from './immutable-project';
 export type Point = { x: number; y: number };
 export type Kind = 'R' | 'C' | 'L' | 'D' | 'NMOS' | 'GND' | 'Port';
@@ -393,7 +394,10 @@ export function parseCircuitTree(root: SExpr): Circuit {
     'sheet_instances',
     'embedded_fonts',
     'text',
+    'text_box',
+    'image',
     'polyline',
+    'rectangle',
   ];
   const unsupported = root
     .filter(Array.isArray)
@@ -408,6 +412,8 @@ export function parseCircuitTree(root: SExpr): Circuit {
   // Accept KiCad documents without carrying their paper size into project state.
   d.original = root.filter((node) => !Array.isArray(node) || node[0] !== 'paper');
   schematicTexts(root);
+  schematicTextBoxes(root);
+  schematicImages(root);
   schematicPolylines(root);
   d.id = val(child(root, 'uuid')) || uid();
   d.title = val(child(child(root, 'title_block') || [], 'title')) || 'Imported schematic';

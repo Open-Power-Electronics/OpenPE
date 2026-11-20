@@ -26,7 +26,7 @@ export const symbolPinTypes = [
   'open_emitter',
   'no_connect',
 ] as const;
-export const symbolPinShapes = [
+const symbolPinShapes = [
   'line',
   'inverted',
   'clock',

@@ -8,6 +8,7 @@ import { listAgentModels } from '../server/agent-models.mjs';
 import { createEventNormalizer } from '../server/agent-events.mjs';
 import { piIsolationFlags } from '../server/agent-provider-runtime.mjs';
 import { annotationFixture } from './fixtures/annotation';
+import { waitForProcessStopped } from '../scripts/process-test-helpers.mjs';
 
 const cwd = process.cwd();
 const fixture = path.join(cwd, 'tests', 'fixtures', 'agent-pi-cli.mjs');
@@ -141,12 +142,12 @@ test('Pi uses isolated RPC with context-only instructions, reconciles snapshots 
   );
   assert.equal(events.filter((event) => event.type === 'text-replace').length, 0);
   assert.equal(
-    events.some((event) => event.type === 'agent-info' && event.model === 'fixture-model'),
+    events.some((event) => event.type === 'agent-info' && event.model === 'fixture/fixture-model'),
     true,
   );
 });
 
-test('Pi model discovery accepts a state-first response and filters non-text or invalid catalog entries', async () => {
+test('Pi model discovery accepts a state-first response and marks non-text models unavailable', async () => {
   const result = await listAgentModels('pi', cwd, new AbortController().signal, {
     resolve: async () => launch(),
   });
@@ -158,6 +159,7 @@ test('Pi model discovery accepts a state-first response and filters non-text or 
       'fixture/ordinary-reasoner',
       'fixture/restricted-reasoner',
       'fixture/no-reasoning',
+      'fixture/image-only',
     ],
   );
   assert.deepEqual(result.models[0].efforts, [
@@ -172,6 +174,21 @@ test('Pi model discovery accepts a state-first response and filters non-text or 
   assert.deepEqual(result.models[1].efforts, ['off', 'minimal', 'low', 'medium', 'high']);
   assert.deepEqual(result.models[2].efforts, ['high', 'max']);
   assert.deepEqual(result.models[3].efforts, ['off']);
+  assert.equal(result.models[4].textInput, false);
+});
+
+test('Pi refuses to prompt when the selected provider-qualified model was not applied', async () => {
+  const events: any[] = [];
+  const result = await runAgent(
+    'pi',
+    { prompt: 'Fixture question', context: {}, model: 'fixture/ordinary-reasoner' },
+    cwd,
+    (event: any) => events.push(event),
+    new AbortController().signal,
+    { resolve: async () => launch() },
+  );
+  assert.equal(result.outcome, 'failed');
+  assert.match(events.find((event) => event.type === 'error')?.text || '', /did not apply the selected model/);
 });
 
 test('Pi sends every native thinking level unchanged and rejects silent clamping before prompting', async () => {
@@ -283,6 +300,53 @@ test('Pi fails clearly on incompatible versions, forbidden actions, model failur
   assert.equal((await pending).outcome, 'cancelled');
 });
 
+test(
+  'Windows Codex lookup starts the npm executable directly even with a stale desktop PATH',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    assert.ok(process.env.APPDATA);
+    const npmBin = path.join(process.env.APPDATA, 'npm');
+    const shim = path.join(npmBin, 'codex.cmd');
+    const modules = path.join(npmBin, 'node_modules');
+    const packageRoot = path.join(modules, '@openai', 'codex');
+    const launcher = path.join(packageRoot, 'bin', 'codex.js');
+    const platformExe = path.join(
+      '@openai',
+      `codex-win32-${process.arch}`,
+      'vendor',
+      `${process.arch === 'x64' ? 'x86_64' : 'aarch64'}-pc-windows-msvc`,
+      'bin',
+      'codex.exe',
+    );
+    const nested = path.join(packageRoot, 'node_modules', platformExe);
+    const hoisted = path.join(modules, platformExe);
+    const olderCodex = 'C:\\Existing Codex\\bin\\codex.exe';
+    const lookup = async () => ({ stdout: `${olderCodex}\r\n` });
+
+    const updated = await resolveAgent('codex', {
+      exec: lookup,
+      exists: (file: string) => [shim, launcher, nested, hoisted, olderCodex].includes(file),
+    });
+    assert.equal(updated.file, nested);
+    assert.deepEqual(updated.args, []);
+    assert.equal(updated.env.CODEX_MANAGED_PACKAGE_ROOT, packageRoot);
+    assert.equal(updated.env.CODEX_MANAGED_BY_NPM, '1');
+
+    const withHoistedBinary = await resolveAgent('codex', {
+      exec: lookup,
+      exists: (file: string) => [shim, launcher, hoisted, olderCodex].includes(file),
+    });
+    assert.equal(withHoistedBinary.file, hoisted);
+
+    const incomplete = await resolveAgent('codex', {
+      exec: lookup,
+      exists: (file: string) => [shim, launcher, olderCodex].includes(file),
+    });
+    assert.equal(incomplete.file, olderCodex);
+    assert.deepEqual(incomplete.args, []);
+  },
+);
+
 test('POSIX CLI lookup uses fixed user and system bins', { skip: process.platform === 'win32' }, async () => {
   const home = '/fixture-home';
   const codex = path.join(home, '.local', 'bin', 'codex');
@@ -334,15 +398,7 @@ test('POSIX cleanup signals the detached process group', { skip: process.platfor
     );
     assert.equal(result.outcome, 'failed');
     pid = Number(await readFile(path.join(cwd, 'grandchild.pid'), 'utf8'));
-    for (let attempt = 0; attempt < 40; attempt++) {
-      try {
-        process.kill(pid, 0);
-      } catch {
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    assert.fail('The grandchild was not stopped with the process group.');
+    await waitForProcessStopped(pid);
   } finally {
     if (pid) {
       try {

@@ -4,38 +4,35 @@ import { mkdtemp, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  bundledWorkbenchCatalog,
-  createWorkbenchPlugins,
-  spicePluginId,
-} from '../server/workbench-plugins.mjs';
+import { bundledWorkbenchCatalog, createWorkbenchPlugins } from '../server/workbench-plugins.mjs';
+import { SPICE_PLUGIN_ID as spicePluginId } from '../plugins/catalog.mjs';
 import { createProjectSpiceStore } from '../server/project-spice-files.mjs';
 import { startServer } from '../server/index.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import { createProject, serializeProject } from '../lib/project';
-import { defaultTransient } from '../lib/spice';
+import { defaultTransient } from '../plugins/spice-simulation/domain/spice';
 
 test('bundled SPICE lifecycle persists independently of projects and reinstalls without provider commands', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-workbench-plugins-'));
   try {
     const plugins = createWorkbenchPlugins(dir);
     assert.equal((await plugins.list()).plugins[0].name, 'SPICE Simulation');
-    await plugins.requireSpice();
+    await plugins.require('spice-simulation@openpe');
     assert.deepEqual(await readdir(dir), [], 'Default initialization does not write settings.');
     const events: boolean[] = [];
     plugins.subscribe((_id: string, state: { enabled: boolean }) => events.push(state.enabled));
     await plugins.change('disable', spicePluginId);
-    await assert.rejects(plugins.requireSpice(), /Plugins > Marketplace/);
+    await assert.rejects(plugins.require('spice-simulation@openpe'), /Plugins > Marketplace/);
     const reopened = createWorkbenchPlugins(dir);
     assert.equal((await reopened.list()).plugins[0].enabled, false);
     await plugins.change('enable', spicePluginId);
-    await plugins.requireSpice();
+    await plugins.require('spice-simulation@openpe');
     await plugins.change('uninstall', spicePluginId);
     assert.equal((await plugins.list()).plugins[0].installed, false);
     assert.equal((await createWorkbenchPlugins(dir).list()).plugins[0].installed, false);
     await assert.rejects(plugins.change('enable', spicePluginId), /Install/);
     await plugins.change('install', spicePluginId);
-    await plugins.requireSpice();
+    await plugins.require('spice-simulation@openpe');
     assert.deepEqual(events, [false, true, false, true]);
     assert.deepEqual(await readdir(dir), ['workbench-plugins-v1.json']);
     const cancelled = new AbortController();
@@ -60,6 +57,7 @@ test('invalid plugin settings and failed writes preserve bytes and never enable 
     for (const invalid of [
       '{broken',
       JSON.stringify({ version: 0, plugins: rows }),
+      JSON.stringify({ version: 1, plugins: rows.slice(0, -1) }),
       JSON.stringify({ version: 1, plugins: [rows[0], rows[0], rows[2]] }),
       JSON.stringify({ version: 1, plugins: [{ ...rows[0], id: 'unknown' }, ...rows.slice(1)] }),
       JSON.stringify({ version: 1, plugins: [{ id: rows[0].id }, ...rows.slice(1)] }),
@@ -72,7 +70,7 @@ test('invalid plugin settings and failed writes preserve bytes and never enable 
       await writeFile(file, invalid);
       const plugins = createWorkbenchPlugins(dir);
       await assert.rejects(plugins.list(), /preserved/);
-      await assert.rejects(plugins.requireSpice(), /preserved/);
+      await assert.rejects(plugins.require('spice-simulation@openpe'), /preserved/);
       await assert.rejects(plugins.change('install', spicePluginId), /preserved/);
       assert.equal(await readFile(file, 'utf8'), invalid);
     }
@@ -91,7 +89,7 @@ test('invalid plugin settings and failed writes preserve bytes and never enable 
       },
     });
     await assert.rejects(plugins.change('enable', spicePluginId), /disk full/);
-    await assert.rejects(plugins.requireSpice(), /Marketplace/);
+    await assert.rejects(plugins.require('spice-simulation@openpe'), /Marketplace/);
     assert.equal(await readFile(file, 'utf8'), disabled);
     assert.deepEqual(await readdir(dir), ['workbench-plugins-v1.json']);
   } finally {
@@ -113,10 +111,10 @@ test('plugin observers cannot mutate confirmed gates or interrupt other lifecycl
       notified.push({ installed: state.installed, enabled: state.enabled });
     });
     await plugins.change('disable', spicePluginId);
-    await assert.rejects(plugins.requireSpice(), /Plugins > Marketplace/);
+    await assert.rejects(plugins.require('spice-simulation@openpe'), /Plugins > Marketplace/);
     assert.equal((await plugins.list()).plugins[0].enabled, false);
     await plugins.change('uninstall', spicePluginId);
-    await assert.rejects(plugins.requireSpice(), /Plugins > Marketplace/);
+    await assert.rejects(plugins.require('spice-simulation@openpe'), /Plugins > Marketplace/);
     assert.deepEqual(notified, [
       { installed: true, enabled: false },
       { installed: false, enabled: false },

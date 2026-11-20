@@ -5,7 +5,7 @@ import { parseCircuit, pinPositions } from '../lib/circuit';
 import { homeExampleNativePath } from '../lib/home-examples';
 import { partFields, unitGraphics } from '../lib/library';
 import { child, children, val } from '../lib/sexpr';
-import { spiceNets } from '../lib/spice';
+import { spiceNets } from '../plugins/spice-simulation/domain/spice';
 import { prepareEmcFlybackValues } from './emc-flyback-values';
 import { prepareEmcFlybackModelBindings } from './emc-flyback-model-bindings';
 import { prepareEmcFlybackTestbench } from './emc-flyback-testbench';
@@ -122,7 +122,7 @@ for (const [id, name] of [
   ['emc-flyback-es2d', 'EMC_ES2D'],
   ['emc-flyback-ss510c', 'EMC_SS510C'],
 ]) {
-  const file = `circuits/${name}.lib`;
+  const file = `models/${name}.lib`;
   const bytes = await readFile(path.join(directory, file));
   if (id === 'emc-flyback-control' && !bytes.equals(Buffer.from(control)))
     throw new Error('EMC Flyback control library must retain the pinned upstream bytes.');

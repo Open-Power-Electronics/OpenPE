@@ -4,24 +4,21 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { createExample, projectExamples } from '../lib/examples';
-import { createTiExample } from '../lib/ti-examples';
-import { tiDcdcParts } from '../lib/ti-dcdc';
 import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
 import { homeExampleNativePath } from '../lib/home-examples';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import {
   serializeProject,
   parseProject,
   projectFromNativeFiles,
   projectNativeFiles,
 } from '../lib/project';
-import { runSimulation } from '../server/spice.mjs';
-import { adaptSpiceModels } from '../server/spice-model-adapters.mjs';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
+import { adaptSpiceModels } from '../plugins/spice-simulation/host/spice-model-adapters.mjs';
 import { projectSimulationModels } from '../server/project-models.mjs';
 import { readProjectModelFile, prepareProjectModelFiles } from '../server/project-model-files.mjs';
-import type { SimulationSamples } from '../lib/simulation-stream';
+import type { SimulationSamples } from '../plugins/spice-simulation/renderer/simulation-stream';
 import { homeSimulationDurationFor, verifyHomeOutput } from './home-simulation-verification';
 
 const directory = 'test-results/example-simulations';
@@ -38,16 +35,6 @@ const cases = [
     id: p.id,
     sourcePath: homeExampleNativePath(p.id),
     project: () => createReferenceExample(p.id),
-  })),
-  ...projectExamples.map((p) => ({
-    id: p.id,
-    sourcePath: `tests/fixtures/kicad/${p.id}.openpe.json`,
-    project: () => createExample(p.id),
-  })),
-  ...tiDcdcParts.map((p) => ({
-    id: p.id.replace(':', '-'),
-    sourcePath: `tests/fixtures/ti/${p.name}.openpe.json`,
-    project: () => createTiExample(p.id),
   })),
 ];
 const selected = cases.filter((v) => !process.argv[2] || v.id.includes(process.argv[2]));
@@ -143,10 +130,6 @@ for (const entry of selected) {
       traces.some((t: { min: number; max: number }) => t.max - t.min > 1e-6),
       'No changing signal.',
     );
-    const output = traces.find(
-      (t: { label: string }) =>
-        t.label === (entry.id === 'kicad-rectifier' ? 'V(rect_out)' : 'V(out)'),
-    );
     const outputs = [];
     if (entry.id.startsWith('reference-')) {
       const bounds: Record<string, [number, number]> = {
@@ -173,25 +156,6 @@ for (const entry of selected) {
         outputs.push({ label: rail.label, ...metrics });
       }
     }
-    const range: Record<string, [number, number]> = {
-      'kicad-rectifier': [0.2, 0.6],
-      'kicad-boost': [4.5, 5.5],
-      'kicad-royer': [5, 10],
-      'kicad-lm317': [8.5, 9.5],
-    };
-    if (range[entry.id])
-      assert.ok(
-        output && output.tailMean > range[entry.id][0] && output.tailMean < range[entry.id][1],
-        `Unexpected output: ${JSON.stringify(output)}`,
-      );
-    if (entry.id === 'kicad-high-voltage')
-      assert.ok(output && output.final > 300 && output.final < 450);
-    if (entry.id === 'kicad-class-d') assert.ok(output && output.max > 50 && output.min < -50);
-    if (entry.id === 'kicad-laser-driver') assert.ok(output && output.max > 4 && output.max < 8);
-    if (entry.id === 'kicad-generic-opamp')
-      assert.ok(output && output.max > 0.8 && output.max < 1.2 && output.min < -0.8);
-    const ti = tiDcdcParts.find((p) => p.id.replace(':', '-') === entry.id);
-    if (ti) assert.ok(Math.abs(traces[0].tailMean / ti.model.voltage - 1) < 0.08);
     const reopened = parseProject(
       serializeProject({
         ...project,

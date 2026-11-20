@@ -37,6 +37,7 @@ export async function exerciseNewProjectDesign(page, step) {
   const first = project.schematic.parts[0];
   await button('Add component').click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+  await button('Search').click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R', { exact: true }) })
@@ -74,11 +75,12 @@ export async function exerciseNewProjectDesign(page, step) {
     await page.getByTestId(`part-${ref}`).click();
     await button('Browse footprints').click();
     await page.getByLabel('Search footprints', { exact: true }).fill(footprintId);
+    await button('Search').click();
     await page
       .locator('.library-results button')
       .filter({ has: page.getByText('R_0805_2012Metric', { exact: true }) })
       .click();
-    await button('Assign footprint').click();
+    await button('Assign').click();
     assert.equal(await page.getByLabel('Footprint', { exact: true }).inputValue(), footprintId);
   }
   await button('Layout').click();

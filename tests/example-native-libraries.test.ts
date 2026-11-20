@@ -6,19 +6,27 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHomeExample } from '../lib/create-home-example';
 import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
-import { projectNativeFiles, replaceNativeProjectFile } from '../lib/project';
+import {
+  projectFromNativeFiles,
+  projectNativeFiles,
+  replaceNativeProjectFile,
+} from '../lib/project';
 import { parseSExpr, child, children, val } from '../lib/sexpr';
 import { prepareExampleFootprints } from '../server/example-footprints.mjs';
 import { atomicWrite } from '../server/atomic-write.mjs';
 import { ownProject } from '../lib/immutable-project';
 
-const { writeNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
+const { readNativeProject, writeNativeProject } = createRequire(import.meta.url)(
+  '../electron/native-project.cjs',
+);
 
 test('Home libraries are native Source files with project-bound names and stable library IDs', async () => {
   let customProjects = 0;
   for (const entry of homeExampleCatalog) {
-    const project = ownProject(createHomeExample(entry.id, (id) => id));
     const nativePath = homeExampleNativePath(entry.id);
+    const project = ownProject(
+      projectFromNativeFiles(await readNativeProject(path.resolve(nativePath))),
+    );
     const original = projectNativeFiles(project, path.basename(nativePath));
     if (!original.files.some((file) => file.name.includes('.pretty/'))) continue;
     for (const file of original.files)

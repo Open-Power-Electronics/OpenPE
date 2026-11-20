@@ -3,7 +3,7 @@ import { unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import { isOwnedCircuit } from './immutable-project';
 
-export type ProjectNetGroup = {
+type ProjectNetGroup = {
   wires: number[];
   junctions: number[];
   labels: number[];

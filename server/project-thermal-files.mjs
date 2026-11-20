@@ -1,3 +1,5 @@
+import { pluginProjectDirectory } from './plugin-project-format.cjs';
+const thermalProjectDirectory = pluginProjectDirectory('pcb-thermal@openpe');
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, realpath, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +15,7 @@ import {
   thermalFingerprint,
   validateThermalConfig,
   validateThermalResult,
-} from './thermal-format.mjs';
+} from '../plugins/layout-thermal/host/thermal-format.mjs';
 
 const format = 'openpe-thermal-v1';
 const flatFormat = 'openpe-thermal-v2';
@@ -168,10 +170,8 @@ export function thermalRunKey(model, solver, files) {
     new Set(files.map((entry) => entry?.name)).size !== files.length ||
     files.some(
       (entry) =>
-        !(
-          ownKeys(entry, ['name', 'size', 'sha256']) ||
-          (ownKeys(entry, ['name', 'file', 'size', 'sha256']) && typeof entry.file === 'string')
-        ) ||
+        !ownKeys(entry, ['name', 'file', 'size', 'sha256']) ||
+        typeof entry.file !== 'string' ||
         typeof entry.name !== 'string' ||
         !Number.isSafeInteger(entry.size) ||
         entry.size < 0 ||
@@ -338,7 +338,7 @@ export function createProjectThermalStore(resolveFile) {
   const projectName = path.basename(projectFile);
   const stem = path.basename(projectFile, path.extname(projectFile));
   const manifestName = analysisFilename(stem, 'manifest.json');
-  const lockDirectory = path.join(path.dirname(projectFile), 'thermal');
+  const lockDirectory = path.join(path.dirname(projectFile), thermalProjectDirectory);
   let nativeParent;
 
   async function root(create) {
@@ -349,7 +349,7 @@ export function createProjectThermalStore(resolveFile) {
     if (nativeParent && normalize(parent) !== normalize(nativeParent))
       throw new Error('The Layout Thermal project directory changed. Save and retry.');
     nativeParent = parent;
-    return directory(parent, 'thermal', create);
+    return directory(parent, thermalProjectDirectory, create);
   }
 
   async function verifyRecord(target, manifest, signal, identities) {
@@ -466,7 +466,7 @@ export function createProjectThermalStore(resolveFile) {
         } catch (error) {
           signal.throwIfAborted();
           throw new Error(
-            'Could not load saved Layout Thermal files. Preserve thermal/' +
+            'Could not load saved Layout Thermal files. Preserve layout-thermal/' +
               manifestName +
               '. ' +
               error.message,

@@ -6,14 +6,12 @@ import styles from './LibraryLicenses.module.css';
 
 const sources = [
   ['kicad-libraries', 'KiCad libraries', '/licenses/kicad-libraries.txt'],
-  ['kicad-demos/NOTICE', 'KiCad demo notices', '/licenses/kicad-demos/NOTICE.txt'],
-  ['kicad-demos/LICENSE', 'KiCad demo license', '/licenses/kicad-demos/LICENSE.txt'],
   ['reference/NOTICE', 'Reference circuit notices', '/licenses/reference/NOTICE.txt'],
   ['emc-flyback/NOTICE', 'EMC Flyback notices', '/licenses/emc-flyback/NOTICE.txt'],
   ['emc-flyback/LICENSE', 'EMC Flyback license', '/licenses/emc-flyback/LICENSE.txt'],
   ['ti-models', 'Texas Instruments models', '/licenses/ti-models.txt'],
-  ['example-models', 'Example models', '/licenses/example-models.txt'],
   ['ngspice', 'ngspice', '/licenses/ngspice.txt'],
+  ['quickjs', 'QuickJS plugin runtime', '/licenses/quickjs.txt'],
   ['thermal', 'Layout Thermal tools', '/licenses/thermal.txt'],
   ['ai-pcb-layout', 'PE Layout Skill', '/licenses/ai-pcb-layout.txt'],
   ['occt-import-js', 'STEP parser', '/licenses/occt-import-js.txt'],

@@ -44,6 +44,10 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
+  let releasePending;
+  const pending = new Promise((resolve) => {
+    releasePending = resolve;
+  });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
@@ -51,7 +55,13 @@ try {
   });
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
+    if (['/brand/openpe-mark.svg', '/brand/openpe-signal.svg'].includes(url.pathname))
+      return route.fulfill({
+        contentType: 'image/svg+xml',
+        body: await readFile('public' + url.pathname),
+      });
     if (url.pathname === '/api/library-model') {
+      if (url.searchParams.get('id') === 'Test:Pending') await pending;
       if (url.searchParams.get('id') === 'Test:Missing')
         return route.fulfill({
           status: 422,
@@ -59,7 +69,18 @@ try {
             error: 'The linked 3D model is unavailable. The 2D footprint can still be used.',
           },
         });
-      return route.fulfill({ json: model });
+      return route.fulfill({
+        json: {
+          ...model,
+          model: {
+            path: 'Fixture.step',
+            rotate: [
+              'rotate',
+              ['xyz', '0', '0', url.searchParams.get('id') === 'Test:Rotated' ? '90' : '0'],
+            ],
+          },
+        },
+      });
     }
     return route.fulfill({
       contentType: 'text/html',
@@ -89,6 +110,39 @@ try {
     );
   };
   await ready();
+  await page.evaluate(() => window.preview('Test:Pending'));
+  const loading = preview.getByRole('status', { name: 'Loading 3D model…', exact: true });
+  await loading.waitFor();
+  const logo = loading.locator('img');
+  assert.equal(await logo.getAttribute('src'), '/brand/openpe-mark.svg');
+  const indicator = loading.locator('.loading-signal');
+  const animation = () => indicator.evaluate((el) => getComputedStyle(el, '::after').animationName);
+  assert.equal(await animation(), 'loading-signal-flow');
+  const panelBounds = await preview.boundingBox();
+  const markBounds = await loading.locator('.loading-content').boundingBox();
+  assert.ok(
+    Math.abs(markBounds.x + markBounds.width / 2 - panelBounds.x - panelBounds.width / 2) < 1,
+  );
+  assert.ok(
+    Math.abs(markBounds.y + markBounds.height / 2 - panelBounds.y - panelBounds.height / 2) < 1,
+  );
+  await page.evaluate(() => {
+    document.documentElement.dataset.motion = 'reduced';
+  });
+  assert.equal(await animation(), 'none');
+  await page.evaluate(() => {
+    document.documentElement.dataset.motion = 'full';
+    document.documentElement.dataset.theme = 'dark';
+  });
+  assert.equal(await logo.getAttribute('src'), '/brand/openpe-mark.svg');
+  await mkdir('test-results', { recursive: true });
+  await preview.screenshot({ path: 'test-results/model-loading-dark.png' });
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light';
+  });
+  assert.equal(await logo.getAttribute('src'), '/brand/openpe-mark.svg');
+  releasePending();
+  await ready();
   const before = await preview.screenshot();
   const { data, info } = await sharp(before)
     .removeAlpha()
@@ -98,6 +152,10 @@ try {
   for (let i = 0; i < data.length; i += info.channels)
     if (data[i + 1] > data[i] + 15 && data[i + 1] > data[i + 2] + 15) coloredPixels++;
   assert.ok(coloredPixels > 500, 'The retained canvas must actually render the model.');
+  await page.evaluate(() => window.preview('Test:Rotated'));
+  await ready();
+  const rotated = await preview.screenshot();
+  assert.notDeepEqual(rotated, before, 'The library preview applies the declared native rotation.');
   const bounds = await preview.boundingBox();
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.down();
@@ -107,15 +165,28 @@ try {
   await page.mouse.up();
   assert.notDeepEqual(
     await preview.screenshot(),
-    before,
+    rotated,
     'Orbit gestures change the rendered view.',
   );
+  const beforeResize = await preview.locator('canvas').evaluate((canvas) => canvas.width);
   await page.locator('#root').evaluate((el) => {
     el.style.width = '300px';
   });
-  await page.waitForFunction(() => document.querySelector('canvas')?.width === 300);
+  await page.waitForFunction((previous) => {
+    const host = document.querySelector('.model-preview-canvas');
+    const canvas = host?.querySelector('canvas');
+    return (
+      canvas?.width > 0 &&
+      canvas.width < previous &&
+      canvas.width === Math.floor(host.clientWidth * Math.min(devicePixelRatio, 2))
+    );
+  }, beforeResize);
   await page.evaluate(() => window.preview('Test:Missing'));
-  await preview.getByRole('status').filter({ hasText: 'unavailable' }).waitFor();
+  await preview.getByRole('alert').filter({ hasText: 'unavailable' }).waitFor();
+  assert.equal(
+    await preview.getByRole('button', { name: 'Retry preview', exact: true }).isVisible(),
+    true,
+  );
   assert.equal(
     await preview.locator('canvas').count(),
     0,
@@ -129,7 +200,7 @@ try {
   await preview.waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: visible 3D mesh after loading, orbit, resize, failure, replacement and unmount.',
+    'PASS: centered animated Signal E loading, reduced motion, visible 3D mesh, orbit, resize, failure/retry control, replacement and unmount.',
   );
 } finally {
   await browser.close();

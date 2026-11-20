@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, FolderOpen, Trash2 } from 'lucide-react';
+import { ArrowRight, FolderOpen, Pin, PinOff, Trash2 } from 'lucide-react';
 import type { Circuit } from '@/lib/circuit';
 import type { RecentProject } from '@/lib/bridge';
 import CanvasContextMenu from './CanvasContextMenu';
@@ -66,6 +66,9 @@ export default function HomeProjectCard({
         aria-label={`Open ${entry.title}${native ? '' : ' example'}`}
         title={entry.description}
       >
+        {recent && entry.pinned && (
+          <Pin size={16} className="home-example-pin" aria-label="Pinned" />
+        )}
         <div className="home-example-preview" aria-hidden="true">
           {circuit ? (
             <ExamplePreview circuit={circuit} />
@@ -91,11 +94,24 @@ export default function HomeProjectCard({
         onError={onError}
         actions={[
           {
+            id: 'pin-recent',
+            label: entry.pinned ? 'Unpin' : 'Pin',
+            icon: entry.pinned ? PinOff : Pin,
+            disabled: typeof window === 'undefined' || !window.openpe,
+            run: async () => {
+              await window.openpe!.pinRecent(
+                native ? entry.id : `default:${entry.id}`,
+                !entry.pinned,
+              );
+              onError('');
+            },
+          },
+          {
             id: 'remove-recent',
             label: 'Remove',
             icon: Trash2,
             destructive: true,
-            disabled: typeof window === 'undefined' || !window.openpe,
+            disabled: !!entry.pinned || typeof window === 'undefined' || !window.openpe,
             run: async () => {
               await window.openpe!.removeRecent(native ? entry.id : `default:${entry.id}`);
               onError('');

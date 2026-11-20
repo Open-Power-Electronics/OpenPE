@@ -1,24 +1,24 @@
+import { parameterizedHomeProject } from './fixtures/model-parameters';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createExample } from '../lib/examples';
 import { exportKiCad, parseProject, serializeProject } from '../lib/project';
 import { displayPartValue, partFields } from '../lib/library';
 import { applyProposal } from '../lib/proposals';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
 import {
   parseProject as serviceParse,
   serializeProject as serviceSerialize,
 } from '../server/project-format.mjs';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import { defaultAgentPreferences, restoreWorkspace } from '../lib/workspace-state';
 import type { ProjectDocument } from '../lib/project-document';
 import { createSession } from '../lib/chat-sessions';
 
 test('one Source value drives the inspector, service, recovery, netlist and native export', () => {
-  const project = createExample('kicad-buck');
+  const project = parameterizedHomeProject();
   const document: ProjectDocument = JSON.parse(serializeProject(project));
-  const component = document.schematic.components!.find((p) => p.reference === 'R101')!;
+  const component = document.schematic.components!.find((p) => p.reference === 'R1')!;
   assert.equal(component.value, '5');
   assert.equal(component.simulation?.valueFormat, 'r=${VALUE}');
   assert.equal(component.fields!['Sim.Params'], undefined);
@@ -69,12 +69,12 @@ test('one Source value drives the inspector, service, recovery, netlist and nati
 });
 
 test('Agent value edits update the shared electrical value and leave the input unchanged', () => {
-  const project = createExample('kicad-buck');
+  const project = parameterizedHomeProject();
   const before = serializeProject(project);
   const schematic = applyProposal(project.schematic, [
-    { type: 'setValue', ref: 'R101', value: '22' },
+    { type: 'setValue', ref: 'R1', value: '22' },
   ]);
-  const part = schematic.parts.find((p) => p.ref === 'R101')!;
+  const part = schematic.parts.find((p) => p.ref === 'R1')!;
   assert.equal(displayPartValue(part), '22');
   assert.equal(partFields(part)['Sim.Params'], 'r=22');
   assert.equal(serializeProject(project), before);
@@ -85,8 +85,8 @@ test('Agent value edits update the shared electrical value and leave the input u
 });
 
 test('bindings preserve single-parameter spelling and compound source descriptions', () => {
-  const project = createExample('kicad-buck');
-  const part = project.schematic.parts.find((p) => p.ref === 'R101')!;
+  const project = parameterizedHomeProject();
+  const part = project.schematic.parts.find((p) => p.ref === 'R1')!;
   part.fields = { ...partFields(part), 'Sim.Params': ' R = 5  ' };
   const source = serializeProject(project);
   const document: ProjectDocument = JSON.parse(source);
@@ -98,12 +98,14 @@ test('bindings preserve single-parameter spelling and compound source descriptio
     partFields(parseProject(source).schematic.parts.find((p) => p.id === part.id)!)['Sim.Params'],
     ' R = 5  ',
   );
-  const rectifier = createExample('kicad-rectifier');
+  const rectifier = parameterizedHomeProject('PULSE');
+  rectifier.schematic.parts.find((part) => part.ref === 'V1')!.value = '${SIM.PARAMS}';
   const rectifierDocument: ProjectDocument = JSON.parse(serializeProject(rectifier));
   const voltage = rectifierDocument.schematic.components!.find((p) => p.reference === 'V1')!;
-  assert.equal(voltage.value, 'dc=0 ampl=1 f=1k ac=1');
+  assert.equal(voltage.value, 'y1=0 y2=15 td=20n tr=20n tf=20n tw=25u per=50u');
   assert.equal(voltage.simulation?.valueFormat, '${VALUE}');
-  assert.equal(voltage.fields!['Sim.Params'], undefined);
+  assert.equal(voltage.simulation?.parameters, undefined);
+  assert.equal(voltage.fields?.['Sim.Params'], undefined);
   const nativeFields = (source: string) =>
     children(parseSExpr(source), 'symbol').map((p) =>
       Object.fromEntries(children(p, 'property').map((f) => [val(f), val(f, 2)])),
@@ -115,7 +117,7 @@ test('bindings preserve single-parameter spelling and compound source descriptio
 });
 
 test('duplicate, recursive, malformed and oversized bindings fail in renderer and service', () => {
-  const source = serializeProject(createExample('kicad-buck'));
+  const source = serializeProject(parameterizedHomeProject());
   for (const mutate of [
     (p: any) => {
       p.fields['Sim.Params'] = 'r=99';
@@ -149,7 +151,7 @@ test('duplicate, recursive, malformed and oversized bindings fail in renderer an
     },
   ]) {
     const document = JSON.parse(source);
-    mutate(document.schematic.components.find((p: any) => p.reference === 'R101'));
+    mutate(document.schematic.components.find((p: any) => p.reference === 'R1'));
     const invalid = JSON.stringify(document);
     assert.throws(() => parseProject(invalid), /Invalid OpenPE project/);
     assert.throws(() => serviceParse(invalid), /Invalid OpenPE project/);

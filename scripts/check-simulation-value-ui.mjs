@@ -10,18 +10,18 @@ const bundle = await build({
       import React, {useState} from 'react';
       import {createRoot} from 'react-dom/client';
       import PartProperties from './components/PartProperties';
-      import {createExample} from './lib/examples';
+      import {parameterizedHomeProject} from './tests/fixtures/model-parameters';
       import {parseProject, serializeProject} from './lib/project';
       function Fixture() {
-        const [project, setProject] = useState(() => createExample('kicad-buck'));
+        const [project, setProject] = useState(() => parameterizedHomeProject());
         const [history, setHistory] = useState([]);
-        const [ref, setRef] = useState('R101');
+        const [ref, setRef] = useState('R1');
         window.valueState = {source: serializeProject(project), commits: history.length};
         const part = project.schematic.parts.find(p => p.ref === ref);
         return <>
-          <button onClick={() => setRef('R101')}>Resistor</button>
-          <button onClick={() => setRef('V101')}>Pulse</button>
-          <button onClick={() => setRef('V102')}>DC source</button>
+          <button onClick={() => setRef('R1')}>Resistor</button>
+          <button onClick={() => {setProject(parameterizedHomeProject('PULSE'));setHistory([]);setRef('V1');}}>Pulse</button>
+          <button onClick={() => {setProject(parameterizedHomeProject());setHistory([]);setRef('V1');}}>DC source</button>
           <button onClick={() => setProject(parseProject(serializeProject(project)))}>Reopen</button>
           <button onClick={() => {setProject(history.at(-1)); setHistory(h => h.slice(0,-1));}}>Undo</button>
           <div className="panel"><PartProperties key={part.id} part={part} spiceAvailable onSave={(ref, value, fields) => {
@@ -80,7 +80,7 @@ try {
   await value.press('Enter');
   let edited = await state();
   assert.equal(edited.commits, 1);
-  const part = JSON.parse(edited.source).schematic.components.find((p) => p.reference === 'R101');
+  const part = JSON.parse(edited.source).schematic.components.find((p) => p.reference === 'R1');
   assert.equal(part.value, '22');
   assert.equal(part.simulation.valueFormat, 'r=${VALUE}');
   assert.equal(part.fields['Sim.Params'], undefined);
@@ -127,7 +127,7 @@ try {
   await page.getByRole('button', { name: 'DC source', exact: true }).click();
   await spice.click();
   const voltage = page.getByLabel('Voltage (V)', { exact: true });
-  assert.equal(Number(await voltage.inputValue()), 12);
+  assert.equal(Number(await voltage.inputValue()), 24);
   assert.equal(await page.getByLabel('Type', { exact: true }).count(), 0);
   assert.equal(await page.getByLabel('Device', { exact: true }).count(), 0);
   assert.equal(await page.getByLabel('Pins', { exact: true }).count(), 0);

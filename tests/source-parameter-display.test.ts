@@ -69,7 +69,7 @@ test('custom source Values and active external model names remain literal', () =
   assert.equal(displayPartValue({ ...part, value: 'Gate drive' }), 'Gate drive');
   const external = {
     ...part,
-    fields: { ...partFields(part), 'Sim.Library': 'circuits/vendor.lib' },
+    fields: { ...partFields(part), 'Sim.Library': 'models/vendor.lib' },
   };
   assert.equal(displayPartValue(external), 'VPULSE');
   assert.equal(

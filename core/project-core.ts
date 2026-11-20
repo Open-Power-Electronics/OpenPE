@@ -17,6 +17,7 @@ import {
 } from '../lib/project';
 import { type PCB, invalidatePCBFill } from '../lib/pcb';
 import { refreshPCBFill } from '../lib/pcb-polygons';
+import { pcbFillRuleContext } from '../lib/pcb-clearance-sources';
 import { partFields, displayPartValue } from '../lib/library';
 import { preparePartGeometry, preparePartProperties, type FieldRow } from '../lib/part-properties';
 import { applyProposal, extractProposal } from '../lib/proposals';
@@ -35,7 +36,7 @@ import {
 import { commitWireRoute, commitWireRoutes } from '../lib/wiring';
 import { schematicDrafting } from '../lib/schematic-drafting';
 import { previewSchematicMove } from '../lib/schematic-move';
-import { val } from '../lib/sexpr';
+import { child, val } from '../lib/sexpr';
 import {
   prepareSymbolDrawing,
   readSymbolDrawing,
@@ -49,6 +50,7 @@ import {
 } from '../lib/footprint-drawing';
 import layoutPropertySchemas from './layout-property-schemas.json';
 import { schematicTexts } from '../lib/schematic-text';
+import { prepareSchematicSection } from '../lib/schematic-section';
 import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
 import { ownProject } from '../lib/immutable-project';
 import {
@@ -91,7 +93,7 @@ import {
 
 /** Private editor models are confined to the in-process adapter. Public queries
  * and project.replace use the existing canonical document format. */
-export type ProjectCoreSnapshot = {
+type ProjectCoreSnapshot = {
   project: Project | null;
   source: string;
   sourceDraft: string | null;
@@ -122,11 +124,11 @@ export type CoreDefinition = {
   inputSchema: Record<string, unknown>;
   level?: CapabilityLevel;
 };
-export type ProjectCoreOptions = {
+type ProjectCoreOptions = {
   draft?: string | null;
   nativeEntryName?: string;
   /** Pure preparation of a validated immutable snapshot. Library I/O belongs to the host adapter. */
-  prepare?: (project: Project) => Project;
+  prepare?: (project: Project, previousProject: Project | null) => Project;
 };
 
 const text = { type: 'string', minLength: 1, maxLength: 4096 };
@@ -265,7 +267,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
   ...layoutCommandDefinitions,
   objectCommand(
     'layout.drc.settings',
-    'Update native board-wide DRC minima in one undo edit. Omitted thresholds retain their current values. Does not run checks or change geometry.',
+    'Update native board-wide DRC minima and refresh affected saved pours in one undo edit. Omitted thresholds retain their current values. Does not run checks or move board objects.',
     object({ boardId: identity, thresholds: object(designRuleThresholdProperties) }, [
       'boardId',
       'thresholds',
@@ -422,6 +424,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
                   x: { type: 'number', minimum: -1000, maximum: 1000 },
                   y: { type: 'number', minimum: -1000, maximum: 1000 },
                   value: { type: 'string', maxLength: 200 },
+                  section: { enum: ['hardware', 'simulation'] },
                 },
                 ['type', 'kind', 'x', 'y'],
               ),
@@ -583,6 +586,15 @@ export const coreCommandDefinitions: CoreDefinition[] = [
       },
       ['schematicId', 'partId'],
     ),
+  ),
+  objectCommand(
+    'part.section',
+    'Set native board inclusion for a component and its shared units. Real (hardware) also requires an assigned Footprint; Virtual (simulation) includes every unassigned component. SPICE participation and model binding stay independent.',
+    object({ ...sheet, partId: identity, section: { enum: ['hardware', 'simulation'] } }, [
+      'schematicId',
+      'partId',
+      'section',
+    ]),
   ),
   objectCommand(
     'part.participation',
@@ -787,13 +799,19 @@ export class ProjectCore {
     this.requireEditing();
     next = ownProject(next, this.project);
     serializeProject(next);
-    const prepared = this.options.prepare?.(next) ?? next;
+    const prepared = this.options.prepare?.(next, this.project) ?? next;
     next = ownProject(prepared, next);
     serializeProject(next);
     // Geometry and its current copper are one edit for every editor/Agent path.
     // Explicit native Source retains its own accepted contours without refilling.
     if (!applyDraft && this.project?.pcb && next.pcb) {
-      const pcb = refreshPCBFill(this.project.pcb, next.pcb);
+      const pcb = refreshPCBFill(
+        this.project.pcb,
+        next.pcb,
+        true,
+        pcbFillRuleContext(next),
+        pcbFillRuleContext(this.project),
+      );
       if (pcb !== next.pcb) next = ownProject({ ...next, pcb }, next);
     }
     this.requirePreparedModelCadGeometry(next);
@@ -826,7 +844,7 @@ export class ProjectCore {
     return this.commit(next);
   }
 
-  replaceSchematic(next: Circuit): boolean {
+  replaceSchematic(next: Circuit, nativeFiles?: Project['nativeFiles']): boolean {
     this.requireAppliedSource();
     const latest = this.project;
     if (!latest) return this.commit(createProject(next));
@@ -839,6 +857,7 @@ export class ProjectCore {
           next.parts.find((part) => part.id === footprint.symbolId) ??
           (old && next.parts.find((part) => part.ref === old.ref && part.libId === old.libId));
         if (!part) return [];
+        if (val(child(part.raw ?? [], 'on_board')) === 'no') return [];
         if (Object.hasOwn(partFields(part), 'Footprint') && !partFields(part).Footprint.trim())
           return [];
         return part.id === footprint.symbolId ? [footprint] : [{ ...footprint, symbolId: part.id }];
@@ -853,10 +872,10 @@ export class ProjectCore {
         pcb: invalidatePCBFill(latest.pcb, board),
       };
     }
-    return this.commit(replacement);
+    return this.commit(nativeFiles ? { ...replacement, nativeFiles } : replacement);
   }
 
-  replaceBoard(board: PCB): boolean {
+  replaceBoard(board: PCB, nativeFiles?: Project['nativeFiles']): boolean {
     this.requireAppliedSource();
     const latest = this.requireProject();
     if (latest.pcb) assertPCBLockedEdits(latest.pcb, board);
@@ -864,7 +883,7 @@ export class ProjectCore {
     // Copper-only previews cannot change assignments through the same array;
     // the complete candidate still passes the normal commit validation.
     if (latest.pcb && board.footprints === latest.pcb.footprints)
-      return this.commit({ ...latest, pcb: board });
+      return this.commit({ ...latest, ...(nativeFiles ? { nativeFiles } : {}), pcb: board });
     const assignments = new Map<string, string>();
     for (const footprint of board.footprints) {
       const old = latest.pcb?.footprints.find((item) => item.id === footprint.id);
@@ -890,6 +909,7 @@ export class ProjectCore {
       : latest.schematic;
     return this.commit({
       ...latest,
+      ...(nativeFiles ? { nativeFiles } : {}),
       schematic,
       pcb: board,
     });
@@ -1025,7 +1045,13 @@ export class ProjectCore {
     next = ownProject(next, basis);
     serializeProject(next);
     if (basis.pcb && next.pcb) {
-      const pcb = refreshPCBFill(basis.pcb, next.pcb);
+      const pcb = refreshPCBFill(
+        basis.pcb,
+        next.pcb,
+        true,
+        pcbFillRuleContext(next),
+        pcbFillRuleContext(basis),
+      );
       if (pcb !== next.pcb) next = ownProject({ ...next, pcb }, next);
     }
     this.requirePreparedModelCadGeometry(next);
@@ -1203,6 +1229,7 @@ export class ProjectCore {
       return { boardId: project.pcb.id, modelCad: structuredClone(modelCadFromProject(project)) };
     }
     if (id.startsWith('layout.')) {
+      if (id === 'layout.placement.preview') this.requireAppliedSource();
       const result = queryLayout(project.pcb, id, args);
       return id === 'layout.get' ? { ...result, project: JSON.parse(this.source) } : result;
     }
@@ -1308,7 +1335,7 @@ export class ProjectCore {
       };
     }
     if (id.startsWith('layout.')) {
-      const result = executeLayout(project.pcb, id, args);
+      const result = executeLayout(project.pcb, id, args, pcbFillRuleContext(project));
       // Explicit Fill also enables its target and supplies the requested minimum.
       if (id === 'layout.fill') this.commitProject({ ...project, pcb: result.board });
       else this.replaceBoard(result.board);
@@ -1406,6 +1433,9 @@ export class ProjectCore {
         break;
       case 'schematic.simplify':
         next = simplifyWires(schematic);
+        break;
+      case 'part.section':
+        next = prepareSchematicSection(schematic, [args.partId], args.section);
         break;
       case 'part.properties':
       case 'part.participation': {

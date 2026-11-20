@@ -1,9 +1,8 @@
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { resolveAgent } from './agents.mjs';
-import { validModelId } from './model-id.mjs';
-import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
-import { verifyPiIsolation } from './agent-provider-runtime.mjs';
+import { isAgentProvider, isProviderReasoningEffort, validModelId } from './agent-provider-format.mjs';
+import { rawCodexIsolationArgs, verifyPiIsolation } from './agent-provider-runtime.mjs';
 import {
   listCursorModels,
   loadCursorSdk,
@@ -60,7 +59,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
             '--mcp-config',
             '{"mcpServers":{}}',
           ]
-        : ['app-server', '--listen', 'stdio://'];
+        : ['app-server', '--listen', 'stdio://', ...(options.raw ? rawCodexIsolationArgs : [])];
     const proc = spawn(launch.file, [...launch.args, ...args], {
       cwd,
       env: launch.env,
@@ -80,6 +79,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       pages = 0;
     let readingConfig = false;
     let defaultModel = null;
+    let recommendedModel = null;
     const models = new Map();
     const cursors = new Set();
     const kill = () => {
@@ -109,9 +109,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
     };
     const timer = setTimeout(() => {
       kill();
-      finish(
-        new Error('Model list timed out. Check your CLI connection, then switch agents to reload.'),
-      );
+      finish(new Error('Model list timed out. Detect agents in Settings to try again.'));
     }, options.timeoutMs || 15000);
     const send = (value) => {
       if (!proc.stdin.destroyed) proc.stdin.write(JSON.stringify(value) + '\n');
@@ -121,7 +119,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       send({
         id: pendingId,
         method: 'model/list',
-        params: { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) },
+        params: { limit: 100, includeHidden: true, ...(cursor ? { cursor } : {}) },
       });
     };
     const consume = (line) => {
@@ -150,8 +148,8 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
             new Error('Claude Code returned an invalid model list. Update Claude Code and retry.'),
           );
         for (const item of catalog) {
-          if (!item || !validModelId(item.value) || item.value === 'default') continue;
-          const alias = ['sonnet', 'opus', 'haiku', 'fable', 'best', 'opusplan'].includes(
+          if (!item || !validModelId(item.value)) continue;
+          const alias = ['default', 'sonnet', 'opus', 'haiku', 'fable', 'best', 'opusplan'].includes(
             item.value,
           );
           models.set(item.value, {
@@ -191,7 +189,11 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       }
       if (e.id !== pendingId) return;
       if (readingConfig) {
-        if (!e.error && validModelId(e.result?.config?.model)) defaultModel = e.result.config.model;
+        const config = e.result?.config;
+        if (!e.error && config && typeof config === 'object' && !Array.isArray(config)) {
+          if (validModelId(config.model)) defaultModel = config.model;
+          else if (config.model === null) defaultModel = recommendedModel;
+        }
         return finish();
       }
       if (e.error)
@@ -208,18 +210,16 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       if (!Array.isArray(e.result?.data))
         return finish(new Error('The CLI returned an invalid model list. Update Codex and retry.'));
       for (const item of e.result.data) {
-        if (
-          !item ||
-          typeof item !== 'object' ||
-          !validModelId(item.model) ||
-          item.hidden ||
-          (Array.isArray(item.inputModalities) && !item.inputModalities.includes('text'))
-        )
-          continue;
+        if (!item || typeof item !== 'object' || !validModelId(item.model)) continue;
+        const textInput =
+          !Array.isArray(item.inputModalities) || item.inputModalities.includes('text');
+        if (item.isDefault === true && textInput && recommendedModel === null)
+          recommendedModel = item.model;
         models.set(item.model, {
           id: item.model,
           label: typeof item.displayName === 'string' ? item.displayName.slice(0, 100) : item.model,
           description: item.model,
+          ...(!textInput && { textInput: false }),
           ...(Array.isArray(item.supportedReasoningEfforts)
             ? {
                 efforts: item.supportedReasoningEfforts

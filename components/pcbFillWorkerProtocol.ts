@@ -2,9 +2,10 @@ import type { BoardZone, PCB } from '../lib/pcb';
 import { pcbFillInputsChanged } from '../lib/pcb';
 import { ownProjectData } from '../lib/immutable-project';
 import { filledCopperPolygons, polygonPath, refreshPCBFill } from '../lib/pcb-polygons';
+import type { PCBFillRuleContext } from '../lib/pcb-clearance-sources';
 
 export type PCBFillWorkerRequest =
-  | { type: 'basis'; generation: number; board: PCB }
+  | { type: 'basis'; generation: number; board: PCB; rules?: PCBFillRuleContext }
   | { type: 'fill'; generation: number; requestId: number; board: PCB };
 
 export type PCBFillWorkerResponse =
@@ -67,15 +68,18 @@ export function createPCBFillWorkerProcessor(
 ) {
   let generation = -1;
   let basis: PCB | undefined;
+  let rules: PCBFillRuleContext | undefined;
   let basisError = '';
   return (request: PCBFillWorkerRequest): PCBFillWorkerResponse | undefined => {
     if (request.type === 'basis') {
       if (!validIdentity(request.generation) || request.generation <= generation) return undefined;
       generation = request.generation;
       basis = undefined;
+      rules = undefined;
       basisError = '';
       try {
         basis = ownProjectData(request.board);
+        rules = request.rules === undefined ? undefined : ownProjectData(request.rules);
       } catch (error) {
         basisError = errorMessage(error);
       }
@@ -96,7 +100,7 @@ export function createPCBFillWorkerProcessor(
       if (candidate.id !== basis.id)
         throw new Error('Copper fill preview board no longer matches its basis.');
       const restored = restoreUnchangedFills(basis, candidate);
-      const board = calculations.refresh(basis, restored);
+      const board = calculations.refresh(basis, restored, true, rules);
       const paths: [string, string][] = [...calculations.copper(board)].map(([id, polygons]) => [
         id,
         calculations.path(polygons),

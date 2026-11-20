@@ -10,10 +10,14 @@ const bundle = await build({
       import React, {useMemo, useState} from 'react';
       import {createRoot} from 'react-dom/client';
       import Canvas from './components/Canvas';
-      import {createExample} from './lib/examples';
+      import {parameterizedHomeProject} from './tests/fixtures/model-parameters';
       import {defaultSchematicLayers} from './lib/schematic-layers';
       import {createProject, serializeProject, parseProject} from './lib/project';
-      const initial = createExample('kicad-buck').schematic;
+      import {val} from './lib/sexpr';
+      const initial = structuredClone(parameterizedHomeProject('PULSE').schematic);
+      const source = initial.parts.find(part => part.ref === 'V1');
+      source.raw = source.raw.filter(node => !Array.isArray(node) || node[0] !== 'property' || val(node) !== 'Sim.Pins');
+      source.raw.push(['property','"Sim.Pins"','"1=+ 2=-"',['at','35','35','0'],['effects',['font',['size','1.27','1.27']]]]);
       function Fixture() {
         const [doc, setDoc] = useState(initial);
         const [history, setHistory] = useState([]);
@@ -27,7 +31,7 @@ const bundle = await build({
         window.fieldState = {doc, selection, commits: history.length};
         return <>
           <button onClick={() => setTool('select')}>Interaction</button>
-          <button onClick={() => setProbing(true)}>Simulation</button>
+          <button onClick={() => setProbing(true)}>SPICE Simulation</button>
           <button onClick={() => setTool('annotate')}>Annotation</button>
           <button onClick={() => setTool('wire')}>Wire</button>
           <button onClick={() => setValues(v => !v)}>Values</button>
@@ -69,7 +73,7 @@ try {
   await page.addStyleTag({ content: await readFile('app/workspace.css', 'utf8') });
   await page.addStyleTag({ content: '#root {height:100vh} .canvas-wrap {height:820px}' });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
-  const field = page.getByTestId('annotation-field-V101-Sim.Params');
+  const field = page.getByTestId('annotation-field-V1-Sim.Params');
   await page.getByTestId('schematic-canvas').waitFor();
   await field.waitFor({ state: 'visible' });
   assert.equal(
@@ -95,7 +99,7 @@ try {
   await field.waitFor({ state: 'visible' });
   const pinTargets = page.locator('[data-probe-pin]');
   assert.ok((await pinTargets.count()) > 0, 'Pin probe targets remain available');
-  const pin = page.getByTestId('part-L101').locator('[data-probe-pin="0"]');
+  const pin = page.getByTestId('part-L1').locator('[data-probe-pin="0"]');
   const assertInvisiblePin = async (message) =>
     assert.deepEqual(
       await pin.evaluate((node) => ({
@@ -126,7 +130,7 @@ try {
   const state = () =>
     page.evaluate(() => {
       const { doc, selection, commits } = window.fieldState;
-      const part = doc.parts.find((p) => p.ref === 'V101');
+      const part = doc.parts.find((p) => p.ref === 'V1');
       return { part, wires: doc.wires, selection, commits };
     });
   const coordinates = () =>
@@ -200,7 +204,7 @@ try {
   );
   assert.equal(await page.evaluate(() => JSON.stringify(window.fieldState.doc)), beforeGestures);
   await page.getByRole('button', { name: 'Interaction', exact: true }).click();
-  const body = page.getByTestId('symbol-hit-L101');
+  const body = page.getByTestId('symbol-hit-L1');
   await body.click({ force: true });
   const bodyBox = await body.boundingBox();
   await page.evaluate(() => {

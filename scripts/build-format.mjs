@@ -4,6 +4,7 @@ import standalone from 'ajv/dist/standalone/index.js';
 import { build as compile } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { customPadVertexLimit } from '../lib/pcb-custom-pad-limits.ts';
 import { ownedValidatorSource } from './owned-validator-source.mjs';
 import { optimizeStaticMaxLength } from './ajv-length-guard.mjs';
 import { pruneValidatorSchemaSource } from './prune-validator-schema-source.mjs';
@@ -22,7 +23,16 @@ const sharedProject = {
     builder.onResolve({ filter: /^(?:\.\/|\.\.\/).*project(?:\.ts)?$/ }, (args) => {
       const resolved = path.resolve(args.resolveDir, args.path).replace(/\.ts$/, '');
       if (resolved === path.resolve('lib/project'))
-        return { path: './project-format.mjs', external: true };
+        return {
+          path: path
+            .relative(
+              path.dirname(path.resolve(builder.initialOptions.outfile)),
+              path.resolve('server/project-format.mjs'),
+            )
+            .replaceAll('\\', '/')
+            .replace(/^(?![.])/, './'),
+          external: true,
+        };
     });
   },
 };
@@ -91,6 +101,7 @@ const pcbPositive = { ...pcbNumber, minimum: 0.000001, maximum: 1000 };
 const pcbNonnegative = { ...pcbPositive, minimum: 0 };
 const pcbXY = { x: pcbNumber, y: pcbNumber };
 const pcbPoint = object(pcbXY);
+const footprintPointCoordinate = { type: 'number', minimum: -100000, maximum: 100000 };
 const pcbAngle = { ...pcbNumber, minimum: -360, maximum: 360 };
 const copper = { enum: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] };
 const graphicLayer = {
@@ -149,6 +160,7 @@ const line = object(
     fill: { type: 'boolean' },
     stroke: { enum: ['default', 'solid', 'dash', 'dot', 'dash_dot', 'dash_dot_dot'] },
     text: object(pcbTextProperties, pcbTextOptional),
+    keepUpright: { const: false },
     dimension: object(
       {
         type: { enum: ['aligned', 'radial', 'leader'] },
@@ -182,7 +194,7 @@ const line = object(
       ['height', 'leaderLength'],
     ),
   },
-  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'dimension', 'locked'],
+  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'keepUpright', 'dimension', 'locked'],
 );
 const zone = object(
   {
@@ -366,6 +378,16 @@ const schema = {
         side: { enum: ['front', 'back'] },
         pads: array(ref('pad'), 2000),
         graphics: array(line, 10000),
+        referencePoints: array(
+          object({
+            id: uuid,
+            x: footprintPointCoordinate,
+            y: footprintPointCoordinate,
+            size: pcbPositive,
+            layer: { enum: ['F.Fab', 'B.Fab'] },
+          }),
+          256,
+        ),
         reference: text,
         value: text,
         zones: array(zone, 1000),
@@ -396,6 +418,7 @@ const schema = {
       [
         'reference',
         'value',
+        'referencePoints',
         'zones',
         'models',
         'locked',
@@ -412,16 +435,19 @@ const schema = {
         ...pcbXY,
         rotation: pcbAngle,
         type: { enum: ['smd', 'thru_hole', 'np_thru_hole'] },
-        shape: { enum: ['rect', 'circle', 'oval', 'roundrect'] },
+        shape: { enum: ['rect', 'circle', 'oval', 'roundrect', 'custom'] },
         size: object({ x: pcbPositive, y: pcbPositive }),
+        customAnchor: { const: 'circle' },
+        outline: { ...array(pcbPoint, customPadVertexLimit), minItems: 3 },
         drill: pcbPositive,
         netId: { anyOf: [uuid, { type: 'null' }] },
         layers: {
-          ...array({ enum: [...graphicLayer.enum, '*.Cu', '*.Mask'] }, 8),
+          ...array({ enum: [...graphicLayer.enum, '*.Cu', 'F&B.Cu', '*.Mask'] }, 8),
           minItems: 1,
           uniqueItems: true,
         },
         drillOffset: pcbPoint,
+        drillSlot: object({ length: pcbPositive, axis: { enum: ['x', 'y'] } }),
         roundrectRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamferRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamfer: {
@@ -435,13 +461,17 @@ const schema = {
         thermalBridgeAngle: pcbAngle,
         zoneConnect: { type: 'integer', minimum: 0, maximum: 3 },
         removeUnusedLayers: { type: 'boolean' },
+        heatsink: { const: true },
         unconnected: { const: true },
       },
       [
         'locked',
+        'customAnchor',
+        'outline',
         'drill',
         'layers',
         'drillOffset',
+        'drillSlot',
         'roundrectRatio',
         'chamferRatio',
         'chamfer',
@@ -451,6 +481,7 @@ const schema = {
         'thermalBridgeAngle',
         'zoneConnect',
         'removeUnusedLayers',
+        'heatsink',
         'unconnected',
       ],
     ),
@@ -594,6 +625,7 @@ docDefs.schematic = object(
           ...location,
           text,
           size: positive,
+          thickness: pcbNonnegative,
           anchor: { enum: ['start', 'middle', 'end'] },
           vertical: { enum: ['top', 'middle', 'bottom'] },
           excludeFromSimulation: { type: 'boolean' },
@@ -610,7 +642,7 @@ docDefs.schematic = object(
             ],
           },
         },
-        ['excludeFromSimulation', 'color', 'bold', 'italic', 'href'],
+        ['excludeFromSimulation', 'color', 'bold', 'italic', 'href', 'thickness'],
       ),
     ),
     kicad: native([
@@ -858,19 +890,28 @@ await Promise.all([
     JSON.stringify(documentSchema, null, 2) + '\n',
   ),
   service('lib/simulation-models.ts', 'server/simulation-model-format.mjs'),
-  service('lib/ti-dcdc.ts', 'server/ti-format.mjs'),
+  service('lib/reference-models.ts', 'server/reference-model-format.mjs'),
   build({
     stdin: {
       contents:
-        'import {tiModels, referenceModels} from "./lib/ti-dcdc.ts";\n' +
-        'export const reviewedModelEntries = [...tiModels, ...referenceModels].map(model => ({sha256:model.modelSha256, names:[model.subcircuit]}));',
+        'import {controllerModelSources} from "./lib/reference-models.ts";\n' +
+        'export const reviewedModelEntries = controllerModelSources.map(model => ({sha256:model.modelSha256, names:[model.subcircuit]}));',
       resolveDir: process.cwd(),
       loader: 'ts',
     },
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    outfile: 'server/spice-model-entrypoints.cjs',
+    outfile: 'plugins/spice-simulation/host/spice-model-entrypoints.cjs',
+    banner,
+  }),
+  service('api/capability-schema.ts', 'server/capability-schema-format.mjs'),
+  build({
+    entryPoints: ['plugins/runtime/project-data.mjs'],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: 'server/plugin-project-format.cjs',
     banner,
   }),
   service('lib/agent-providers.ts', 'server/agent-provider-format.mjs'),
@@ -881,7 +922,6 @@ await Promise.all([
   build({
     stdin: {
       contents:
-        'export { default as exampleModelLock } from "./resources/example-models-lock.json";\n' +
         'export { default as emcFlybackModelLock } from "./resources/emc-flyback-models-lock.json";',
       resolveDir: process.cwd(),
       loader: 'js',
@@ -905,10 +945,24 @@ await Promise.all([
   ),
   writeGeneratedFile('server/project-format.d.mts', declaration('../lib/project')),
   service('lib/library.ts', 'server/library-format.mjs', [sharedProject]),
-  service('lib/spice.ts', 'server/spice-format.mjs'),
-  writeGeneratedFile('server/spice-format.d.mts', declaration('../lib/spice')),
-  service('lib/thermal.ts', 'server/thermal-format.mjs', [sharedProject]),
-  writeGeneratedFile('server/thermal-format.d.mts', declaration('../lib/thermal')),
+  service('lib/pcb-layout.ts', 'server/pcb-layout-format.mjs', [sharedProject]),
+  service(
+    'plugins/spice-simulation/domain/spice.ts',
+    'plugins/spice-simulation/host/spice-format.mjs',
+  ),
+  writeGeneratedFile(
+    'plugins/spice-simulation/host/spice-format.d.mts',
+    declaration('../domain/spice'),
+  ),
+  service(
+    'plugins/layout-thermal/domain/thermal.ts',
+    'plugins/layout-thermal/host/thermal-format.mjs',
+    [sharedProject],
+  ),
+  writeGeneratedFile(
+    'plugins/layout-thermal/host/thermal-format.d.mts',
+    declaration('../domain/thermal'),
+  ),
   service('lib/model-cad.ts', 'server/model-cad-format.mjs', [sharedProject]),
   writeGeneratedFile('server/model-cad-format.d.mts', declaration('../lib/model-cad')),
   service('lib/workspace-state.ts', 'server/workspace-format.mjs', [sharedProject]),

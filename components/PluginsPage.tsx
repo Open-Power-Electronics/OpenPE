@@ -15,11 +15,10 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '@/lib/bridge';
+import WorkspaceLoading from './WorkspaceLoading';
 import type { CapabilityHost } from '@/api/capabilities';
+import { SPICE_PLUGIN_ID, THERMAL_PLUGIN_ID, PCB_DESIGN_PLUGIN_ID } from '../plugins/catalog.mjs';
 import {
-  SPICE_PLUGIN_ID,
-  THERMAL_PLUGIN_ID,
-  PCB_DESIGN_PLUGIN_ID,
   changeWorkbenchPlugin,
   loadWorkbenchPlugins,
   useWorkbenchPlugins,
@@ -28,6 +27,8 @@ import {
   type WorkbenchPluginCatalog as Catalog,
 } from '@/lib/workbench-plugins';
 import Dialog from './Dialog';
+import PluginCommandDialog from '../plugins/runtime/PluginCommandDialog';
+import type { PluginCommand } from '../api/plugins';
 import AgentMarkdown from './AgentMarkdown';
 import AgentLogo from './AgentLogo';
 import PluginLogo, { hasPluginLogo } from './PluginLogo';
@@ -115,9 +116,11 @@ function PluginWorkflow({
     const { signal } = control;
     const load = async () => {
       try {
-        const guide = (capabilityHost
-          ? await capabilityHost.query('pcbDesign.guide', {}, { signal })
-          : await (await api('pcb-design/guide?document=workflow', { signal })).json()) as {
+        const guide = (
+          capabilityHost
+            ? await capabilityHost.query('pcbDesign.guide', {}, { signal })
+            : await (await api('pcb-design/guide?document=workflow', { signal })).json()
+        ) as {
           text: string;
         };
         if (!signal.aborted) setResult({ text: guide.text });
@@ -131,9 +134,11 @@ function PluginWorkflow({
   return (
     <Dialog title="PE Layout Skill workflow" wide onClose={onClose}>
       {!result ? (
-        <p role="status">Loading workflow…</p>
+        <WorkspaceLoading panel label="Loading workflow" />
       ) : 'error' in result ? (
-        <p className="plugins-error" role="alert">{result.error}</p>
+        <p className="plugins-error" role="alert">
+          {result.error}
+        </p>
       ) : (
         <AgentMarkdown text={result.text} />
       )}
@@ -163,6 +168,8 @@ export default function PluginsPage({
     claude: false,
   });
   const [working, setWorking] = useState(false);
+  const [runtimeCommand, setRuntimeCommand] = useState<PluginCommand | null>(null);
+  const [installing, setInstalling] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<Provider, string>>>({});
   const [confirmation, setConfirmation] = useState<Operation | null>(null);
   const [workflowOpen, setWorkflowOpen] = useState(false);
@@ -262,7 +269,7 @@ export default function PluginsPage({
       if (!next.signal.aborted) setWorking(false);
     }
   }
-  const busy = providers.some((provider) => loading[provider]) || working;
+  const busy = providers.some((provider) => loading[provider]) || working || installing;
   const entries = providers.flatMap((provider) =>
     (catalogs[provider]?.plugins || [])
       .filter((plugin) => provider === 'openpe' || plugin.installed)
@@ -382,6 +389,30 @@ export default function PluginsPage({
                   : categories.find((category) => category.id === filter)?.label)}
           </h1>
           <div className="plugins-toolbar">
+            {typeof window !== 'undefined' && window.openpe?.installPlugin && (
+              <button
+                className="icon-button"
+                aria-label="Install plugin from file"
+                title="Install plugin from file"
+                disabled={busy}
+                onClick={async () => {
+                  setInstalling(true);
+                  try {
+                    const installed = await window.openpe!.installPlugin();
+                    if (installed) {
+                      await loadWorkbenchPlugins(true);
+                      refresh(true);
+                    }
+                  } catch (error) {
+                    setErrors((previous) => ({ ...previous, openpe: (error as Error).message }));
+                  } finally {
+                    setInstalling(false);
+                  }
+                }}
+              >
+                <Download size={17} />
+              </button>
+            )}
             <label className="plugins-search">
               <Search size={17} aria-hidden="true" />
               <input
@@ -468,11 +499,13 @@ export default function PluginsPage({
               <div>
                 <dt>Origin</dt>
                 <dd>
-                  {selectedPlugin.origin === 'openpe'
-                    ? 'OpenPE'
-                    : selectedPlugin.origin === 'agent'
-                      ? providerNames[selectedPlugin.provider]
-                      : 'Unknown'}
+                  {selectedPlugin.runtime === 'javascript'
+                    ? 'Local plugin'
+                    : selectedPlugin.origin === 'openpe'
+                      ? 'OpenPE'
+                      : selectedPlugin.origin === 'agent'
+                        ? providerNames[selectedPlugin.provider]
+                        : 'Unknown'}
                 </dd>
               </div>
               <div>
@@ -509,7 +542,27 @@ export default function PluginsPage({
                 ))}
               </div>
             )}
+            {selectedPlugin.runtime === 'javascript' && (
+              <p className="plugins-notice">
+                {selectedPlugin.permissions?.includes('project.read')
+                  ? 'Can read this project when a command runs.'
+                  : 'Uses command inputs only.'}
+              </p>
+            )}
             <div className="plugin-actions">
+              {selectedPlugin.runtime === 'javascript' &&
+                capabilityHost &&
+                selectedPlugin.installed &&
+                selectedPlugin.enabled &&
+                selectedPlugin.contributes?.commands?.map((command) => (
+                  <button
+                    className="dialog-button quiet"
+                    key={command.id}
+                    onClick={() => setRuntimeCommand(command)}
+                  >
+                    {command.name}
+                  </button>
+                ))}
               {selectedPlugin.provider === 'openpe' &&
                 selectedPlugin.id === PCB_DESIGN_PLUGIN_ID &&
                 selectedPlugin.installed &&
@@ -683,6 +736,13 @@ export default function PluginsPage({
           </>
         )}
       </div>
+      {runtimeCommand && capabilityHost && (
+        <PluginCommandDialog
+          command={runtimeCommand}
+          host={capabilityHost}
+          onClose={() => setRuntimeCommand(null)}
+        />
+      )}
       {workflowOpen && (
         <PluginWorkflow capabilityHost={capabilityHost} onClose={() => setWorkflowOpen(false)} />
       )}
@@ -715,7 +775,10 @@ export default function PluginsPage({
           <p className="dialog-document">{confirmation.id}</p>
           <p className="plugins-notice">
             {confirmation.provider === 'openpe'
-              ? 'This removes the plugin from the workbench and stops active simulations. Project design data and model files are kept. You can reinstall it from Marketplace.'
+              ? catalogs.openpe?.plugins.find((plugin) => plugin.id === confirmation.id)
+                  ?.runtime === 'javascript'
+                ? 'This removes the local plugin package and stops its active work. Project design data is kept. Reinstall requires the original package file.'
+                : 'This removes the plugin from the workbench and stops active simulations. Project design data and model files are kept. You can reinstall it from Marketplace.'
               : confirmation.action === 'uninstall'
                 ? `This removes the plugin from your shared ${providerNames[confirmation.provider]} setup, including its local cache.`
                 : `This changes your shared ${providerNames[confirmation.provider]} setup for future sessions.${confirmation.action === 'install' ? ' Plugins can include skills, hooks and external tools.' : ''}`}

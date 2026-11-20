@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stopOwnedProcess, windowsTaskkillCommand } from '../server/owned-process.mjs';
 
-test('Windows stop uses the absolute SystemRoot taskkill and surfaces a failed direct kill', () => {
+test('Windows stop uses the absolute SystemRoot taskkill and tolerates an exit before its callback', () => {
   assert.equal(
     windowsTaskkillCommand({ SystemRoot: 'C:\\Windows' }),
     'C:\\Windows\\System32\\taskkill.exe',
@@ -27,7 +27,12 @@ test('Windows stop uses the absolute SystemRoot taskkill and surfaces a failed d
     env: { SystemRoot: 'C:\\Windows' },
     closed: () => false,
     timeoutMs: 1000,
-    execFile: ((file: string, args: readonly string[], options: { timeout: number }, done: typeof callback) => {
+    execFile: ((
+      file: string,
+      args: readonly string[],
+      options: { timeout: number },
+      done: typeof callback,
+    ) => {
       calls.push({ file, args, timeout: options.timeout });
       callback = done;
       return proc;
@@ -59,10 +64,17 @@ test('Windows stop uses the absolute SystemRoot taskkill and surfaces a failed d
   callback(failure, '', '');
 
   proc.kill = () => false;
-  assert.throws(() => callback(failure, '', ''), (error: unknown) => {
-    assert.equal(error, failure);
-    return true;
+  assert.doesNotThrow(() => callback(failure, '', ''));
+
+  proc.exitCode = 0;
+  stopOwnedProcess(proc as never, {
+    platform: 'win32',
+    env: { SystemRoot: 'C:\\Windows' },
+    closed: () => false,
+    timeoutMs: 1000,
+    execFile: (() => assert.fail('An exited child must not start taskkill.')) as never,
   });
+  proc.exitCode = null;
 
   let launched = false;
   assert.throws(

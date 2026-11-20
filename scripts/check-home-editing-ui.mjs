@@ -9,6 +9,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { prepareExampleFootprints } from '../server/example-footprints.mjs';
 import { prepareProjectModelFiles } from '../server/project-model-files.mjs';
 import { atomicWrite } from '../server/atomic-write.mjs';

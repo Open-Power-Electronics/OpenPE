@@ -9,18 +9,18 @@ const bundle = await build({
   stdin: {
     resolveDir: process.cwd(),
     loader: 'tsx',
-    contents: `import React,{useState}from'react';import{createRoot}from'react-dom/client';
-      import Chat from './components/Chat';import{emptyCircuit}from'./lib/circuit';
+    contents: `import React,{useState,useRef}from'react';import{createRoot}from'react-dom/client';
+      import PanelFindController from './components/PanelFindController';import Chat from './components/Chat';import{emptyCircuit}from'./lib/circuit';
       import{annotationFixture}from'./tests/fixtures/annotation';
       const doc=emptyCircuit(),noop=()=>{},agents=[{id:'codex',available:true,supportsEffort:true}];
       const capabilities={query:()=>new Promise(resolve=>{window.releaseToolQuery=resolve}),observe:async()=>null,execute:async()=>null};
       const originalMessage={id:'reusable-source',role:'user',text:'Original **literal** requirement.\\n'+'Preserve Ω, µH and native parameters.\\n'.repeat(40)+'Unexpanded final requirement.',annotations:[annotationFixture()]};
-      function Fixture(){const[messages,setMessages]=useState([originalMessage,{id:'annotation-only',role:'user',text:'',annotations:[annotationFixture()]},{id:'earlier',role:'assistant',text:'Earlier reference.[^scope]\\n\\n'+'Earlier discussion.\\n\\n'.repeat(60)+'[^scope]: Earlier measurement conditions.'}]),[input,setInput]=useState(''),[active,setActive]=useState(true),[annotations,setAnnotations]=useState([]);window.setChatVisible=setActive;window.setReadingMessages=setMessages;window.readingFixture={messages,annotations};
-        return <><main hidden={!active}><Chat doc={doc} agents={agents} provider="codex" effort="low" setEffort={noop}
+      function Fixture(){const workspace=useRef(null),findControl=useRef(null);const[messages,setMessages]=useState([originalMessage,{id:'annotation-only',role:'user',text:'',annotations:[annotationFixture()]},{id:'earlier',role:'assistant',text:'Earlier reference.[^scope]\\n\\n'+'Earlier discussion.\\n\\n'.repeat(60)+'[^scope]: Earlier measurement conditions.'}]),[input,setInput]=useState(''),[active,setActive]=useState(true),[annotations,setAnnotations]=useState([]);window.setChatVisible=setActive;window.setReadingMessages=setMessages;window.readingFixture={messages,annotations};
+        return <><div ref={workspace} style={{display:'contents'}}><main hidden={!active}><Chat doc={doc} agents={agents} provider="codex" effort="low" setEffort={noop}
           approvalMode="review" setApprovalMode={noop} model="fixture-model" setModel={noop} messages={messages} setMessages={setMessages}
           input={input} setInput={setInput} annotations={annotations} setAnnotations={setAnnotations} onSettings={noop} onApply={()=>false}
-          active={active} sessionId="reading" conversationTitle="Reading" onRunningChange={noop} capabilities={capabilities}/></main>
-          <aside id="editor"><textarea aria-label="Editor draft" defaultValue="Keep editor selection"/><div style={{height:1400}}>Design stays here</div></aside></>}
+          onFind={()=>findControl.current?.open('agent')} active={active} sessionId="reading" conversationTitle="Reading" onRunningChange={noop} capabilities={capabilities}/></main>
+          <aside id="editor" className="editor"><textarea aria-label="Editor draft" defaultValue="Keep editor selection"/><div style={{height:1400}}>Design stays here</div></aside></div><PanelFindController workspace={workspace} control={findControl} active={active} scopeKey={String(active)}/></>}
       createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);`,
   },
   bundle: true,
@@ -201,168 +201,31 @@ try {
   if (await button('Latest messages').count()) await button('Latest messages').click();
   await atBottom();
   const findConversation = button('Find in conversation');
-  const searchDialog = page.getByRole('dialog', { name: 'Find in conversation', exact: true });
-  const search = searchDialog.getByRole('searchbox', { name: 'Search messages', exact: true });
-  await page.locator('#editor').evaluate((element) => {
-    element.scrollTop = 64;
-  });
+  const searchBar = page.getByRole('search', { name: 'Find in Agent', exact: true });
+  const search = searchBar.getByRole('searchbox', { name: 'Search Agent', exact: true });
   await input.fill('Preserve this draft Ω.');
   await input.evaluate((field) => field.setSelectionRange(2, 9));
   await input.dispatchEvent('compositionstart');
   await input.dispatchEvent('keydown', { key: 'f', ctrlKey: true });
-  assert.equal(await searchDialog.count(), 0);
-  await findConversation.click();
-  assert.equal(await searchDialog.count(), 0);
-  assert.ok(await input.evaluate((field) => document.activeElement === field));
+  assert.equal(await searchBar.count(), 0);
   await input.dispatchEvent('compositionend');
-  const editorDraft = page.getByRole('textbox', { name: 'Editor draft', exact: true });
-  await editorDraft.evaluate((field) => field.focus({ preventScroll: true }));
-  await page.keyboard.press('Control+f');
-  assert.equal(await searchDialog.count(), 0);
-  await input.evaluate((field) => {
-    field.focus({ preventScroll: true });
-    field.setSelectionRange(2, 9);
-  });
+  await chat.hover();
+  await input.focus();
   await page.keyboard.press('Control+f');
   await search.waitFor();
-  const initialResults = searchDialog.getByRole('list', { name: 'Matching messages', exact: true });
-  const resultButtons = initialResults.getByRole('button');
-  await search.dispatchEvent('compositionstart');
-  await search.press('ArrowDown');
-  assert.ok(await search.evaluate((field) => document.activeElement === field));
-  await search.dispatchEvent('compositionend');
-  await search.press('ArrowDown');
-  assert.ok(await resultButtons.first().evaluate((control) => document.activeElement === control));
-  await page.keyboard.press('ArrowDown');
-  assert.ok(await resultButtons.nth(1).evaluate((control) => document.activeElement === control));
-  await page.keyboard.press('ArrowUp');
-  await page.keyboard.press('ArrowUp');
-  assert.ok(await search.evaluate((field) => document.activeElement === field));
-  await search.press('ArrowUp');
-  assert.ok(await resultButtons.last().evaluate((control) => document.activeElement === control));
-  await page.keyboard.press('Escape');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.deepEqual(
-    await input.evaluate((field) => [
-      document.activeElement === field,
-      field.selectionStart,
-      field.selectionEnd,
-    ]),
-    [true, 2, 9],
-  );
-  await findConversation.press('Enter');
-  await search.waitFor();
-  assert.ok(await search.evaluate((field) => document.activeElement === field));
-  const entries = searchDialog.getByRole('list', { name: 'Matching messages', exact: true });
-  await searchDialog.getByRole('status').getByText('3 messages', { exact: true }).waitFor();
-  assert.deepEqual(
-    await entries.getByRole('listitem').evaluateAll((rows) => rows.map((row) => row.value)),
-    [3, 2, 1],
-  );
-  const beforePromptCancel = await chat.evaluate((element) => element.scrollTop);
+  assert.equal(await page.getByRole('dialog', { name: /Find/ }).count(), 0);
   await search.fill('No such phrase');
-  await searchDialog.getByRole('status').getByText('No matching messages').waitFor();
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '0/0',
+  );
   await search.press('Escape');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.ok(await findConversation.evaluate((control) => document.activeElement === control));
-  assert.equal(await chat.evaluate((element) => element.scrollTop), beforePromptCancel);
-  await findConversation.click();
-  await search.fill('  **LITERAL**  ');
-  const originalPrompt = entries.getByRole('button', { name: /Original \*\*literal\*\*/ });
-  await originalPrompt.waitFor();
-  assert.equal(await originalPrompt.locator('mark').textContent(), '**literal**');
-  await search.dispatchEvent('compositionstart');
-  await search.press('Enter');
-  await originalPrompt.click();
-  assert.ok(await search.evaluate((field) => document.activeElement === field));
-  await search.dispatchEvent('compositionend');
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  await button('Latest messages').waitFor();
+  await searchBar.waitFor({ state: 'detached' });
   assert.deepEqual(
-    await page.evaluate(() => {
-      const message = document.activeElement;
-      const field = document.querySelector('.composer textarea');
-      return [
-        message.dataset.messageId,
-        Array.from(CSS.highlights.get('agent-search-hit') ?? [])[0]?.toString(),
-        field.value,
-        field.selectionStart,
-        field.selectionEnd,
-        window.runs.length,
-      ];
-    }),
-    ['reusable-source', '**literal**', 'Preserve this draft Ω.', 2, 9, 0],
+    await input.evaluate((field) => [field.value, field.selectionStart, field.selectionEnd]),
+    ['Preserve this draft Ω.', 2, 9],
   );
-  await findConversation.click();
-  await search.fill('Unexpanded final requirement.');
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.equal(
-    await page.evaluate(() => document.activeElement.dataset.messageId),
-    'reusable-source',
-  );
-  assert.equal(await page.evaluate(() => CSS.highlights.has('agent-search-hit')), false);
-  await page.getByRole('button', { name: 'Show more of this message', exact: true }).waitFor();
-  await findConversation.click();
-  await search.fill('check the resistor');
-  await search.press('Tab');
-  assert.ok(
-    await entries
-      .getByRole('button', { name: /Check the resistor/ })
-      .evaluate((control) => document.activeElement === control),
-  );
-  await page.keyboard.press('Space');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.equal(
-    await page.evaluate(() => document.activeElement.dataset.messageId),
-    'annotation-only',
-  );
-  assert.equal(await page.locator('#editor').evaluate((element) => element.scrollTop), 64);
-  await findConversation.click();
-  await search.fill('measurement CONDITIONS');
-  const replyMatch = entries.getByRole('button', { name: /Reply.*measurement conditions/ });
-  await replyMatch.waitFor();
-  assert.equal(await replyMatch.locator('mark').textContent(), 'measurement conditions');
-  assert.match(await replyMatch.locator('.agent-conversation-excerpt').textContent(), /^…/);
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.equal(await page.evaluate(() => document.activeElement.dataset.messageId), 'earlier');
-  assert.ok(
-    await page.evaluate(() => {
-      const range = Array.from(CSS.highlights.get('agent-search-hit') ?? [])[0];
-      if (range?.toString() !== 'measurement conditions') return false;
-      const hit = range.getBoundingClientRect();
-      const viewport = document.querySelector('.chat-scroll').getBoundingClientRect();
-      return (
-        hit.top >= viewport.top &&
-        hit.bottom <= viewport.bottom &&
-        document.activeElement.getBoundingClientRect().top < viewport.top
-      );
-    }),
-  );
-  await page
-    .locator('main')
-    .screenshot({ path: 'test-results/agent-reading/conversation-search-reveal.png' });
-  await findConversation.click();
-  assert.equal(await page.evaluate(() => CSS.highlights.has('agent-search-hit')), false);
-  await search.fill('[^scope]');
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.ok(
-    await page.evaluate(() => {
-      const reply = document.activeElement.getBoundingClientRect();
-      const viewport = document.querySelector('.chat-scroll').getBoundingClientRect();
-      return Math.abs(reply.top - viewport.top - 4) <= 1 && !CSS.highlights.has('agent-search-hit');
-    }),
-  );
-  await findConversation.click();
-  await page.evaluate(() => window.setChatVisible(false));
-  await searchDialog.waitFor({ state: 'detached' });
-  await page.evaluate(() => window.setChatVisible(true));
-  await findConversation.waitFor();
-  assert.equal(await searchDialog.count(), 0);
-  await button('Latest messages').click();
+  if (await button('Latest messages').count()) await button('Latest messages').click();
   await atBottom();
   await send('Inspect this converter.', 1);
   await emit(0, {
@@ -388,7 +251,8 @@ try {
   await findConversation.click();
   await search.fill('Original');
   await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
+  await search.press('Escape');
+  await searchBar.waitFor({ state: 'detached' });
   const promptPosition = await chat.evaluate((element) => element.scrollTop);
   await emit(0, { type: 'text', text: '\n\nAdditional streamed overview.' });
   await page
@@ -986,7 +850,7 @@ try {
   ]);
   await answer.dispatchEvent('compositionstart');
   await answer.dispatchEvent('keydown', { key: 'f', ctrlKey: true });
-  assert.equal(await searchDialog.count(), 0);
+  assert.equal(await searchBar.count(), 0);
   await viewQuestion.click();
   await button('Continue').click();
   assert.deepEqual(await page.evaluate(() => window.answerRequests), []);
@@ -1716,23 +1580,6 @@ try {
   });
   await mkdir('test-results/agent-reading', { recursive: true });
   await page.screenshot({ path: 'test-results/agent-reading/success.png' });
-  await findConversation.click();
-  await page.setViewportSize({ width: 328, height: 560 });
-  await search.fill('settled');
-  await searchDialog.getByRole('status').getByText('1 message', { exact: true }).waitFor();
-  for (const theme of ['light', 'dark']) {
-    await page.evaluate((theme) => {
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.setProperty('--font-step', '4px');
-    }, theme);
-    assert.ok((await searchDialog.boundingBox()).width <= 328);
-    await searchDialog.screenshot({
-      path: `test-results/agent-reading/conversation-search-${theme}-328.png`,
-    });
-  }
-  await search.press('Escape');
-  await searchDialog.waitFor({ state: 'detached' });
-  await page.setViewportSize({ width: 1100, height: 900 });
   const liveRun = await page.evaluate(() => {
     window.copies = [];
     window.copyAttempts = [];
@@ -1754,9 +1601,12 @@ try {
   await page.getByText('Keep Ω and µH.', { exact: true }).waitFor();
   await findConversation.click();
   await search.fill('Keep Ω and µH.');
-  await searchDialog.getByRole('status').getByText('No matching messages').waitFor();
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '1/1',
+  );
   await search.press('Escape');
-  await searchDialog.waitFor({ state: 'detached' });
+  await searchBar.waitFor({ state: 'detached' });
   await input.fill('Draft stays here.');
   await input.evaluate((field) => field.setSelectionRange(1, 6));
   await input.dispatchEvent('compositionstart');
@@ -1805,156 +1655,6 @@ try {
     secondSnapshot + '\n\nCompleted after copying.',
   );
   assert.equal(await button('Latest messages').count(), 0);
-  await findConversation.click();
-  for (const excluded of ['Private title payload', 'Private proposal payload']) {
-    await search.fill(excluded);
-    await searchDialog.getByRole('status').getByText('No matching messages').waitFor();
-  }
-  await search.fill('Keep Ω and µH.');
-  await entries.getByRole('button', { name: /Reply.*Keep Ω and µH/ }).waitFor();
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.ok(
-    await settledCopy.evaluate((control) => control.closest('article') === document.activeElement),
-  );
-  assert.equal(await input.inputValue(), 'Draft stays here.');
-  await page.evaluate(() =>
-    window.setReadingMessages((messages) => [
-      ...messages,
-      ...Array.from({ length: 24 }, (_, index) => ({
-        id: `keyboard-result-${index}`,
-        role: 'user',
-        text: `Overflow keyboard result ${index}.`,
-      })),
-      { id: 'literal-search-markup', role: 'user', text: 'Before <script>Ω</script> after' },
-    ]),
-  );
-  await page.keyboard.press('Meta+f');
-  await search.fill('<SCRIPT>Ω</SCRIPT>');
-  assert.equal(await entries.locator('mark').textContent(), '<script>Ω</script>');
-  assert.equal(await entries.locator('script').count(), 0);
-  await search.fill('Overflow keyboard result');
-  await searchDialog.getByRole('status').getByText('24 messages', { exact: true }).waitFor();
-  const outerSearchPose = await page.evaluate(() => [
-    scrollY,
-    document.querySelector('.chat-scroll').scrollTop,
-  ]);
-  await search.press('ArrowUp');
-  const oldestResult = entries.getByRole('button', { name: /Overflow keyboard result 0\./ });
-  assert.ok(
-    await oldestResult.evaluate((control) => {
-      const list = control.closest('ol');
-      return (
-        document.activeElement === control &&
-        list.scrollTop > 0 &&
-        control.getBoundingClientRect().bottom <= list.getBoundingClientRect().bottom + 1
-      );
-    }),
-  );
-  await page.keyboard.press('Control+f');
-  assert.ok(
-    await search.evaluate(
-      (field) =>
-        document.activeElement === field &&
-        field.selectionStart === 0 &&
-        field.selectionEnd === field.value.length,
-    ),
-  );
-  await search.press('Escape');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.deepEqual(
-    await page.evaluate(() => [scrollY, document.querySelector('.chat-scroll').scrollTop]),
-    outerSearchPose,
-  );
-  await findConversation.click();
-  await search.fill('Overflow keyboard result');
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  const focusedMessage = () => page.evaluate(() => document.activeElement.dataset.messageId);
-  assert.equal(await focusedMessage(), 'keyboard-result-23');
-  await page.keyboard.press('F3');
-  assert.equal(await focusedMessage(), 'keyboard-result-0');
-  await page.keyboard.press('F3');
-  assert.equal(await focusedMessage(), 'keyboard-result-1');
-  await page.keyboard.press('Shift+F3');
-  assert.equal(await focusedMessage(), 'keyboard-result-0');
-  await page.keyboard.press('Shift+F3');
-  assert.equal(await focusedMessage(), 'keyboard-result-23');
-  assert.equal(
-    await page.evaluate(() =>
-      Array.from(CSS.highlights.get('agent-search-hit') ?? [])[0]?.toString(),
-    ),
-    'Overflow keyboard result',
-  );
-  const repeatedMatch = page.locator('[data-message-id="keyboard-result-23"]');
-  await repeatedMatch.dispatchEvent('keydown', { key: 'F3', repeat: true });
-  assert.equal(await focusedMessage(), 'keyboard-result-23');
-  await input.evaluate((field) => field.focus({ preventScroll: true }));
-  await input.dispatchEvent('compositionstart');
-  await input.dispatchEvent('keydown', { key: 'F3' });
-  assert.ok(await input.evaluate((field) => document.activeElement === field));
-  await input.dispatchEvent('compositionend');
-  await editorDraft.evaluate((field) => field.focus({ preventScroll: true }));
-  await page.keyboard.press('F3');
-  assert.ok(await editorDraft.evaluate((field) => document.activeElement === field));
-  await page.evaluate(() => window.setChatVisible(false));
-  await page.locator('main').waitFor({ state: 'hidden' });
-  await page.evaluate(() => window.setChatVisible(true));
-  await repeatedMatch.evaluate((element) => element.focus({ preventScroll: true }));
-  await page.keyboard.press('F3');
-  assert.equal(await focusedMessage(), 'keyboard-result-23');
-  assert.equal(await page.evaluate(() => CSS.highlights.has('agent-search-hit')), false);
-  await page.evaluate(() =>
-    window.setReadingMessages((messages) => [
-      ...messages,
-      { id: 'older-occurrence', role: 'user', text: 'Older GAINMARKER.' },
-      {
-        id: 'reply-occurrences',
-        role: 'assistant',
-        text:
-          'First **Gain**Marker then gainmarkergainmarker.\n\n' +
-          'More detail.\n\n'.repeat(32) +
-          '```text\nDesign note\nGAINMARKER\n```\n\nSoloTerm and soloterm.',
-      },
-      { id: 'newer-occurrence', role: 'user', text: 'Newer Gainmarker.' },
-    ]),
-  );
-  const matchedRange = () =>
-    page.evaluate(() => {
-      const range = Array.from(CSS.highlights.get('agent-search-hit') ?? [])[0];
-      return [
-        document.activeElement.closest('article')?.dataset.messageId,
-        range?.toString(),
-        range?.startOffset,
-      ];
-    });
-  await findConversation.click();
-  await search.fill('gainmarker');
-  await entries.getByRole('button', { name: /Reply.*then gainmarker/i }).click();
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.deepEqual(await matchedRange(), ['reply-occurrences', 'GainMarker', 0]);
-  for (const offset of ['Marker then '.length, 'Marker then gainmarker'.length]) {
-    await page.keyboard.press('F3');
-    assert.deepEqual(await matchedRange(), ['reply-occurrences', 'gainmarker', offset]);
-  }
-  await page.keyboard.press('F3');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['reply-occurrences', 'GAINMARKER']);
-  assert.ok(await page.evaluate(() => document.activeElement.matches('.agent-code-block > pre')));
-  await page.keyboard.press('F3');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['newer-occurrence', 'Gainmarker']);
-  await page.keyboard.press('Shift+F3');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['reply-occurrences', 'GAINMARKER']);
-  await page.keyboard.press('Shift+F3');
-  assert.deepEqual(await matchedRange(), ['reply-occurrences', 'gainmarker', 22]);
-  await findConversation.click();
-  await search.fill('soloterm');
-  await searchDialog.getByRole('status').getByText('1 message', { exact: true }).waitFor();
-  await search.press('Enter');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['reply-occurrences', 'SoloTerm']);
-  await page.keyboard.press('Shift+F3');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['reply-occurrences', 'soloterm']);
-  await page.keyboard.press('F3');
-  assert.deepEqual((await matchedRange()).slice(0, 2), ['reply-occurrences', 'SoloTerm']);
   const codeForSearch = (term, leftTerm = '') =>
     [
       '```spice',
@@ -2009,10 +1709,14 @@ try {
   const revealReaderHit = async (reader, term) => {
     await findConversation.click();
     await search.fill(term);
-    await search.press('Enter');
-    await searchDialog.waitFor({ state: 'detached' });
+    await waitForAsync(
+      page,
+      (term) =>
+        Array.from(CSS.highlights.get('openpe-panel-find-current') ?? [])[0]?.toString() === term,
+      term,
+    );
     const placement = await reader.evaluate((element, term) => {
-      const range = Array.from(CSS.highlights.get('agent-search-hit') ?? [])[0];
+      const range = Array.from(CSS.highlights.get('openpe-panel-find-current') ?? [])[0];
       if (!range || !element.contains(range.startContainer))
         return {
           visible: false,
@@ -2031,7 +1735,7 @@ try {
         )
         ?.getBoundingClientRect();
       const visible =
-        document.activeElement === element &&
+        !!document.activeElement.closest('[data-panel-find]') &&
         range.toString() === term &&
         element.scrollTop > 0 &&
         element.scrollLeft > 0 &&
@@ -2050,6 +1754,8 @@ try {
       };
     }, term);
     assert.ok(placement.visible, `${term}: ${JSON.stringify(placement)}`);
+    await search.press('Escape');
+    await searchBar.waitFor({ state: 'detached' });
   };
   const editorReaderPose = await page.evaluate(() => [
     scrollY,
@@ -2079,7 +1785,7 @@ try {
   assert.equal(await input.inputValue(), 'Draft stays here.');
   await page
     .locator('main')
-    .screenshot({ path: 'test-results/agent-reading/conversation-search-table-328.png' });
+    .screenshot({ path: 'test-results/agent-reading/panel-find-table.png' });
   const lineReader = codeReaders.last();
   const lineBefore = await scrollPosition(lineReader);
   const tableBeforeLineJump = await scrollPosition(tableReaders.last());
@@ -2112,10 +1818,12 @@ try {
   await searchedCodeBlock.getByRole('button', { name: 'Collapse code', exact: true }).click();
   await findConversation.click();
   await search.fill('CODE_NEEDLE_Ω');
-  await search.press('Enter');
-  await searchDialog.waitFor({ state: 'detached' });
-  assert.ok(await readerReply.evaluate((element) => element === document.activeElement));
-  assert.equal(await page.evaluate(() => CSS.highlights.has('agent-search-hit')), false);
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '0/0',
+  );
+  await search.press('Escape');
+  await searchBar.waitFor({ state: 'detached' });
   await searchedCodeBlock.getByRole('button', { name: 'Expand code', exact: true }).click();
   assert.deepEqual(
     await page.evaluate(() => [scrollY, document.querySelector('#editor').scrollTop]),
@@ -2419,7 +2127,7 @@ try {
   assert.equal(await page.evaluate(() => window.readingFixture.messages.at(-1).text), savedPrompt);
   assert.deepEqual(errors, []);
   console.log(
-    'Agent reading passed: live response snapshots, conversation search, prompt history, exact reuse, citations, question delivery, reading positions and independent focus.',
+    'Agent reading passed: live response snapshots, inline rendered-pane Find, prompt history, exact reuse, citations, question delivery, reading positions and independent focus.',
   );
 } finally {
   await browser.close();

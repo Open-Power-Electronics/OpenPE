@@ -3,7 +3,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { hasOpenOverlay } from './Dialog';
 
-const defaultRatio = 0.35;
+const defaultRatio = 0.3;
 const resizingAttribute = 'data-workspace-resizing';
 const resizingOwners = new WeakMap<HTMLElement, { owners: Set<object>; previous: string | null }>();
 

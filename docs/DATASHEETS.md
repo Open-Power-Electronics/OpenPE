@@ -15,6 +15,10 @@ controller. That record is independent of editable disk text, native KiCad
 documents, Core state, undo, recovery and simulation models. The schematics,
 boards and pinned upstream sources remain the sources of design data.
 
+The [catalog datasheet preview](LIBRARIES.md#component-datasheet-preview)
+shows component documents from the library chooser. Reviewed example records
+retain their own controller binding, document hashes and Agent access.
+
 ## Source and Agent access
 
 In Source, expand the actual `datasheets` directory. Local PDFs open in an iframe from bounded

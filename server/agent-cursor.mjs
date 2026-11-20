@@ -6,8 +6,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { isProviderReasoningEffort } from './agent-provider-format.mjs';
-import { validModelId } from './model-id.mjs';
+import { isProviderReasoningEffort, validModelId } from './agent-provider-format.mjs';
 import { startAgentMCP, agentMcpTools } from './agent-mcp.mjs';
 
 const require = createRequire(import.meta.url);
@@ -119,7 +118,10 @@ export function publishCursorListError(error, apiKey) {
       modelListDiagnostic: true,
     });
   if (error instanceof Error && error.modelListDiagnostic === true) return error;
-  if (error instanceof Error && (message.startsWith('Cursor model ') || cursorListDiagnostics.has(message)))
+  if (
+    error instanceof Error &&
+    (message.startsWith('Cursor model ') || cursorListDiagnostics.has(message))
+  )
     return Object.assign(error, { modelListDiagnostic: true });
   return Object.assign(new Error('Could not load Cursor models.'), { modelListDiagnostic: true });
 }
@@ -181,7 +183,7 @@ function cursorCatalogLabel(model, identity, label, kind) {
 }
 
 /** ModelParameterDefinition entries are the selectable parameters. Ids that appear only on a variant stay out of the request. */
-export function definedCursorModel(model) {
+function definedCursorModel(model) {
   if (!model || !validModelId(model.id)) cursorModelError(model, 'is not a catalog model.');
   const rawParameters = model.parameters === undefined ? [] : model.parameters;
   if (!Array.isArray(rawParameters) || rawParameters.length > 16)
@@ -192,7 +194,11 @@ export function definedCursorModel(model) {
     if (!parameter || !parameterIdPattern.test(parameter.id) || ids.has(parameter.id))
       cursorModelError(model, 'has an invalid parameter id.');
     ids.add(parameter.id);
-    if (!Array.isArray(parameter.values) || parameter.values.length < 1 || parameter.values.length > 32)
+    if (
+      !Array.isArray(parameter.values) ||
+      parameter.values.length < 1 ||
+      parameter.values.length > 32
+    )
       cursorModelError(model, `parameter ${parameter.id} has invalid values.`);
     const values = [];
     const seen = new Set();
@@ -226,7 +232,12 @@ export function definedCursorModel(model) {
     const seen = new Set();
     const params = [];
     for (const param of variant.params) {
-      if (!param || typeof param.id !== 'string' || typeof param.value !== 'string' || seen.has(param.id))
+      if (
+        !param ||
+        typeof param.id !== 'string' ||
+        typeof param.value !== 'string' ||
+        seen.has(param.id)
+      )
         cursorModelError(model, 'has an invalid variant.');
       if (!parameterIdPattern.test(param.id) || !parameterValuePattern.test(param.value))
         cursorModelError(model, 'has an invalid variant.');
@@ -260,8 +271,7 @@ export function cursorCatalogEntry(model) {
   return {
     id: defined.id,
     label: typeof model.displayName === 'string' ? model.displayName.slice(0, 100) : model.id,
-    description:
-      typeof model.description === 'string' ? model.description.slice(0, 300) : model.id,
+    description: typeof model.description === 'string' ? model.description.slice(0, 300) : model.id,
     efforts: defined.effort ? defined.effort.values.map((entry) => entry.value) : [],
     ...(defined.effort ? { effortParameter: defined.effort.id } : {}),
     parameters: defined.parameters.map((parameter) => ({
@@ -309,7 +319,9 @@ export function cursorCheckRequest(entry, override) {
     const value = override?.id === parameter.id ? override.value : parameter.default;
     if (!parameter.values?.some((item) => item.value === value))
       throw new Error(
-        `Cursor parameter ${parameter.id} does not offer ${value}. Values: ${(parameter.values || [])
+        `Cursor parameter ${parameter.id} does not offer ${value}. Values: ${(
+          parameter.values || []
+        )
           .map((item) => item.value)
           .join(', ')}`,
       );
@@ -360,7 +372,9 @@ export function cursorModelSelection(model, request = {}) {
   });
   const matches = defined.variants.filter((variant) => sameVariantParams(variant.params, params));
   if (matches.length !== 1)
-    throw new Error(`Cursor model ${defined.id} has no single variant for the selected parameters.`);
+    throw new Error(
+      `Cursor model ${defined.id} has no single variant for the selected parameters.`,
+    );
   // ModelSelection.maxMode is optional. SDK 1.3.1 honors only maxMode === true
   // and otherwise infers it from every variant consistent with the parameters.
   // The explicit flag is the matched variant's isMaxMode, so a max-mode variant
@@ -458,7 +472,8 @@ export async function proveCursorMcpTools(env) {
   });
   try {
     input.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n');
-    for (let i = 0; i < 50 && !received.length; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    for (let i = 0; i < 50 && !received.length; i++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
     const names = received[0]?.result?.tools?.map((tool) => tool.name);
     if (!sameNames(names, cursorMcpTools))
       throw new Error(`OpenPE MCP exposed ${names?.join(', ') || 'no tools'}.`);
@@ -470,7 +485,11 @@ export async function proveCursorMcpTools(env) {
 
 export function assertCursorSdkTools(agent, expected) {
   const options = agent?.options;
-  if (!options || !Array.isArray(options.allowedProtoTools) || !Array.isArray(options.disallowedProtoTools))
+  if (
+    !options ||
+    !Array.isArray(options.allowedProtoTools) ||
+    !Array.isArray(options.disallowedProtoTools)
+  )
     throw new Error('Cursor SDK cannot prove the effective tool set exposed to the model.');
   const local = options.local;
   if (local?.cwd !== expected.cwd)
@@ -483,21 +502,30 @@ export function assertCursorSdkTools(agent, expected) {
     throw new Error('Cursor SDK is using the host filesystem.');
   if (local.customTools || options.agents || options.cloud)
     throw new Error('Cursor SDK enabled custom tools, subagents, or a cloud runtime.');
+  const denied = new Set(options.disallowedProtoTools);
+  const effective = options.allowedProtoTools.filter((name) => !denied.has(name)).sort();
+  if (expected.raw) {
+    if (effective.length || Object.keys(options.mcpServers ?? {}).length)
+      throw new Error('Cursor SDK exposed tools in Raw KiCad mode.');
+    return;
+  }
   const server = options.mcpServers?.openpe;
   const servers = options.mcpServers ? Object.keys(options.mcpServers) : [];
-  if (servers.length !== 1 || !server || server.type !== 'stdio' || server.command !== process.execPath)
+  if (
+    servers.length !== 1 ||
+    !server ||
+    server.type !== 'stdio' ||
+    server.command !== process.execPath
+  )
     throw new Error('Cursor SDK did not keep the single OpenPE MCP server.');
   if (!Array.isArray(server.args) || server.args.length !== 1 || server.args[0] !== mcpScript)
     throw new Error('Cursor SDK MCP server is not the OpenPE adapter.');
-  if (server.cwd !== expected.cwd) throw new Error('Cursor SDK MCP server is not in the private directory.');
+  if (server.cwd !== expected.cwd)
+    throw new Error('Cursor SDK MCP server is not in the private directory.');
   if (server.env !== expected.env || !isolatedMcpEnv(server.env, expected))
     throw new Error('Cursor MCP environment is not isolated.');
-  const denied = new Set(options.disallowedProtoTools);
-  const effective = options.allowedProtoTools.filter((name) => !denied.has(name)).sort();
   if (!sameNames(effective, cursorBuiltinTools))
-    throw new Error(
-      `Cursor SDK exposed built-in tools ${effective.join(', ') || 'none'}.`,
-    );
+    throw new Error(`Cursor SDK exposed built-in tools ${effective.join(', ') || 'none'}.`);
 }
 
 async function withStartup(signal, timeoutMs, work) {
@@ -506,7 +534,8 @@ async function withStartup(signal, timeoutMs, work) {
     timer = setTimeout(() => reject(new Error('Cursor startup timed out.')), timeoutMs);
   });
   const cancelled = new Promise((_, reject) => {
-    const fail = () => reject(Object.assign(new Error('Cursor startup cancelled.'), { cancelled: true }));
+    const fail = () =>
+      reject(Object.assign(new Error('Cursor startup cancelled.'), { cancelled: true }));
     if (signal.aborted) fail();
     else signal.addEventListener('abort', fail, { once: true });
   });
@@ -523,17 +552,17 @@ async function withStartup(signal, timeoutMs, work) {
  * @param {(event:any)=>void} emit
  * @param {AbortSignal} signal
  */
-export async function runCursorAgent(prompt, request, emit, signal, options) {
+export async function runCursorAgent(prompt, request, emit, signal, options, raw = false) {
   const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
   let apiKey = '';
   try {
     apiKey = await readCursorApiKey(options.cursorCredential);
     if (!request.model) throw new Error('Choose a Cursor model from the catalog.');
-    if (!options.capabilities?.url || !options.capabilities.token)
+    if (!raw && (!options.capabilities?.url || !options.capabilities.token))
       throw new Error('Cursor requires the OpenPE capability bridge.');
-    if (!options.questions?.url || !options.questions.token)
+    if (!raw && (!options.questions?.url || !options.questions.token))
       throw new Error('Cursor requires the OpenPE question bridge.');
-    const env = Object.freeze({
+    const env = raw ? undefined : Object.freeze({
       ELECTRON_RUN_AS_NODE: '1',
       OPENPE_AGENT_BRIDGE_URL: options.capabilities.url,
       OPENPE_AGENT_BRIDGE_TOKEN: options.capabilities.token,
@@ -542,16 +571,16 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
     });
     if (signal.aborted) return { outcome: 'cancelled' };
     emit({ type: 'status', stage: 'starting', text: 'Checking Cursor tool isolation…' });
-    await proveCursorMcpTools(env);
+    if (env) await proveCursorMcpTools(env);
     const catalog = await cursorModelCatalog(apiKey, sdk);
     if (signal.aborted) return { outcome: 'cancelled' };
-    const raw = catalog.raw.find((model) => model?.id === request.model);
-    if (!catalog.models.some((model) => model.id === request.model) || !raw) {
+    const catalogModel = catalog.raw.find((model) => model?.id === request.model);
+    if (!catalog.models.some((model) => model.id === request.model) || !catalogModel) {
       const excluded = catalog.unavailable.find((entry) => entry.id === request.model);
       if (excluded) throw new Error(excluded.reason);
       throw new Error('Choose a Cursor model from the catalog.');
     }
-    const selection = cursorModelSelection(raw, request);
+    const selection = cursorModelSelection(catalogModel, request);
     emit({
       type: 'agent-info',
       model: selection.id,
@@ -562,19 +591,20 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
     const proof = Object.freeze({
       cwd: directory,
       fs: filesystem,
+      raw,
       env,
       apiKey,
-      capabilityUrl: options.capabilities.url,
-      capabilityToken: options.capabilities.token,
-      questionUrl: options.questions.url,
-      questionToken: options.questions.token,
+      capabilityUrl: options.capabilities?.url,
+      capabilityToken: options.capabilities?.token,
+      questionUrl: options.questions?.url,
+      questionToken: options.questions?.token,
     });
     const createOptions = {
       apiKey,
       model: selection,
-      tools: ['mcp'],
+      tools: raw ? [] : ['mcp'],
       disallowedTools,
-      mcpServers: {
+      mcpServers: raw ? {} : {
         openpe: {
           type: 'stdio',
           command: process.execPath,
@@ -602,17 +632,13 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
     };
     try {
       try {
-        agent = await withStartup(
-          signal,
-          options.timeoutMs || startupLimitMs,
-          () => created,
-        );
+        agent = await withStartup(signal, options.timeoutMs || startupLimitMs, () => created);
       } catch (error) {
         void created.then((value) => value?.[Symbol.asyncDispose]?.()).catch(() => {});
         throw error;
       }
       assertCursorSdkTools(agent, proof);
-      if (createOptions.local.fs !== proof.fs || createOptions.mcpServers.openpe.env !== proof.env)
+      if (createOptions.local.fs !== proof.fs || createOptions.mcpServers.openpe?.env !== proof.env)
         throw new Error('Cursor SDK options changed before the run.');
       if (signal.aborted) return { outcome: 'cancelled' };
       emit({ type: 'status', stage: 'waiting', text: 'Waiting for the model…' });
@@ -694,7 +720,8 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
               }
               if (block.type !== 'text' || !block.text) continue;
               text += block.text;
-              if (text.length > textLimit) throw new Error('Agent response exceeds the 2 MB limit.');
+              if (text.length > textLimit)
+                throw new Error('Agent response exceeds the 2 MB limit.');
               emit({ type: 'text-delta', delta: block.text });
               if (signal.aborted) {
                 stopped = true;

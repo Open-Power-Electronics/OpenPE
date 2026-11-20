@@ -1,3 +1,4 @@
+import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPart, emptyCircuit, pinPositions, libraries, uid } from '../lib/circuit';
@@ -13,10 +14,13 @@ import {
   defaultSimulationParticipation,
   participatesInSimulation,
 } from '../lib/simulation-participation';
-import { buildSpiceDeck, defaultTransient, simulationSupportError, spiceNets } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
-import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
-import { createExample } from '../lib/examples';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  simulationSupportError,
+  spiceNets,
+} from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import { PCBProjectSync } from '../lib/pcb-project-sync';
 import { child, quote } from '../lib/sexpr';
@@ -65,7 +69,7 @@ test('participation survives canonical JSON and native exports, and can override
 
 const fixtures = [
   ['generic switching stage', switchingStageFixture],
-  ['official model Buck', () => createExample('kicad-buck').schematic],
+  ['official model Buck', () => createReferenceExample('reference-lm2598-to220-7-buck').schematic],
   ...referenceExamples.map(
     (entry) => [entry.title, () => createReferenceExample(entry.id).schematic] as const,
   ),

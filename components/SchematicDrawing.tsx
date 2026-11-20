@@ -16,7 +16,12 @@ type ObjectPoint = Point & { id: string };
 type PointerDown = (event: React.PointerEvent, id: string) => void;
 type PinPointerDown = (event: React.PointerEvent, id: string, point: Point) => void;
 type Offsets = { dx: number; dy: number };
-type ObjectProps<T> = Offsets & { object: T; selected: boolean; onPointerDown: PointerDown };
+type ObjectProps<T> = Offsets & {
+  object: T;
+  selected: boolean;
+  dimmed: boolean;
+  onPointerDown: PointerDown;
+};
 
 const SchematicSymbol = memo(SymbolGraphic);
 const HitPadding = createContext(0.5);
@@ -49,6 +54,7 @@ const DrawingPartHitTarget = memo(function DrawingPartHitTarget({
 const DrawingWire = memo(function DrawingWire({
   object: wire,
   selected,
+  dimmed,
   dx,
   dy,
   onPointerDown,
@@ -58,7 +64,11 @@ const DrawingWire = memo(function DrawingWire({
     x2 = wire.b.x + dx,
     y2 = wire.b.y + dy;
   return (
-    <g data-selection-id={wire.id} onPointerDown={(event) => onPointerDown(event, wire.id)}>
+    <g
+      data-selection-id={wire.id}
+      opacity={dimmed ? 0.25 : 1}
+      onPointerDown={(event) => onPointerDown(event, wire.id)}
+    >
       <line
         data-export-exclude
         x1={x1}
@@ -89,14 +99,16 @@ const DrawingJunction = memo(function DrawingJunction({
   x,
   y,
   selected,
+  dimmed,
   dx,
   dy,
   onPointerDown,
-}: Offsets & ObjectPoint & { selected: boolean; onPointerDown: PointerDown }) {
+}: Offsets & ObjectPoint & { selected: boolean; dimmed: boolean; onPointerDown: PointerDown }) {
   return (
     <SchematicSelectionPaint selected={selected}>
       <circle
         data-selection-id={id}
+        opacity={dimmed ? 0.25 : 1}
         cx={x + dx}
         cy={y + dy}
         r="0.6"
@@ -110,6 +122,7 @@ const DrawingJunction = memo(function DrawingJunction({
 const DrawingLabel = memo(function DrawingLabel({
   object: label,
   selected,
+  dimmed,
   dx,
   dy,
   onPointerDown,
@@ -118,6 +131,7 @@ const DrawingLabel = memo(function DrawingLabel({
     <g
       data-testid={`label-${label.text}`}
       data-selection-id={label.id}
+      opacity={dimmed ? 0.25 : 1}
       className={`net-annotation${selected ? ' is-selected' : ''}`}
       transform={`translate(${label.x + dx} ${label.y + dy}) rotate(${-(label.rotation || 0)})`}
       onPointerDown={(event) => onPointerDown(event, label.id)}
@@ -147,6 +161,7 @@ const DrawingLabel = memo(function DrawingLabel({
 const DrawingNoConnect = memo(function DrawingNoConnect({
   object,
   selected,
+  dimmed,
   dx,
   dy,
   onPointerDown,
@@ -158,6 +173,7 @@ const DrawingNoConnect = memo(function DrawingNoConnect({
       <path
         data-testid={`no-connect-${object.id}`}
         data-selection-id={object.id}
+        opacity={dimmed ? 0.25 : 1}
         d={`M ${x - 0.65} ${y - 0.65} l 1.3 1.3 M ${x - 0.65} ${y + 0.65} l 1.3 -1.3`}
         stroke="var(--symbol)"
         strokeWidth="0.3"
@@ -209,6 +225,7 @@ const DrawingPart = memo(function DrawingPart({
   object: original,
   library,
   selected,
+  dimmed,
   dx,
   dy,
   pinNames,
@@ -229,6 +246,7 @@ const DrawingPart = memo(function DrawingPart({
     <g
       data-selection-id={part.id}
       data-testid={`part-${part.ref}`}
+      opacity={dimmed ? 0.25 : 1}
       className={`part${selected ? ' is-selected' : ''}`}
       onPointerDown={(event) => onPointerDown(event, part.id)}
     >
@@ -261,6 +279,8 @@ type DrawingProps = {
   junctions: Circuit['junctions'];
   selection: string[];
   layers: SchematicLayers;
+  /** Objects outside the primary section remain displayed at reduced opacity. */
+  sectionIds?: ReadonlySet<string>;
   hitPadding: number;
   offset: (id: string) => Point;
   onPointerDown: PointerDown;
@@ -274,6 +294,7 @@ export default memo(function SchematicDrawing({
   junctions,
   selection,
   layers,
+  sectionIds,
   hitPadding,
   offset,
   onPointerDown,
@@ -288,6 +309,7 @@ export default memo(function SchematicDrawing({
     offset,
     onPointerDown,
     onPinPointerDown,
+    sectionIds,
   ];
   const retainWire = useRetainedElements(drawing.wires, presentationInputs);
   const retainPart = useRetainedElements(drawing.parts, presentationInputs);
@@ -305,6 +327,7 @@ export default memo(function SchematicDrawing({
             key: wire.id,
             object: wire,
             selected: selection.includes(wire.id),
+            dimmed: !!sectionIds && !sectionIds.has(wire.id),
             dx: delta.x,
             dy: delta.y,
             onPointerDown,
@@ -312,7 +335,7 @@ export default memo(function SchematicDrawing({
           ({ key, ...props }) => <DrawingWire key={key} {...props} />,
         );
       }),
-    [drawing.wires, layers.wires, selection, offset, onPointerDown],
+    [drawing.wires, layers.wires, selection, offset, onPointerDown, sectionIds],
   );
   const dots = useMemo(
     () =>
@@ -326,6 +349,7 @@ export default memo(function SchematicDrawing({
             x: junction.x,
             y: junction.y,
             selected: selection.includes(junction.id),
+            dimmed: !!sectionIds && !sectionIds.has(junction.id),
             dx: delta.x,
             dy: delta.y,
             onPointerDown,
@@ -333,7 +357,7 @@ export default memo(function SchematicDrawing({
           ({ key, ...props }) => <DrawingJunction key={key} {...props} />,
         );
       }),
-    [junctions, layers.wires, selection, offset, onPointerDown],
+    [junctions, layers.wires, selection, offset, onPointerDown, sectionIds],
   );
   const parts = useMemo(
     () =>
@@ -346,6 +370,7 @@ export default memo(function SchematicDrawing({
             object: part,
             library: libraries[part.libId],
             selected: selection.includes(part.id),
+            dimmed: !!sectionIds && !sectionIds.has(part.id),
             dx: delta.x,
             dy: delta.y,
             pinNames: layers.pinNames,
@@ -366,6 +391,7 @@ export default memo(function SchematicDrawing({
       offset,
       onPointerDown,
       onPinPointerDown,
+      sectionIds,
     ],
   );
   const annotations = useMemo(
@@ -382,6 +408,7 @@ export default memo(function SchematicDrawing({
             part,
             library: libraries[part.libId],
             selected: selection.includes(part.id),
+            dimmed: !!sectionIds && !sectionIds.has(part.id),
             referenceSelected: selection.includes(fieldId(part.id, 'Reference')),
             valueSelected: selection.includes(fieldId(part.id, 'Value')),
             parameterSelected: selection.includes(fieldId(part.id, 'Sim.Params')),
@@ -391,7 +418,11 @@ export default memo(function SchematicDrawing({
             offset,
             onPointerDown,
           },
-          ({ key, ...props }) => <SchematicPartAnnotations key={key} {...props} />,
+          ({ key, dimmed, ...props }) => (
+            <g key={key} opacity={dimmed ? 0.25 : 1}>
+              <SchematicPartAnnotations {...props} />
+            </g>
+          ),
         );
       }),
     [
@@ -403,6 +434,7 @@ export default memo(function SchematicDrawing({
       layers.fields,
       offset,
       onPointerDown,
+      sectionIds,
     ],
   );
   const labels = useMemo(
@@ -415,6 +447,7 @@ export default memo(function SchematicDrawing({
             key: label.id,
             object: label,
             selected: selection.includes(label.id),
+            dimmed: !!sectionIds && !sectionIds.has(label.id),
             dx: delta.x,
             dy: delta.y,
             onPointerDown,
@@ -422,7 +455,7 @@ export default memo(function SchematicDrawing({
           ({ key, ...props }) => <DrawingLabel key={key} {...props} />,
         );
       }),
-    [drawing.labels, layers.labels, selection, offset, onPointerDown],
+    [drawing.labels, layers.labels, selection, offset, onPointerDown, sectionIds],
   );
   const noConnects = useMemo(
     () =>
@@ -434,6 +467,7 @@ export default memo(function SchematicDrawing({
             key: point.id,
             object: point,
             selected: selection.includes(point.id),
+            dimmed: !!sectionIds && !sectionIds.has(point.id),
             dx: delta.x,
             dy: delta.y,
             onPointerDown,
@@ -441,7 +475,7 @@ export default memo(function SchematicDrawing({
           ({ key, ...props }) => <DrawingNoConnect key={key} {...props} />,
         );
       }),
-    [drawing.noConnects, layers.noConnects, selection, offset, onPointerDown],
+    [drawing.noConnects, layers.noConnects, selection, offset, onPointerDown, sectionIds],
   );
   return (
     <HitPadding.Provider value={hitPadding}>

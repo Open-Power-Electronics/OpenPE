@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
@@ -6,7 +7,7 @@ const exec = promisify(execFile);
 // These executable names and package entry points are owned by the service.
 // Renderer input never selects a program, package, path or argument.
 export const agentLaunchers = {
-  codex: { commands: ['codex'], entries: ['@openai/codex/bin/codex.js'] },
+  codex: { commands: ['codex'] },
   claude: { commands: ['claude'], entries: ['@anthropic-ai/claude-code/cli.js'] },
   deepseek: { commands: ['dsh'], entries: ['@deepseek-ai/dsh/lib/bin.js'] },
   pi: {
@@ -18,6 +19,38 @@ export const agentLaunchers = {
   },
 };
 
+const windowsCodexTargets = {
+  x64: 'x86_64-pc-windows-msvc',
+  arm64: 'aarch64-pc-windows-msvc',
+};
+
+export function windowsCodexNpmLaunch(shim, exists) {
+  const target = windowsCodexTargets[process.arch];
+  if (!target) return;
+  const modules = path.join(path.dirname(shim), 'node_modules');
+  const packageRoot = path.join(modules, '@openai', 'codex');
+  if (!exists(path.join(packageRoot, 'bin', 'codex.js'))) return;
+  const executable = path.join(
+    '@openai',
+    `codex-win32-${process.arch}`,
+    'vendor',
+    target,
+    'bin',
+    'codex.exe',
+  );
+  // npm can install the platform package under Codex or hoist it into the same prefix.
+  const file = [path.join(packageRoot, 'node_modules'), modules]
+    .map((directory) => path.join(directory, executable))
+    .find(exists);
+  if (!file) return;
+  // Spawn the native CLI directly so the host controls its Windows console and stdio.
+  return {
+    file,
+    args: [],
+    env: { ...process.env, CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: packageRoot },
+  };
+}
+
 export const piIsolationFlags = [
   '--no-tools',
   '--no-extensions',
@@ -28,6 +61,22 @@ export const piIsolationFlags = [
   '--no-approve',
   '--offline',
   '--no-session',
+];
+
+export const codexIsolationArgs = [
+  'features.shell_tool=false',
+  'web_search="disabled"',
+  'mcp_servers={}',
+].flatMap((setting) => ['-c', setting]);
+
+export const rawCodexIsolationArgs = [
+  ...codexIsolationArgs,
+  ...[
+    'features.plugins=false',
+    'features.multi_agent=false',
+    'features.memories=false',
+    'project_doc_max_bytes=0',
+  ].flatMap((setting) => ['-c', setting]),
 ];
 
 // Check the installed CLI's own flags without starting a conversation. Never

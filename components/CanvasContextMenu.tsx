@@ -12,6 +12,7 @@ export type CanvasMenuAction = {
   icon: LucideIcon;
   run: () => void | Promise<void>;
   disabled?: boolean;
+  description?: string;
   separated?: boolean;
   destructive?: boolean;
 };
@@ -210,13 +211,15 @@ export default function CanvasContextMenu({
         ]?.focus();
       }}
     >
-      {actions.map(({ id, label, icon: Icon, disabled, separated, destructive }) => (
+      {actions.map(({ id, label, icon: Icon, disabled, description, separated, destructive }) => (
         <button
           key={id}
           type="button"
           role="menuitem"
           className="select-option"
           disabled={disabled}
+          title={description || label}
+          aria-description={description}
           data-separated={separated || undefined}
           data-destructive={destructive || undefined}
           onClick={() => {

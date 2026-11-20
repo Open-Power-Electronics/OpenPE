@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, symlink, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,22 +20,23 @@ import {
 } from '../lib/simulation-models';
 import {
   prepareProjectModelFiles,
+  prepareBoundTiModelFiles,
   readProjectModelFile,
   writeProjectModelFile,
 } from '../server/project-model-files.mjs';
 import { projectSimulationModels } from '../server/project-models.mjs';
 import { fetchModelResponse } from '../server/model-download.mjs';
 import { startServer } from '../server/index.mjs';
-import { createTiExample } from '../lib/ti-examples';
-import { defaultTransient } from '../lib/spice';
+import { createReferenceExample } from '../lib/reference-examples';
+import { exportZip } from '../lib/export-zip';
+import { partFields } from '../lib/library';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 
 const model = simulationModelDefinitions[0];
 
 test('model filenames identify component variants and remain unique on case-insensitive filesystems', () => {
   for (const [id, filename] of Object.entries({
-    'lm2596-3.3': 'LM2596-3.3.lib',
     'lm2596-5': 'LM2596-5.lib',
-    'lm2596-12': 'LM2596-12.lib',
     'reference-lm2735y': 'LM2735Y.lib',
     'reference-lm5001': 'LM5001.lib',
     'reference-lm27761': 'LM27761.lib',
@@ -46,11 +48,11 @@ test('model filenames identify component variants and remain unique on case-inse
   }))
     assert.equal(
       simulationModelDefinitions.find((definition) => definition.id === id)?.file,
-      `circuits/${filename}`,
+      `models/${filename}`,
     );
   const filenames = simulationModelDefinitions.map((definition) => definition.file);
   for (const filename of filenames) {
-    assert.match(filename, /^circuits\/[A-Za-z0-9_.-]+\.lib$/);
+    assert.match(filename, /^models\/[A-Za-z0-9_.-]+\.lib$/);
     assert.doesNotMatch(filename, /reference-|-[a-f0-9]{64}\.lib$/);
   }
   assert.equal(new Set(filenames.map((filename) => filename.toLowerCase())).size, filenames.length);
@@ -66,7 +68,7 @@ test('native imports and Save as retain current component model filenames and re
   assert.deepEqual(imported.simulationModels, [reference]);
   const copy = projectNativeFiles(imported, 'copy.kicad_pro');
   assert.deepEqual(projectFromNativeFiles(copy).simulationModels, [reference]);
-  for (const directory of ['circuits', 'circuit', 'models']) {
+  for (const directory of ['spice-simulation/models', 'circuit', 'models']) {
     const file = directory + '/' + model.id + '-' + model.sha256 + '.lib';
     assert.equal(simulationModelReferenceForFile(file), undefined);
     assert.throws(() => validateSimulationModels([{ ...model, file }]), /simulation model/i);
@@ -100,7 +102,7 @@ test('project validation rejects arbitrary paths, hashes, IDs, duplicate referen
     { file: 'C:/model.lib' },
     { file: 'models/custom.lib' },
     { file: 'circuit/custom.lib' },
-    { file: 'circuits/custom.lib' },
+    { file: 'models/custom.lib' },
     { sha256: '0'.repeat(64) },
     { id: 'custom' },
     { data: 'ZXhlYw==' },
@@ -121,7 +123,7 @@ test('sidecar reads are bounded, preserve invalid files and reject model-directo
   try {
     const projectFile = path.join(root, 'project.openpe.json');
     assert.equal(await readProjectModelFile(projectFile, model), null);
-    await mkdir(path.join(root, 'circuits'));
+    await mkdir(path.join(root, 'models'), { recursive: true });
     const file = path.join(root, model.file);
     await writeFile(file, 'corrupt original');
     await assert.rejects(readProjectModelFile(projectFile, model), /integrity/);
@@ -135,8 +137,8 @@ test('sidecar reads are bounded, preserve invalid files and reject model-directo
     const other = path.join(root, 'another-project');
     await mkdir(other);
     await symlink(
-      path.join(root, 'circuits'),
-      path.join(other, 'circuits'),
+      path.join(root, 'models'),
+      path.join(other, 'models'),
       process.platform === 'win32' ? 'junction' : 'dir',
     );
     await assert.rejects(
@@ -168,7 +170,7 @@ test('current source models copy offline and retired aliases cannot supply proje
     const store = async () => {
       throw new Error('Source copy must remain offline.');
     };
-    for (const directory of ['circuits', 'circuit', 'models']) {
+    for (const directory of ['spice-simulation/models', 'circuit', 'models']) {
       const file = directory + '/' + pinned.id + '-' + pinned.sha256 + '.lib';
       const alias = path.join(path.dirname(source), file);
       await mkdir(path.dirname(alias), { recursive: true });
@@ -300,7 +302,7 @@ test('simulation HTTP uses the injected desktop downloader and returns an action
     },
   });
   try {
-    const project = createTiExample('Regulator_Switching:LM2596S-5');
+    const project = createReferenceExample('reference-lm2596-to220-5-buck');
     const referenced = serializeProject(project);
     delete project.simulationModels;
     const response = await fetch(server.base + '/api/simulation/transient', {
@@ -324,6 +326,288 @@ test('simulation HTTP uses the injected desktop downloader and returns an action
     assert.equal(downloads, 1, 'A referenced model cannot trigger a runtime download.');
   } finally {
     server.close();
+    assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('TI packages require a current search and return only bounded declared models', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-ti-selection-'));
+  const bytes = await readFile('examples/lm5001-soic8-boost/models/LM5001.lib');
+  const fileId = '8d748757-960d-4b0a-a2b5-f5d320e74839';
+  const id = 'reference-lm5001';
+  const file = 'models/LM5001.lib';
+  const archive = 'SNVM921';
+  const modelSource =
+    '* original TI test library\n.subckt example A B\nR1 A B 1k\n.ends DifferentName\n';
+  const fixtureZip = Buffer.concat([
+    exportZip([
+      { name: 'example.lib', source: modelSource },
+      {
+        name: 'dependent.lib',
+        source: '.include "other.lib"\n.subckt dependent A B\n.ends dependent\n',
+      },
+      { name: 'encrypted.lib', source: '.subckt encrypted A B\n$CDNENCSTART\n.ends encrypted\n' },
+      { name: 'metadata.txt', source: 'TI model package' },
+    ]),
+    Buffer.from([0xff]),
+  ]);
+  let granted = true;
+  let colocated = true;
+  let downloads = 0;
+  let encryptedDownloads = 0;
+  let location: string | null = null;
+  let changeLocation = false;
+  const searches: string[] = [];
+  const card = (link: string, file: string, title: string) => `
+    <div class="u-font-size-small">Simulation model</div>
+    <h4 class="u-text-breakword"><a href="${link}">${title}</a></h4>
+    <div>${file}.ZIP (27 KB) - PSpice model</div>
+  `;
+  const server = await startServer({
+    dataDir: root,
+    simulationModelFiles: {
+      location: (grant: string) => {
+        if (grant !== fileId || !granted) throw new Error('The project grant expired.');
+        return location;
+      },
+      read: async (grant: string, model: { id: string; file: string }) => {
+        assert.equal(grant, fileId);
+        assert.equal(model.id, id);
+        assert.equal(model.file, file);
+        if (changeLocation) location = path.join(root, 'changed.kicad_pro');
+        return colocated ? bytes : null;
+      },
+      write: async () => assert.fail('Selecting a TI model must not write project files.'),
+    },
+    simulationModelFetcher: async (url, options) => {
+      if (String(url).includes('/product/')) {
+        searches.push(String(url));
+        assert.equal(options?.redirect, 'error');
+        assert.equal(options?.cache, 'no-store');
+        assert.equal(options?.credentials, 'omit');
+        if (String(url).includes('UNKNOWN-PART')) return new Response(null, { status: 404 });
+        if (String(url).includes('LM25017'))
+          return new Response(`
+          <meta name="idio:page-subtype" content="product" />
+          ${card('/lit/zip/SNVM209', 'SNVM209', 'LM25017 PSpice Transient Model')}
+          ${card('/lit/zip/SNVMAM0', 'SNVMAM0', 'LM25017 Unencrypted PSpice Transient Model')}
+          ${card('/lit/zip/CYPHER', 'CYPHER', 'Encrypted PSpice model')}
+          ${card('/lit/zip/UNKNWN', 'UNKNWN', 'PSpice model without an encryption label')}
+        `);
+        if (String(url).includes('LM5001'))
+          return new Response(`
+          <meta name="idio:page-subtype" content="product" />
+          ${card('/lit/zip/SNVM921', 'SNVM921', 'LM5001 PSpice transient model')}
+        `);
+        return new Response(`
+          <meta name="idio:page-subtype" content="product" />
+          ${card('https://www.ti.com/lit/zip/SLVMB38', 'SLVMB38A', 'Unencrypted TPS61046 PSpice Transient Model Package (Rev. A)')}
+          ${card('/lit/zip/SLVMB38', 'SLVMB38A', 'Duplicate')}
+          ${card('/lit/zip/ABCDEF', 'ABCDEF', 'New &amp; unreviewed PSpice model')}
+          ${card('https://other.test/lit/zip/BADZIP', 'BADZIP', 'Foreign model')}
+          ${card('/lit/zip/INVALI', 'UNRELATED', 'Unrelated filename')}
+        `);
+      }
+      if (String(url) === 'https://www.ti.com/lit/zip/UNKNWN') {
+        encryptedDownloads++;
+        return new Response(
+          Buffer.from(
+            exportZip([
+              {
+                name: 'encrypted.lib',
+                source: '.subckt encrypted A B\n$CDNENCSTART\n.ends encrypted\n',
+              },
+            ]),
+          ),
+        );
+      }
+      downloads++;
+      assert.equal(options?.redirect, 'manual');
+      if (String(url) === 'https://www.ti.com/lit/zip/ABCDEF') return new Response(fixtureZip);
+      assert.equal(String(url), 'https://www.ti.com/lit/zip/snvm921');
+      return new Response('Changed archive.');
+    },
+  });
+  const select = (body: unknown, token = server.token, extraHeaders = {}) =>
+    fetch(server.base + '/api/simulation/ti-model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': token, ...extraHeaders },
+      body: JSON.stringify(body),
+    });
+  const search = (body: unknown) =>
+    fetch(server.base + '/api/simulation/ti-model-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': server.token },
+      body: JSON.stringify(body),
+    });
+  try {
+    assert.equal((await search({ fileId, partNumber: '../bad' })).status, 400);
+    assert.equal(
+      (await search({ fileId, partNumber: 'TPS61046', url: 'https://other.test' })).status,
+      400,
+    );
+    assert.deepEqual(searches, []);
+    const live = await search({ fileId, partNumber: 'tps61046' });
+    assert.equal(live.status, 200);
+    assert.deepEqual(await live.json(), {
+      partNumber: 'TPS61046',
+      models: [
+        {
+          archive: 'SLVMB38A',
+          title: 'Unencrypted TPS61046 PSpice Transient Model Package (Rev. A)',
+          encryption: 'unencrypted',
+          modelId: 'reference-tps61046',
+        },
+        { archive: 'ABCDEF', title: 'New & unreviewed PSpice model', encryption: 'unknown' },
+      ],
+    });
+    assert.equal(downloads, 0, 'Online search reads only the TI product page.');
+    const imported = await select({ fileId, archive: 'ABCDEF' });
+    assert.equal(imported.status, 200);
+    const sha256 = createHash('sha256').update(modelSource).digest('hex');
+    const library = `models/ti/${sha256}/example.lib`;
+    assert.deepEqual(await imported.json(), {
+      libraries: [
+        {
+          path: library,
+          models: [{ name: 'example', kind: 'subcircuit', pins: ['A', 'B'] }],
+          issues: [],
+        },
+      ],
+    });
+    const project = createReferenceExample('reference-lm5001-soic8-boost');
+    delete project.simulationModels;
+    const controller = project.schematic.parts.find(({ ref }) => ref === 'U1')!;
+    controller.fields = {
+      ...partFields(controller),
+      'Sim.Library': library,
+      'Sim.Name': 'example',
+    };
+    const bundle = projectNativeFiles(project, 'imported.kicad_pro');
+    const destination = path.join(root, 'imported.kicad_pro');
+    await prepareBoundTiModelFiles(project, bundle, destination, null, root);
+    const sidecar = bundle.files.find(({ name }) => name === library)!;
+    assert.equal(sidecar.source, modelSource);
+    assert.equal(projectFromNativeFiles(bundle).simulationModels, undefined);
+    assert.throws(() => buildSpiceDeck(project.schematic, defaultTransient(project.schematic)));
+    sidecar.source += '* modified';
+    await assert.rejects(
+      prepareBoundTiModelFiles(project, bundle, destination, null, root),
+      /has changed/,
+    );
+    const noPart = await search({ fileId, partNumber: 'UNKNOWN-PART' });
+    assert.equal(noPart.status, 200);
+    assert.deepEqual(await noPart.json(), { partNumber: 'UNKNOWN-PART', models: [] });
+    assert.deepEqual(searches, [
+      'https://www.ti.com/product/TPS61046?locale=en-US',
+      'https://www.ti.com/product/UNKNOWN-PART?locale=en-US',
+    ]);
+    const lm25017 = () =>
+      search({ fileId, partNumber: 'LM25017' }).then((response) => response.json());
+    assert.deepEqual(
+      (await lm25017()).models.map(
+        ({ archive, encryption }: { archive: string; encryption: string }) => [archive, encryption],
+      ),
+      [
+        ['SNVM209', 'encrypted'],
+        ['SNVMAM0', 'unencrypted'],
+        ['CYPHER', 'encrypted'],
+        ['UNKNWN', 'unknown'],
+      ],
+    );
+    const blocked = async (archive: string) => {
+      const response = await select({ fileId, archive });
+      assert.equal(response.status, 422);
+      assert.equal((await response.json()).code, 'OPENPE_TI_MODEL_ENCRYPTED');
+    };
+    await blocked('SNVM209');
+    await blocked('CYPHER');
+    assert.equal(encryptedDownloads, 0);
+    await blocked('UNKNWN');
+    assert.equal((await lm25017()).models.at(-1).encryption, 'encrypted');
+    await blocked('UNKNWN');
+    assert.equal(encryptedDownloads, 1, 'Known encrypted packages do not fetch an archive again.');
+    assert.equal(downloads, 1);
+    assert.equal((await select({ fileId, archive }, 'invalid')).status, 401);
+    assert.equal(
+      (await select({ fileId, archive }, server.token, { Origin: 'https://other.test' })).status,
+      403,
+    );
+    assert.equal((await select({ fileId, archive, url: 'https://other.test' })).status, 400);
+    assert.equal((await select({ fileId, archive: 'emc-flyback-control' })).status, 400);
+    assert.equal((await select({ fileId, archive })).status, 422);
+    assert.equal((await search({ fileId, partNumber: 'LM5001' })).status, 200);
+    const response = await select({ fileId, archive });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      libraries: [
+        {
+          path: file,
+          models: [
+            {
+              name: 'LM5001_TRANS',
+              kind: 'subcircuit',
+              pins: ['SW', 'VIN', 'VCC', 'GND', 'RT', 'FB', 'COMP', 'EN'],
+            },
+          ],
+          issues: [],
+        },
+      ],
+    });
+    assert.equal(downloads, 1);
+    changeLocation = true;
+    const stale = await select({ fileId, archive });
+    assert.equal(stale.status, 422);
+    assert.match((await stale.json()).error, /location changed/);
+    changeLocation = false;
+    granted = false;
+    assert.equal((await select({ fileId, archive })).status, 422);
+    assert.equal(downloads, 1);
+    granted = true;
+    colocated = false;
+    const changed = await select({ fileId, archive });
+    assert.equal(changed.status, 422);
+    assert.match((await changed.json()).error, /integrity/);
+    assert.equal(downloads, 2);
+    const disable = await fetch(server.base + '/api/workbench-plugins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': server.token },
+      body: JSON.stringify({ action: 'disable', id: 'spice-simulation@openpe' }),
+    });
+    assert.equal(disable.status, 200);
+    assert.equal((await select({ fileId, archive })).status, 403);
+    assert.equal((await search({ fileId, partNumber: 'TPS61046' })).status, 403);
+    assert.equal(downloads, 2);
+  } finally {
+    server.close();
+    assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('TI bindings carry verified sidecars into Save as before the first completed run', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-ti-save-'));
+  try {
+    const project = createReferenceExample('reference-lm5001-soic8-boost');
+    delete project.simulationModels;
+    const bundle = projectNativeFiles(project, 'copy.kicad_pro');
+    const bytes = await readFile('examples/lm5001-soic8-boost/models/LM5001.lib');
+    const file = 'models/LM5001.lib';
+    const source = path.join(root, 'original', 'original.kicad_pro');
+    const destination = path.join(root, 'copy.kicad_pro');
+    await mkdir(path.join(root, 'original', 'models'), { recursive: true });
+    await writeFile(path.join(root, 'original', file), bytes);
+    await prepareBoundTiModelFiles(project, bundle, destination, source, root);
+    const added = bundle.files.find(({ name }) => name === file);
+    assert.ok(added);
+    assert.deepEqual(Buffer.from(added.source, added.encoding), bytes);
+    assert.equal(projectFromNativeFiles(bundle).simulationModels, undefined);
+    assert.equal(project.simulationModels, undefined);
+    const previous = structuredClone(bundle);
+    await prepareBoundTiModelFiles(project, bundle, destination, source, root);
+    assert.deepEqual(bundle, previous);
+  } finally {
     assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));
     await rm(root, { recursive: true, force: true });
   }

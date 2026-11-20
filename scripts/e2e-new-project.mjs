@@ -109,6 +109,7 @@ try {
   await button('Schematic').click();
   await button('Add component').click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+  await button('Search').click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R', { exact: true }) })

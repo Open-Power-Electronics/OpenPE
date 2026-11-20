@@ -1,7 +1,6 @@
+import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
-import { projectExamples } from '../lib/examples';
 import { defaultExamples } from '../lib/default-examples';
 import { homeExampleCatalog, homeExamples, homeRecent } from '../lib/home-examples';
 import { validExampleKey } from '../lib/workspace-example';
@@ -141,8 +140,8 @@ test('Reference recovery keeps complete boards and pending source with explicit 
   assert.equal(recovered.source, doc.source);
   assert.equal(recovered.dirty, false);
   assert.deepEqual(parseProject(recovered.source).pcb, project.pcb);
-  for (const previous of projectExamples) {
-    assert.equal(validExampleKey(`example:${previous.id}`), false);
+  for (const current of referenceExamples) {
+    assert.equal(validExampleKey(`example:${current.id}`), true);
   }
   assert.equal(validExampleKey('example:unknown'), false);
 });

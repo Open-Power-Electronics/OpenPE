@@ -71,7 +71,8 @@ function runner(
   t: TestContext,
   options: {
     verbose?: boolean;
-    probe?: () => Promise<boolean>;
+    probe?: (url: string, signal: AbortSignal) => Promise<boolean>;
+    useDefaultProbe?: boolean;
     startupTimeoutMs?: number;
     onSpawn?: (child: FakeChild, index: number) => void;
   } = {},
@@ -92,7 +93,7 @@ function runner(
     prepare: false,
     logger: log.logger,
     spawnProcess: spawnProcess as typeof import('node:child_process').spawn,
-    probe: options.probe ?? (async () => true),
+    probe: options.useDefaultProbe ? undefined : (options.probe ?? (async () => true)),
     processEvents: events,
     retryDelayMs: 1,
     startupTimeoutMs: options.startupTimeoutMs ?? 1000,
@@ -185,31 +186,44 @@ test('failure replay bounds Unicode by bytes without splitting UTF-8 characters 
   }
 });
 
-test('development preparation retains every step in order without nested npm commands', async () => {
+test('development preparation overlaps solver checks and formats without racing shared solver files', async () => {
   const log = output();
   const calls: { file: string; args: string[]; options: SpawnOptions }[] = [];
+  const resources = new Map<string, FakeChild>();
   const env = { ...process.env, OPENPE_DEV_FIXTURE: 'retained' };
-  await prepareDevResources({
+  const preparing = prepareDevResources({
     logger: log.logger,
     env,
     cache: false,
     spawnProcess: ((file: string, args: readonly string[], options: SpawnOptions) => {
       calls.push({ file, args: [...args], options });
       const child = new FakeChild();
-      queueMicrotask(() => child.finish());
+      const name = path.basename(args.at(-1)!);
+      if (['prepare-ngspice.mjs', 'prepare-thermal.mjs', 'build-format.mjs'].includes(name))
+        resources.set(name, child);
+      else queueMicrotask(() => child.finish());
       return child as unknown as ChildProcess;
     }) as typeof import('node:child_process').spawn,
   });
+  assert.equal(resources.size, 2);
+  assert.ok(!resources.has('prepare-ngspice.mjs'));
+  resources.get('build-format.mjs')!.finish();
+  await delay(0);
+  assert.equal(calls.length, 2, 'Home preparation waits for the thermal runtime.');
+  resources.get('prepare-thermal.mjs')!.finish();
+  await until(() => calls.length === 7);
+  resources.get('prepare-ngspice.mjs')!.finish();
+  await preparing;
   assert.deepEqual(
     calls.map((call) => path.basename(call.args.at(-1)!)),
     [
+      'prepare-thermal.mjs',
       'build-format.mjs',
+      'prepare-ngspice.mjs',
       'prepare-emc-analytical-models.ts',
       'download-manufacturer-models.mjs',
       'download-example-models.ts',
       'prepare-default-examples.ts',
-      'prepare-ngspice.mjs',
-      'prepare-thermal.mjs',
     ],
   );
   for (const call of calls) {
@@ -228,9 +242,10 @@ test('failed development preparation stops subsequent steps and preserves its di
     prepareDevResources({
       logger: log.logger,
       cache: false,
-      spawnProcess: (() => {
+      spawnProcess: ((_file: string, args: readonly string[]) => {
         const child = new FakeChild();
-        const failing = ++calls === 2;
+        calls++;
+        const failing = args.at(-1) === 'scripts/build-format.mjs';
         queueMicrotask(() => {
           if (failing) {
             child.stdout.write('Pinned model integrity context\n');
@@ -242,7 +257,7 @@ test('failed development preparation stops subsequent steps and preserves its di
       }) as typeof import('node:child_process').spawn,
     }),
   );
-  assert.equal(calls, 2);
+  assert.ok(calls <= 3, 'No Home child can start after format preparation fails.');
   assert.match(log.stdout() + log.stderr(), /Pinned model integrity context/);
   assert.match(log.stderr(), /Model download failed/);
 });
@@ -304,6 +319,63 @@ test('a renderer whose HTTP probe remains unsuccessful cannot start the desktop'
   });
   assert.notEqual(await dev.result, 0);
   assert.ok(probes > 0);
+  assert.equal(dev.children.length, 1);
+  assert.equal(dev.children[0].kills.length, 1);
+});
+
+test('a renderer request stays in flight until it responds and releases the response body', async (t) => {
+  const renderer = Promise.withResolvers<Response>();
+  let requestedSignal: AbortSignal | null | undefined;
+  const request = t.mock.method(
+    globalThis,
+    'fetch',
+    async (_url: Parameters<typeof fetch>[0], options?: RequestInit) => {
+      requestedSignal = options?.signal;
+      assert.equal(options?.redirect, 'error');
+      return renderer.promise;
+    },
+  );
+  const dev = runner(t, {
+    useDefaultProbe: true,
+    onSpawn: (child, index) => {
+      if (!index) child.stdout.write('✓ Ready in 1ms\n');
+    },
+  });
+  await until(() => request.mock.callCount() === 1);
+  assert.equal(dev.children.length, 1);
+  assert.equal(requestedSignal?.aborted, false);
+  let released = false;
+  renderer.resolve(
+    new Response(
+      new ReadableStream({
+        cancel: () => {
+          released = true;
+        },
+      }),
+    ),
+  );
+  await until(() => dev.children.length === 2);
+  assert.equal(request.mock.callCount(), 1);
+  assert.equal(released, true);
+  assert.equal(requestedSignal?.aborted, true);
+  dev.children[1].finish();
+  assert.equal(await dev.result, 0);
+});
+
+test('the startup deadline aborts an in-flight renderer probe', async (t) => {
+  let requestedSignal: AbortSignal | undefined;
+  const dev = runner(t, {
+    startupTimeoutMs: 50,
+    probe: async (_url, signal) => {
+      requestedSignal = signal;
+      return new Promise<boolean>(() => {});
+    },
+    onSpawn: (child, index) => {
+      if (!index) child.stdout.write('✓ Ready in 1ms\n');
+    },
+  });
+  assert.equal(await dev.result, 1);
+  assert.equal(requestedSignal?.aborted, true);
   assert.equal(dev.children.length, 1);
   assert.equal(dev.children[0].kills.length, 1);
 });

@@ -24,12 +24,7 @@ import AgentComposer from './AgentComposer';
 import { useAgentSettings } from './AgentSettings';
 import AgentMessageQueue from './AgentMessageQueue';
 import AgentMessageActions from './AgentMessageActions';
-import AgentConversationSearch, { isConversationFindShortcut } from './AgentConversationSearch';
-import {
-  nextConversationMatch,
-  renderedSearchMatch,
-  revealSearchMatch,
-} from './agent-search-match';
+import { panelFindRevealEvent } from './panel-find';
 import { isGoToCodeLineShortcut } from './agent-code-navigation';
 import AgentAttentionNavigation from './AgentAttentionNavigation';
 import useRetiringConversationControl from './useRetiringConversationControl';
@@ -238,6 +233,7 @@ export default function Chat({
   onSettings,
   onApply,
   active,
+  workbenchSuspended = false,
   sessionId,
   conversationTitle,
   requestTitle = false,
@@ -251,6 +247,7 @@ export default function Chat({
   setAnnotations,
   getWorkspaceContext,
   capabilities,
+  onFind,
 }: {
   doc: Circuit;
   pcb?: PCB | null;
@@ -269,6 +266,7 @@ export default function Chat({
   onSettings: () => void;
   onApply: (ops: Operation[], basis?: string) => boolean;
   active: boolean;
+  workbenchSuspended?: boolean;
   sessionId: string;
   conversationTitle: string;
   requestTitle?: boolean;
@@ -284,6 +282,7 @@ export default function Chat({
     signal?: AbortSignal,
   ) => AgentWorkspaceContext | Promise<AgentWorkspaceContext>;
   capabilities?: AgentCapabilities;
+  onFind?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -492,54 +491,13 @@ export default function Chat({
     setInput(next);
     setSendError('');
   }
-  const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
-  const pendingSearchTarget = useRef<{ id: string; term: string } | null>(null);
-  const lastSearchTarget = useRef<{ id: string; term: string; range?: Range } | null>(null);
-  const searchHighlight = useRef<{ highlight: Highlight; focus: HTMLElement } | null>(null);
-  const clearSearchHighlight = useCallback(() => {
-    if (
-      searchHighlight.current &&
-      CSS.highlights.get('agent-search-hit') === searchHighlight.current.highlight
-    )
-      CSS.highlights.delete('agent-search-hit');
-    searchHighlight.current = null;
-  }, []);
-  useLayoutEffect(() => clearSearchHighlight, [presentationActive, clearSearchHighlight]);
-  const searchFieldOrigin = useRef<{
-    field: HTMLTextAreaElement;
-    value: string;
-    start: number;
-    end: number;
-    direction: HTMLTextAreaElement['selectionDirection'];
-    scrollTop: number;
-    scrollLeft: number;
-  } | null>(null);
-  const revealConversationSearchTarget = useCallback(
-    (selected: { id: string; term: string }, direction: 1 | -1 = 1, after?: Range) => {
-      const container = scroll.current;
-      if (!presentationActive || !container?.getClientRects().length) return;
-      const target = container.querySelector<HTMLElement>(
-        `.message[data-message-id="${CSS.escape(selected.id)}"]`,
-      );
-      if (!target) return;
-      const match = renderedSearchMatch(target, selected.term, direction, after);
-      if (after && !match) return false;
-      lastSearchTarget.current = selected.term ? { ...selected, range: match?.range } : null;
-      pauseFollowing(true);
-      clearSearchHighlight();
-      const focus = match?.reader ?? target;
-      focus.focus({ preventScroll: true });
-      const top = match ? revealSearchMatch(match) : target.getBoundingClientRect().top;
-      if (match) {
-        const highlight = new Highlight(match.range);
-        searchHighlight.current = { highlight, focus };
-        CSS.highlights.set('agent-search-hit', highlight);
-      }
-      container.scrollTop += top - container.getBoundingClientRect().top - (match ? 12 : 4);
-      return true;
-    },
-    [presentationActive, pauseFollowing, clearSearchHighlight],
-  );
+  useEffect(() => {
+    const container = scroll.current;
+    if (!presentationActive || !container) return;
+    const pause = () => pauseFollowing(true);
+    container.addEventListener(panelFindRevealEvent, pause);
+    return () => container.removeEventListener(panelFindRevealEvent, pause);
+  }, [presentationActive, pauseFollowing]);
   const navigateAnswerHeading = useCallback(
     (heading: HTMLElement) => {
       const container = scroll.current;
@@ -558,27 +516,6 @@ export default function Chat({
     },
     [presentationActive, pauseFollowing],
   );
-  useLayoutEffect(() => {
-    if (!presentationActive) {
-      setConversationSearchOpen(false);
-      lastSearchTarget.current = null;
-    }
-    if (conversationSearchOpen) return;
-    const origin = searchFieldOrigin.current;
-    searchFieldOrigin.current = null;
-    if (
-      presentationActive &&
-      origin?.field === document.activeElement &&
-      origin.field.value === origin.value
-    ) {
-      origin.field.setSelectionRange(origin.start, origin.end, origin.direction);
-      origin.field.scrollTop = origin.scrollTop;
-      origin.field.scrollLeft = origin.scrollLeft;
-    }
-    const selected = pendingSearchTarget.current;
-    pendingSearchTarget.current = null;
-    if (selected) revealConversationSearchTarget(selected);
-  }, [presentationActive, conversationSearchOpen, revealConversationSearchTarget]);
   const retainLatestControl = useRetiringConversationControl(presentationActive, () => {
     composerInput.current?.focus({ preventScroll: true });
   });
@@ -827,8 +764,15 @@ export default function Chat({
   const sendLatest = useRef(send);
   sendLatest.current = send;
   useEffect(() => {
+    if (!workbenchSuspended) return;
+    if (controller.current || queue.current.length) pauseQueue(true);
+    controller.current?.abort();
+    for (const control of reviewControls.current.values()) control.abort();
+  }, [workbenchSuspended]);
+  useEffect(() => {
     if (
       mounted.current &&
+      !workbenchSuspended &&
       !busy &&
       !paused.current &&
       !queuePaused &&
@@ -836,7 +780,7 @@ export default function Chat({
       !controller.current
     )
       void sendLatest.current(queued[0].effort, queued[0]);
-  }, [busy, queuePaused, queued]);
+  }, [busy, queuePaused, queued, workbenchSuspended]);
 
   async function steerMessage(prompt: string, queuedId?: string) {
     const control = controller.current;
@@ -898,11 +842,12 @@ export default function Chat({
   async function submit(
     resolvedEffort: ReasoningEffort | undefined,
     parameters?: { id: string; value: string }[],
+    resolvedModel = '',
   ) {
     if (steeringPending.current) return;
     if (!controller.current && !busy && !queue.current.length) {
       pauseQueue(false);
-      return send(resolvedEffort, undefined, parameters);
+      return send(resolvedEffort, undefined, parameters, resolvedModel);
     }
     if (!input.trim() && !annotations.length) return;
     if (input.length > maxDraftLength)
@@ -932,7 +877,7 @@ export default function Chat({
         text: input.trim(),
         annotations: structuredClone(annotations),
         provider,
-        model,
+        model: resolvedModel,
         effort: resolvedEffort,
         ...(parameters?.length ? { parameters } : {}),
         approvalMode,
@@ -947,11 +892,13 @@ export default function Chat({
     resolvedEffort: ReasoningEffort | undefined,
     pending?: QueuedMessage,
     parameters?: { id: string; value: string }[],
+    resolvedModel = '',
   ) {
+    if (workbenchSuspended) return;
     const submittedText = pending?.text ?? input.trim();
     const sentAnnotations = pending?.annotations ?? annotations;
     const turnProvider = pending?.provider ?? provider;
-    const turnModel = pending?.model ?? model;
+    const turnModel = pending?.model ?? resolvedModel;
     const turnApproval = pending?.approvalMode ?? approvalMode;
     const turnParameters = pending ? pending.parameters : parameters;
     if ((!submittedText && !sentAnnotations.length) || busy || controller.current) return;
@@ -1489,9 +1436,6 @@ export default function Chat({
     <aside
       className="chat-panel"
       hidden={!active}
-      onBlurCapture={(event) => {
-        if (event.target === searchHighlight.current?.focus) clearSearchHighlight();
-      }}
       onCompositionStartCapture={(event) => {
         compositionTarget.current = event.target;
         if (event.target === composerInput.current) draftComposing.current = true;
@@ -1541,49 +1485,6 @@ export default function Chat({
           } else if (!event.repeat) pauseFollowing(true);
           return;
         }
-        const priorSearch = lastSearchTarget.current;
-        const stepSearch =
-          priorSearch && event.key === 'F3' && !event.ctrlKey && !event.metaKey && !event.altKey;
-        if (
-          presentationActive &&
-          messages.length &&
-          !draftComposing.current &&
-          compositionTarget.current !== event.target &&
-          !event.nativeEvent.isComposing &&
-          event.keyCode !== 229 &&
-          event.target instanceof Element &&
-          event.currentTarget.contains(event.target) &&
-          (stepSearch || isConversationFindShortcut(event.nativeEvent))
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (event.repeat) return;
-          if (stepSearch) {
-            const direction = event.shiftKey ? -1 : 1;
-            if (
-              priorSearch.range &&
-              revealConversationSearchTarget(priorSearch, direction, priorSearch.range)
-            )
-              return;
-            const match = nextConversationMatch(messages, activeId, priorSearch, direction);
-            if (match) revealConversationSearchTarget(match, direction);
-          } else {
-            const field = event.target;
-            if (field instanceof HTMLTextAreaElement) {
-              searchFieldOrigin.current = {
-                field,
-                value: field.value,
-                start: field.selectionStart,
-                end: field.selectionEnd,
-                direction: field.selectionDirection,
-                scrollTop: field.scrollTop,
-                scrollLeft: field.scrollLeft,
-              };
-            }
-            setConversationSearchOpen(true);
-          }
-          return;
-        }
         if (
           (draftComposing.current || event.nativeEvent.isComposing || event.keyCode === 229) &&
           event.target instanceof Element &&
@@ -1600,16 +1501,15 @@ export default function Chat({
         <div className="session-picker">
           <h2 className="session-title">{conversationTitle}</h2>
         </div>
-        {presentationActive && messages.length > 0 && (
+        {presentationActive && messages.length > 0 && onFind && (
           <button
             type="button"
             className="icon-button chat-conversation-search-trigger"
             aria-label="Find in conversation"
             aria-keyshortcuts="Control+F Meta+F"
-            aria-haspopup="dialog"
             title="Find in conversation (Ctrl+F / ⌘F)"
             onClick={() => {
-              if (!draftComposing.current) setConversationSearchOpen(true);
+              if (!draftComposing.current) onFind?.();
             }}
           >
             <Search size={17} aria-hidden="true" />
@@ -1641,17 +1541,6 @@ export default function Chat({
           <SidebarToggle side="left" visible={Boolean(sidebarVisible)} onToggle={onToggleSidebar} />
         )}
       </div>
-      {presentationActive && conversationSearchOpen && (
-        <AgentConversationSearch
-          messages={messages}
-          activeReplyId={activeId}
-          onClose={() => setConversationSearchOpen(false)}
-          onSelect={(id, term) => {
-            pendingSearchTarget.current = { id, term };
-            setConversationSearchOpen(false);
-          }}
-        />
-      )}
       <div className="chat-body">
         <div
           ref={scroll}
@@ -2066,7 +1955,9 @@ export default function Chat({
               ? stepDraftHistory
               : undefined
           }
-          onSubmit={(resolvedEffort, parameters) => void submit(resolvedEffort, parameters)}
+          onSubmit={(resolvedEffort, parameters, resolvedModel) =>
+            void submit(resolvedEffort, parameters, resolvedModel)
+          }
           onStop={stopGeneration}
         />
       </div>

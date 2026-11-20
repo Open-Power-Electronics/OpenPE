@@ -4,7 +4,7 @@ import { compileCapabilitySchema } from '../api/capability-schema';
 import type { BoardZone, Footprint, PCB } from '../lib/pcb';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import type { Polygon } from '../lib/pcb-polygons';
-import { thermalPolygonArea } from '../lib/thermal-geometry';
+import { thermalPolygonArea } from '../plugins/layout-thermal/domain/thermal-geometry';
 import {
   defaultThermalConfig,
   prepareThermalModel,
@@ -14,7 +14,7 @@ import {
   validateThermalResult,
   type ThermalConfig,
   type ThermalResult,
-} from '../lib/thermal';
+} from '../plugins/layout-thermal/domain/thermal';
 
 const rectangle = (x: number, y: number, width: number, height: number) => [
   { x, y },
@@ -177,7 +177,10 @@ test('unfilled zone outlines never become thermal copper and saved fill holes re
   const pour = zone();
   pcb.zones = [pour];
   const before = structuredClone(pcb);
-  assert.throws(() => prepareThermalModel(pcb, scenario(pcb)), /Fill copper zones from Layout Properties/);
+  assert.throws(
+    () => prepareThermalModel(pcb, scenario(pcb)),
+    /Fill copper zones from Layout Properties/,
+  );
   assert.deepEqual(pcb, before);
   pour.fillEnabled = false;
   let model = prepareThermalModel(pcb, scenario(pcb));

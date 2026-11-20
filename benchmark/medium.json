@@ -1,0 +1,23 @@
+[
+  {
+    "number": 2,
+    "spec": "Design a multi-rail power supply with a nominal external input of 12 V. The input should withstand 19 V, with 36 V as the preferred target.\n\nProvide 5.4 V at 0.2 A, 1.1 V at 0.5 A, 1.8 V at 0.4 A, 0.86 V at 0.5 A, 3.3 V at 0.3 A, 3 V at 0.2 A and 4.9 V at 0.3 A. Provide an additional adjustable rail rated for 0.2 A at a nominal 4.5 V. Adjust its voltage by injecting a signal from an external DAC into the feedback (FB) pin.\n\nThe required power-up sequence is 5.4 V → 0.86 V → 1.8 V → (3.3 V and 4.5 V together) → 3 V → 4.9 V → 1.1 V. The 3.3 V and 4.5 V rails must have matching voltage rise slopes.",
+    "eval": {
+      "count": {
+        "unit": "components",
+        "method": "Use each component quantity q_i in the complete BOM.",
+        "formula": "sum(q_i)"
+      },
+      "cost": {
+        "unit": "USD",
+        "method": "Use each BOM component quantity q_i and USD unit price p_i.",
+        "formula": "sum(q_i × p_i)"
+      },
+      "efficiency": {
+        "unit": "%",
+        "method": "Set the input to 12 V and the adjustable rail to 4.5 V. Apply the specified currents to all eight rails simultaneously. Over the same 10 ms after settling, average instantaneous voltage times current at the supply input (P_in) and at each external load (P_load,k). Include losses from regulation and control circuitry in the input power.",
+        "formula": "100 × sum(P_load,k) / P_in"
+      }
+    }
+  }
+]

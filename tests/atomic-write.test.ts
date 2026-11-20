@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
@@ -63,10 +72,18 @@ test('a contained missing file is created without following a symlink', async (t
     message: 'linked',
   });
   assert.equal(await readFile(file, 'utf8'), 'created');
-  const target = path.join(root, 'kept.csv');
+  const targetDirectory = path.join(root, 'kept');
+  await mkdir(targetDirectory);
+  const target = path.join(targetDirectory, 'kept.csv');
   await writeFile(target, 'kept');
   const link = path.join(root, 'link.csv');
-  await symlink(target, link);
+  // A directory junction exercises Windows reparse rejection without the
+  // administrator privilege required for file symlinks.
+  await symlink(
+    process.platform === 'win32' ? targetDirectory : target,
+    link,
+    process.platform === 'win32' ? 'junction' : 'file',
+  );
   await assert.rejects(
     atomicWrite(link, 'changed', async () => {}, { parentCanonical: canonical, message: 'linked' }),
     /linked/,
@@ -75,7 +92,7 @@ test('a contained missing file is created without following a symlink', async (t
   const outside = await mkdtemp(path.join(path.dirname(root), 'atomic-write-outside-'));
   t.after(() => rm(outside, { recursive: true, force: true }));
   const jump = path.join(root, 'jump');
-  await symlink(outside, jump);
+  await symlink(outside, jump, process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(
     atomicWrite(path.join(jump, 'out.csv'), 'nope', async () => {}, {
       parentCanonical: canonical,

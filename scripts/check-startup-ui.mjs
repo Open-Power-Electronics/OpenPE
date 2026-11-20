@@ -1,14 +1,16 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { parseProject, projectNativeFiles } from '../server/project-format.mjs';
 import { fillSource, readSource } from './source-editor-test-helpers.mjs';
 
 // Code-split renderer and in-memory native/service fixtures. No Electron or user data.
-const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+const source = formatTestProjectSource();
 const emcSource = await readFile('lib/emc-flyback-example.json', 'utf8');
 const homeManifest = JSON.parse(
   await readFile('resources/example-catalog/home-manifest.json', 'utf8'),
@@ -100,7 +102,7 @@ const startupInputs = [...startupFiles].flatMap((file) =>
 for (const deferred of [
   '@codemirror/',
   'node_modules/three/',
-  'components/SimulationDialog.tsx',
+  'plugins/spice-simulation/renderer/SimulationDialog.tsx',
   'components/LayoutEditor.tsx',
   'components/LibraryChooser.tsx',
   'components/ProjectHistoryView.tsx',

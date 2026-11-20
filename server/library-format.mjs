@@ -10,7 +10,14 @@ function recordOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var quote = (v) => JSON.stringify(v);
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
@@ -41,7 +48,7 @@ function parseSExprValue(source, maxLength, owned) {
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
-            JSON.parse(t);
+            decodeKiCadString(t);
           } catch {
             throw new Error("Invalid string.");
           }
@@ -506,7 +513,7 @@ for (const [relative, entry] of records) {
   keys.set(file, entry.sha256);
 }
 function relativePath(path) {
-  return path.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, "").replace(/^\$\{KIPRJMOD\}\/(?:footprints\/)?models\//, "").replace(/^\$\{KIPRJMOD\}\/(?:3D|footprints)\//, "").replace(/\.wrl$/i, ".step");
+  return path.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, "").replace(/^\$\{KIPRJMOD\}\/(?:footprints\/)?models\//, "").replace(/\.wrl$/i, ".step");
 }
 function exampleModelPath(relative) {
   const file = files.get(relative);
@@ -523,7 +530,7 @@ function resolveExampleModelRelative(allowed, path) {
 }
 function portableExampleModelSource(source) {
   return source.replace(
-    /\$\{KIPRJMOD\}\/(?:(?:footprints\/)?models\/|footprints\/|3D\/)([^"\r\n]+)/g,
+    /\$\{KIPRJMOD\}\/(?:footprints\/)?models\/([^"\r\n]+)/g,
     (original, relative) => {
       const portable = portablePaths.get(relative);
       return portable ? "${KIPRJMOD}/" + portable : original;
@@ -532,6 +539,75 @@ function portableExampleModelSource(source) {
 }
 
 // lib/library.ts
+var librarySources = ["KiCad", "NextPCB", "JLCPCB"];
+function isOnlineLibrary(source) {
+  return source === "NextPCB" || source === "JLCPCB";
+}
+function catalogSource(library) {
+  return isOnlineLibrary(library) ? library : "KiCad";
+}
+function onlineFootprintLibrary(id) {
+  const separator = id.indexOf(":");
+  const library = id.slice(0, separator);
+  return separator > 0 && isOnlineLibrary(library) ? library : void 0;
+}
+function footprintSearchTerm(id) {
+  const library = onlineFootprintLibrary(id);
+  const name = id.slice(id.indexOf(":") + 1);
+  const nextpcb = library === "NextPCB" && /^[1-9]\d{0,18}_(.+)$/.exec(name);
+  if (!nextpcb) return library === "JLCPCB" ? name : id;
+  try {
+    return decodeURIComponent(nextpcb[1]);
+  } catch {
+    return "";
+  }
+}
+var libraryPriceSources = ["lcsc", "huaqiu"];
+function isLibraryPriceSource(value) {
+  return libraryPriceSources.some((source) => source === value);
+}
+var libraryDatasheetSources = ["huaqiu", "jlcpcb"];
+function isLibraryDatasheetSource(value) {
+  return libraryDatasheetSources.some((source) => source === value);
+}
+function isLibraryAssetUnavailable(error) {
+  return error instanceof Error && "code" in error && error.code === "OPENPE_LIBRARY_ASSET_UNAVAILABLE";
+}
+function libraryPackageQuery(query) {
+  const value = query.trim();
+  const explicit = /^package:(.*)$/i.exec(value)?.[1].trim();
+  return explicit ?? (libraryPackageCodeKind(value) ? value : void 0);
+}
+var chipPackageSizes = /* @__PURE__ */ new Set([
+  "01005",
+  "0201",
+  "0402",
+  "0603",
+  "0805",
+  "1008",
+  "1206",
+  "1210",
+  "1812",
+  "2010",
+  "2220",
+  "2512"
+]);
+var namedPackageCode = /^(?:SOT|TSOT|SOD|TO|SOIC|SOP|SSOP|TSSOP|MSOP|QSOP|DIP|QFN|DFN|QFP|TQFP|LQFP|BGA|LGA|SMD)(?:[- ]?\d{1,4}){1,3}[A-Z]?$/i;
+function libraryPackageCodeKind(value) {
+  if (chipPackageSizes.has(value)) return "chip";
+  if (namedPackageCode.test(value)) return "named";
+}
+function matchesLibraryPackage(value, query) {
+  if (chipPackageSizes.has(query)) return value?.match(/\d+/)?.[0] === query;
+  const normalize = (text) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const term = normalize(query);
+  return term !== "" && normalize(value ?? "").includes(term);
+}
+function matchesNativeFootprintPackage(id, query) {
+  if (!chipPackageSizes.has(query)) return matchesLibraryPackage(id, query);
+  const name = id?.split(":").at(-1);
+  return name?.match(/(?:^|[_-])(\d{4,6})(?=$|[_-])/)?.[1] === query;
+}
 function searchLibrary(entries, query, library = "") {
   const phrase = query.trim().toLowerCase().replace(/\s+/g, " ");
   if (!phrase)
@@ -543,7 +619,7 @@ function searchLibrary(entries, query, library = "") {
     if (library && entry.library !== library) continue;
     const id = entry.id.toLowerCase();
     const name = entry.name.toLowerCase();
-    const keywords = entry.keywords.toLowerCase();
+    const keywords = `${entry.keywords} ${entry.package ?? ""} ${entry.footprint ?? ""}`.toLowerCase();
     const description = entry.description.toLowerCase();
     const libraryName = entry.library.toLowerCase();
     const searchable = `${id} ${name} ${description} ${keywords}`;
@@ -779,6 +855,7 @@ function parseLibrary(source) {
   return children(root, "symbol");
 }
 export {
+  catalogSource,
   child,
   children,
   createLibraryPart,
@@ -786,8 +863,21 @@ export {
   displayPartValue,
   exampleModelPath,
   extraSymbolAnnotations,
+  footprintSearchTerm,
+  isLibraryAssetUnavailable,
+  isLibraryDatasheetSource,
+  isLibraryPriceSource,
+  isOnlineLibrary,
+  libraryDatasheetSources,
+  libraryPackageCodeKind,
+  libraryPackageQuery,
+  libraryPriceSources,
+  librarySources,
+  matchesLibraryPackage,
+  matchesNativeFootprintPackage,
   modelReferenceKey,
   num,
+  onlineFootprintLibrary,
   parseLibrary,
   parseSExpr,
   partFields,

@@ -1,7 +1,6 @@
 import type { Footprint, Pad } from './pcb';
 import { isOwnedProjectNode } from './immutable-project';
-import { padDrillPosition } from './pcb-layout';
-import { circlePolygon, padPolygon, type Polygon } from './pcb-polygons';
+import { padDrillPolygon, padPolygon, type Polygon } from './pcb-polygons';
 
 // Shared private geometry for connectivity and fixed track contacts. Each
 // footprint owns its pad identities, bounding the inner map by its actual pads;
@@ -49,10 +48,7 @@ export function borrowPCBPadCopperContour(footprint: Footprint, pad: Pad): Polyg
   const polygon: Polygon = pad.drill
     ? {
         outer: contours.outline.outer,
-        holes: [
-          ...contours.outline.holes,
-          circlePolygon(padDrillPosition(footprint, pad), pad.drill / 2),
-        ],
+        holes: [...contours.outline.holes, padDrillPolygon(footprint, pad)],
       }
     : contours.outline;
   if (contours.retained && pad.drill) freezeContour(polygon);

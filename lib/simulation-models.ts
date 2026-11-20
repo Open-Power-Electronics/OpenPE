@@ -1,24 +1,18 @@
-import { tiModels, referenceModels } from './ti-dcdc';
-import exampleModels from '../resources/example-models-lock.json';
+import { lm2596SourceModel, referenceModels } from './reference-models';
 import emcFlybackModels from '../resources/emc-flyback-models-lock.json';
 
 /** Portable references to separate immutable pinned model files. */
 export type SimulationModelReference = { id: string; sha256: string; file: string };
 export const simulationModelDefinitions = [
-  ...tiModels.map((model) => ({
+  ...[lm2596SourceModel].map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.toUpperCase()}.lib`,
+    file: `models/${model.id.toUpperCase()}.lib`,
   })),
   ...referenceModels.map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.replace(/^reference-/, '').toUpperCase()}.lib`,
-  })),
-  ...exampleModels.models.map((model) => ({
-    id: model.id,
-    sha256: model.sha256,
-    file: `circuits/${model.file.replace(/\.[^.]+$/, '.lib')}`,
+    file: `models/${model.id.replace(/^reference-/, '').toUpperCase()}.lib`,
   })),
   ...emcFlybackModels.models,
 ];
@@ -26,7 +20,7 @@ const definitionsByFile = new Map<string, SimulationModelReference>();
 const caseInsensitiveFiles = new Set<string>();
 for (const definition of simulationModelDefinitions) {
   if (
-    !/^circuits\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) ||
+    !/^models\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) ||
     caseInsensitiveFiles.has(definition.file.toLowerCase())
   )
     throw new Error('Simulation component filenames must be safe and unique.');

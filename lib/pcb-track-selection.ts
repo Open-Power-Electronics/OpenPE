@@ -2,10 +2,11 @@ import type { Point } from './circuit';
 import type { PCB } from './pcb';
 import type { PCBDisplay } from './pcb-display';
 import type { PCBSelectionFilters } from './pcb-selection';
-import { padDrillPosition, type PCBSelection } from './pcb-layout';
+import type { PCBSelection } from './pcb-layout';
 import { padCopperLayers } from './pcb-connectivity';
 import {
   circlePolygon,
+  padDrillPolygon,
   filledCopperPolygons,
   padPolygon,
   worldZones,
@@ -151,8 +152,7 @@ export function expandPCBTrackSelection(
         );
         if (!copperLayers.length) continue;
         const polygon = padPolygon(footprint, pad);
-        if (pad.drill)
-          polygon.holes.push(circlePolygon(padDrillPosition(footprint, pad), pad.drill / 2));
+        if (pad.drill) polygon.holes.push(padDrillPolygon(footprint, pad));
         add(makeBody('pad', pad.netId, polygon.outer, 0, copperLayers, polygon));
       }
   if (mode === 'connected' && layers.copper) {

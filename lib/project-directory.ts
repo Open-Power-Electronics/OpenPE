@@ -1,5 +1,5 @@
 // Grant-bound host files; supporting text stays outside native design and Core.
-export type ProjectDirectoryEntry = {
+type ProjectDirectoryEntry = {
   name: string;
   kind: 'directory' | 'file';
   id?: string;

@@ -12,12 +12,12 @@ import {
   simulationSupportError,
   type SpiceDeck,
   passiveValue,
-} from '../lib/spice';
-import { runSimulation } from '../server/spice.mjs';
+} from '../plugins/spice-simulation/domain/spice';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
 import { projectSimulationModels } from '../server/project-models.mjs';
 import { readProjectModelFile } from '../server/project-model-files.mjs';
-import { validatedSimulationResult } from '../lib/waveform';
-import { spiceVectorName } from '../server/spice-raw.mjs';
+import { validatedSimulationResult } from '../plugins/spice-simulation/domain/waveform';
+import { spiceVectorName } from '../plugins/spice-simulation/host/spice-raw.mjs';
 import { partFields } from '../lib/library';
 import { simulationSourceValues } from '../lib/simulation-source-parameters';
 

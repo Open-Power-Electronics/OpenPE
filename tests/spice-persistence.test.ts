@@ -9,8 +9,12 @@ import { PassThrough } from 'node:stream';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { SimulationResult, SpiceDeck } from '../lib/spice';
-import { buildSpiceDeck, defaultTransient, type TransientConfig } from '../lib/spice';
+import type { SimulationResult, SpiceDeck } from '../plugins/spice-simulation/domain/spice';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  type TransientConfig,
+} from '../plugins/spice-simulation/domain/spice';
 import { createProject, serializeProject } from '../lib/project';
 import { createProjectSpiceStore } from '../server/project-spice-files.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
@@ -99,7 +103,7 @@ test(
     syncBuiltinESMExports();
     try {
       const { runSimulation } = await import(
-        new URL('../server/spice.mjs?persisted-first', import.meta.url).href
+        new URL('../plugins/spice-simulation/host/spice.mjs?persisted-first', import.meta.url).href
       );
       const deck: SpiceDeck = {
         netlist:
@@ -126,7 +130,7 @@ test(
         { ...defaultTransient(switchingStageFixture()), stop: 1, step: 0.1 },
       );
       assert.equal(runs, 1);
-      const records = path.join(root, 'spice');
+      const records = path.join(root, 'spice-simulation');
       const { key } = JSON.parse(await readFile(path.join(records, 'buck.manifest.json'), 'utf8'));
       assert.match(key, /^[a-f0-9]{64}$/);
       assert.match(
@@ -140,7 +144,8 @@ test(
       assert.equal(await readFile(path.join(records, 'buck.example-model-0.lib'), 'utf8'), model);
       // A fresh runner has an empty process-local LRU; it must load the disk record.
       const restarted = await import(
-        new URL('../server/spice.mjs?persisted-restarted', import.meta.url).href
+        new URL('../plugins/spice-simulation/host/spice.mjs?persisted-restarted', import.meta.url)
+          .href
       );
       assert.deepEqual(
         await restarted.runSimulation(
@@ -432,7 +437,7 @@ test(
     let service: { close(): void } | undefined;
     try {
       const { registerSpice, runSimulation, findSimulationResult } = await import(
-        new URL('../server/spice.mjs?restore-settings', import.meta.url).href
+        new URL('../plugins/spice-simulation/host/spice.mjs?restore-settings', import.meta.url).href
       );
       const handlers = new Map<string, (req: unknown, res: unknown) => Promise<void>>();
       const store = () => createProjectSpiceStore(() => path.join(root, 'buck.kicad_pro'));
@@ -495,7 +500,7 @@ test(
         'Completed runtime heat must use all native rows rather than the two display rows.',
       );
       assert.equal(runs, 1);
-      const parent = path.join(root, 'spice');
+      const parent = path.join(root, 'spice-simulation');
       const manifestFile = path.join(parent, 'buck.manifest.json');
       const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
       assert.deepEqual(manifest.config, config);

@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 
 const { emptyCircuit, createPart, uid } = await tsImport('../lib/circuit.ts', import.meta.url);

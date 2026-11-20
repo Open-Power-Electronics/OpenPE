@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { createLibraryService } from '../server/libraries.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { prepareExampleFootprints } from '../server/example-footprints.mjs';
 import { prepareProjectModelFiles } from '../server/project-model-files.mjs';
 import { createSimulationModelStore } from '../server/example-models.mjs';

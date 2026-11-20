@@ -1,6 +1,10 @@
 'use client';
 import PropertyDeleteButton from './PropertyDeleteButton';
+import usePanelFindCanvas, { panelFindCanvasView } from './usePanelFindCanvas';
 import { resizeDrawingView } from '@/lib/drawing-viewport';
+import { loadLibraryFootprint } from '@/lib/library-package';
+import { onlineFootprintLibrary } from '@/lib/library';
+import type { FootprintSource } from '@/lib/pcb-sync';
 
 import {
   memo,
@@ -86,6 +90,7 @@ import { expandPCBTrackSelection } from '@/lib/pcb-track-selection';
 import { previewConstrainedPCBTrackDrag, type PCBTrackDragPreview } from '@/lib/pcb-track-drag';
 import { createPCBTrackJointDrag } from '@/lib/pcb-track-joint-drag';
 import { connectedPCBDragKind, createPCBInteractiveDrag } from '@/lib/pcb-interactive-drag';
+import { suggestPCBPlacement } from '@/lib/pcb-placement-suggestion';
 import {
   findPCBRectangle,
   pcbRectangleDragBounds,
@@ -116,13 +121,17 @@ import {
   pcbDisplayLayers,
   pcbFootprintBodyBounds,
   pcbLayerColor,
+  pcbPadDisplayLayers,
   pcbDisplayLayerPaintOrder,
   type PCBDisplay,
   type PCBInactiveLayerMode,
 } from '@/lib/pcb-display';
+import { padReach } from '@/lib/pcb-custom-pad';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { preparePCBFillPreview } from './pcbFillPreview';
 import { usePCBFillWorker } from './usePCBFillWorker';
+import type { PCBFillRuleContext } from '@/lib/pcb-clearance-sources';
 import {
   boardPolygons,
   defaultCopperFillClearance,
@@ -175,7 +184,7 @@ import Select from './Select';
 import { NumberField } from './LayoutPropertyFields';
 import LayoutProperties from './LayoutProperties';
 import EditorStatusBar from './EditorStatusBar';
-import ThermalComponentOutlines from './ThermalComponentOutlines';
+import ThermalComponentOutlines from '../plugins/layout-thermal/renderer/ThermalComponentOutlines';
 import CanvasCoordinates, { createCanvasCoordinates } from './CanvasCoordinates';
 import {
   createLayoutCamera,
@@ -184,6 +193,7 @@ import {
   zoomLayoutView,
   LayoutCameraRender,
   LayoutCameraScaleRender,
+  layoutCanvasPoint,
   rebaseLayoutCameraPoint,
   type LayoutCameraPanLease,
 } from './LayoutCamera';
@@ -256,8 +266,11 @@ type RouteLeg = {
   previous: { points: Point[]; waypoints: number[] };
 };
 type Props = {
+  getComponentActions?: (id: string) => CanvasMenuAction[];
   analysisLocateRef?: RefObject<((footprintId: string) => boolean) | null>;
+  analysisObjectLocateRef?: RefObject<((objectId: string) => boolean) | null>;
   ruleFocus?: RuleCheckFocus | null;
+  showRuleMarker?: boolean;
   capabilityHost?: CapabilityHost;
   board?: PCB;
   schematic: Circuit;
@@ -266,9 +279,10 @@ type Props = {
   sidebarVisible?: boolean;
   onShowSidebar?: () => void;
   onToggleSidebar?: () => void;
-  onCommit: (board: PCB) => boolean;
+  onCommit: (board: PCB, source?: FootprintSource) => boolean;
   fileId?: string;
   projectSource?: string;
+  fillRules?: PCBFillRuleContext;
   getRevision?: () => number;
   spiceAvailable?: boolean;
   onSavePartProperties?: ComponentProps<typeof LayoutProperties>['onSavePartProperties'];
@@ -300,11 +314,13 @@ type Props = {
   undoAction?: ReactNode;
   grid?: boolean;
   gridSpacing?: number;
+  placementSuggestionRevision?: number;
   leftButtonDrag?: LeftButtonDrag;
   gridControl?: ReactNode;
   ruleStatus?: ReactNode;
   rulePanel?: ReactNode;
   draftStatus?: string;
+  imageExportBlocked?: boolean;
   agentContextRef?: RefObject<Record<string, unknown> | null>;
 };
 
@@ -329,8 +345,11 @@ function fittedView(
 
 /** Two-layer PCB drawing. All content changes pass through the project transaction owner. */
 function LayoutEditor({
+  getComponentActions,
   analysisLocateRef,
+  analysisObjectLocateRef,
   ruleFocus,
+  showRuleMarker = true,
   board,
   schematic,
   active = true,
@@ -340,6 +359,7 @@ function LayoutEditor({
   onCommit,
   fileId,
   projectSource,
+  fillRules,
   getRevision,
   spiceAvailable,
   onSavePartProperties,
@@ -366,11 +386,13 @@ function LayoutEditor({
   undoAction,
   grid = true,
   gridSpacing = defaultLayoutGridSpacing,
+  placementSuggestionRevision,
   leftButtonDrag = defaultLeftButtonDrag,
   gridControl,
   ruleStatus,
   rulePanel,
   draftStatus,
+  imageExportBlocked = false,
   agentContextRef,
   capabilityHost,
 }: Props) {
@@ -472,7 +494,10 @@ function LayoutEditor({
   const [inactiveLayerMode, setInactiveLayerMode] = useState<PCBInactiveLayerMode>('Normal');
   const focusedLayer = inactiveLayerMode === 'Normal' ? priorityLayer : activeLayer;
   const selectionLayers = useMemo(
-    () => inactiveLayerMode === 'Normal' ? visibleLayers : pcbDisplayForLayer(visibleLayers, activeLayer),
+    () =>
+      inactiveLayerMode === 'Normal'
+        ? visibleLayers
+        : pcbDisplayForLayer(visibleLayers, activeLayer),
     [visibleLayers, inactiveLayerMode, activeLayer],
   );
   const layers = inactiveLayerMode === 'Hide' ? selectionLayers : visibleLayers;
@@ -507,11 +532,14 @@ function LayoutEditor({
       const part = partsById.get(owner.symbolId ?? '');
       for (const graphic of owner.graphics)
         if (graphic.kind === 'text' && graphic.text)
-          values.set(graphic.id, resolvePCBGraphic(
-            graphic,
-            part?.ref ?? owner.reference ?? '',
-            part?.value ?? owner.value ?? '',
-          ).text!.value);
+          values.set(
+            graphic.id,
+            resolvePCBGraphic(
+              graphic,
+              part?.ref ?? owner.reference ?? '',
+              part?.value ?? owner.value ?? '',
+            ).text!.value,
+          );
     }
     return values;
   }, [pcb.footprints, partsById]);
@@ -584,6 +612,35 @@ function LayoutEditor({
     objectSnap: boolean;
   } | null>(null);
   const [error, setError] = useState('');
+  usePanelFindCanvas(svg, (matchedId, range) => {
+    if (
+      !active ||
+      !visible ||
+      annotationDisabled ||
+      hasOpenOverlay() ||
+      syncStatus?.pending ||
+      syncStatus?.error ||
+      tool !== 'select' ||
+      !svg.current
+    )
+      return false;
+    const owner = pcb.footprints.find((footprint) =>
+      footprint.graphics.some((graphic) => graphic.id === matchedId),
+    );
+    const target =
+      owner && pcbFootprintBodyBounds(pcb, owner, layers)
+        ? { kind: 'footprint' as const, id: owner.id }
+        : objectSelection(pcb, matchedId);
+    if (!target || !pcbSelectionEligible(pcb, target, filters)) return false;
+    const view = panelFindCanvasView(svg.current, target.id, range);
+    if (!view) return false;
+    cancelGesture();
+    setInspector(false);
+    setInspectedPadId('');
+    setSelection([target]);
+    setView(view);
+    return true;
+  });
   const handledRuleFocus = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!active || !ruleFocus || handledRuleFocus.current === ruleFocus.request) return;
@@ -622,9 +679,7 @@ function LayoutEditor({
               pad &&
               owner &&
               visibleLayers.footprints &&
-              (pad.type === 'np_thru_hole'
-                ? visibleLayers['Edge.Cuts']
-                : padCopperLayers(pcb, owner, pad).some((layer) => visibleLayers[layer as BoardLayer]));
+              pcbPadDisplayLayers(pcb, owner, pad).some((layer) => visibleLayers[layer]);
             return visiblePad ? [{ kind: 'footprint' as const, id: owner.id }] : [];
           })
           .filter((target) => eligible.has(`${target.kind}:${target.id}`)),
@@ -660,6 +715,11 @@ function LayoutEditor({
   const [partId, setPartId] = useState('');
   const [choosing, setChoosing] = useState(false);
   const [placement, setPlacement] = useState<Footprint | null>(null);
+  const placementSource = useRef<{ id: string; source: FootprintSource } | null>(null);
+  const packageRequest = useRef<AbortController | null>(null);
+  useLayoutEffect(() => {
+    return () => packageRequest.current?.abort();
+  }, [active, visible, pcb, schematic, annotationDisabled, partId, tool, choosing]);
   const [drag, setDrag] = useState<{
     start: Point;
     pickup?: Point;
@@ -683,9 +743,42 @@ function LayoutEditor({
     selection: Selection[];
     mode: 'replace' | 'add' | 'toggle' | 'subtract';
     basis: PCB;
+    revision: number | undefined;
     clickCandidate?: SelectionCandidate;
     clickChoices?: SelectionCandidate[];
   } | null>(null);
+  const [placementSuggestion, setPlacementSuggestion] = useState<{
+    basis: PCB;
+    revision: number | undefined;
+    selection: Selection[];
+    spacing: number;
+    preview: NonNullable<ReturnType<typeof suggestPCBPlacement>>;
+  } | null>(null);
+  const canSuggestPlacement =
+    placementSuggestionRevision !== undefined &&
+    active &&
+    visible &&
+    tool === 'select' &&
+    !analysisPanelVisible &&
+    !analysisProbing &&
+    !annotationDisabled &&
+    !fillBusy &&
+    !drag &&
+    !outlineResize;
+  const suggestion =
+    canSuggestPlacement &&
+    placementSuggestion?.basis === pcb &&
+    placementSuggestion.revision === placementSuggestionRevision &&
+    placementSuggestion.selection.length === selection.length &&
+    placementSuggestion.selection.every(
+      (item, index) => item.kind === selection[index].kind && item.id === selection[index].id,
+    ) &&
+    placementSuggestion.spacing === gridSpacing
+      ? placementSuggestion.preview
+      : null;
+  useLayoutEffect(() => {
+    if (placementSuggestion && !suggestion) setPlacementSuggestion(null);
+  }, [placementSuggestion, suggestion]);
   const [contextMenuOnBlank, setContextMenuOnBlank] = useState(false);
   const [selectionChoice, setSelectionChoice] = useState<
     (LayoutSelectionChoice & { position: { x: number; y: number } }) | null
@@ -703,6 +796,7 @@ function LayoutEditor({
     selection: Selection;
     basis: PCB;
     choices?: SelectionCandidate[];
+    clickCandidate?: SelectionCandidate;
   } | null>(null);
   const pointerPosition = useRef<{ clientX: number; clientY: number } | null>(null);
   const lastCanvasPoint = useRef<Point | null>(null);
@@ -724,7 +818,8 @@ function LayoutEditor({
     selected?.kind === 'track' ? pcb.tracks.find((t) => t.id === selected.id) : undefined;
   const selectedVia =
     selected?.kind === 'via' ? pcb.vias.find((v) => v.id === selected.id) : undefined;
-  const graphicSelection = selected?.kind === 'graphic' ? findPCBGraphic(pcb, selected.id) : undefined;
+  const graphicSelection =
+    selected?.kind === 'graphic' ? findPCBGraphic(pcb, selected.id) : undefined;
   const selectedGraphic = graphicSelection?.graphic;
   const selectedRectangle = useMemo(() => findPCBRectangle(pcb, selection), [pcb, selection]);
   const outlineResizePreview = useMemo(() => {
@@ -949,8 +1044,7 @@ function LayoutEditor({
     const padIds = new Set<string>();
     const footprints = new Set(trackDrag.ids.map(({ id }) => id));
     for (const footprint of pcb.footprints)
-      if (footprints.has(footprint.id))
-        for (const pad of footprint.pads) padIds.add(pad.id);
+      if (footprints.has(footprint.id)) for (const pad of footprint.pads) padIds.add(pad.id);
     return { footprints, leads: new Set(leads), padIds };
   }, [footprintDrag, trackDrag?.ids, trackDragEngine.engine, pcb.footprints]);
   useLayoutEffect(() => {
@@ -994,17 +1088,14 @@ function LayoutEditor({
   // Masks cover only the movement since the last completed background frame.
   // Connected footprint motion keeps the committed pour on the static layer and
   // paints the translated package in a separate preview group.
-  const presentationBoard = useMemo(
-    () => invalidatePCBFill(pcb, motionBoard),
-    [pcb, motionBoard],
-  );
+  const presentationBoard = useMemo(() => invalidatePCBFill(pcb, motionBoard), [pcb, motionBoard]);
   const acceptedFillPreview = useMemo(() => {
     try {
-      return { ...preparePCBFillPreview(pcb, motionBoard), error: '' };
+      return { ...preparePCBFillPreview(pcb, motionBoard, fillRules), error: '' };
     } catch (error) {
       return { zones: [], changed: true, error: (error as Error).message };
     }
-  }, [pcb, motionBoard]);
+  }, [pcb, motionBoard, fillRules]);
   const backgroundFill = usePCBFillWorker(
     pcb,
     motionBoard,
@@ -1017,16 +1108,17 @@ function LayoutEditor({
       !outlineResizePreview?.error &&
       !trackDragPreview?.error,
     getRevision?.(),
+    fillRules,
   );
   const fillPreview = useMemo(() => {
     const completed = backgroundFill.completed;
     if (!completed?.board) return acceptedFillPreview;
     try {
-      return { ...preparePCBFillPreview(completed.board, motionBoard), error: '' };
+      return { ...preparePCBFillPreview(completed.board, motionBoard, fillRules), error: '' };
     } catch (error) {
       return { zones: [], changed: true, error: (error as Error).message };
     }
-  }, [acceptedFillPreview, backgroundFill.completed, motionBoard]);
+  }, [acceptedFillPreview, backgroundFill.completed, motionBoard, fillRules]);
   const fillPreviewZones = useMemo(
     () => new Map(fillPreview.zones.map((zone) => [zone.id, zone])),
     [fillPreview.zones],
@@ -1207,7 +1299,9 @@ function LayoutEditor({
   );
   const paintLayerOrder = useMemo(
     () =>
-      focusedLayer ? pcbActiveLayerPaintOrder(physicalLayerOrder, focusedLayer) : physicalLayerOrder,
+      focusedLayer
+        ? pcbActiveLayerPaintOrder(physicalLayerOrder, focusedLayer)
+        : physicalLayerOrder,
     [physicalLayerOrder, focusedLayer],
   );
   useEffect(() => {
@@ -1257,7 +1351,18 @@ function LayoutEditor({
   }, [onAnalysisComponentChange, inspectedAnalysisFootprint]);
   const zoneOwners = useMemo(
     () =>
-      new Map(motionBoard.footprints.flatMap((f) => (f.zones ?? []).map((z) => [z.id, f.id] as const))),
+      new Map(
+        motionBoard.footprints.flatMap((f) => (f.zones ?? []).map((z) => [z.id, f.id] as const)),
+      ),
+    [motionBoard.footprints],
+  );
+  const lockedFootprintZones = useMemo(
+    () =>
+      new Set(
+        motionBoard.footprints.flatMap((owner) =>
+          owner.locked ? (owner.zones ?? []).map((zone) => zone.id) : [],
+        ),
+      ),
     [motionBoard.footprints],
   );
   const committedZonePaths = useRef<ReturnType<typeof preparePCBZoneOutlinePaths>['cache']>(
@@ -1485,7 +1590,9 @@ function LayoutEditor({
   });
   useEffect(() => {
     cancelGesture();
-    const eligible = new Set(allVisibleSelections(true, visibleLayers).map((item) => `${item.kind}:${item.id}`));
+    const eligible = new Set(
+      allVisibleSelections(true, visibleLayers).map((item) => `${item.kind}:${item.id}`),
+    );
     setSelection((current) => {
       const next = current.filter((item) => eligible.has(`${item.kind}:${item.id}`));
       return next.length === current.length ? current : next;
@@ -1500,9 +1607,7 @@ function LayoutEditor({
         pad &&
         (!(owner.locked || pad.locked) || filters.locked !== false) &&
         visibleLayers.footprints &&
-        (pad.type === 'np_thru_hole'
-          ? visibleLayers['Edge.Cuts']
-          : padCopperLayers(pcb, owner, pad).some((name) => visibleLayers[name as CopperLayer]))
+        pcbPadDisplayLayers(pcb, owner, pad).some((name) => visibleLayers[name])
         ? current
         : '';
     };
@@ -1633,7 +1738,8 @@ function LayoutEditor({
       const next = host.current?.getBoundingClientRect();
       if (!next || next.width < 1 || next.height < 1) return;
       const before = previous;
-      const windowResized = windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
+      const windowResized =
+        windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
       windowWidth = window.innerWidth;
       windowHeight = window.innerHeight;
       setSize({ width: next.width, height: next.height });
@@ -1676,7 +1782,15 @@ function LayoutEditor({
     if (!active || next === pcb || (!knownChanged && JSON.stringify(next) === JSON.stringify(pcb)))
       return false;
     try {
-      const accepted = onCommit(next);
+      const prepared = placementSource.current;
+      const accepted = onCommit(
+        next,
+        prepared &&
+          !pcb.footprints.some((fp) => fp.id === prepared.id) &&
+          next.footprints.some((fp) => fp.id === prepared.id)
+          ? prepared.source
+          : undefined,
+      );
       if (accepted) setError('');
       return accepted;
     } catch (e) {
@@ -1765,6 +1879,92 @@ function LayoutEditor({
       if (analysisLocateRef.current === locate) analysisLocateRef.current = null;
     };
   });
+  useLayoutEffect(() => {
+    if (!analysisObjectLocateRef) return;
+    const locate = (id: string) => {
+      if (
+        !active ||
+        !visible ||
+        annotationDisabled ||
+        latestBoard.current !== pcb ||
+        hasOpenOverlay() ||
+        syncStatus?.pending ||
+        syncStatus?.error ||
+        propertiesPanel.current?.querySelector('[data-pending-edit="true"]')
+      )
+        return false;
+      const track = pcb.tracks.find((item) => item.id === id);
+      const via = pcb.vias.find((item) => item.id === id);
+      const footprint = pcb.footprints.find((item) => item.id === id);
+      const padOwner =
+        !track && !via && !footprint
+          ? pcb.footprints.find((item) => item.pads.some((pad) => pad.id === id))
+          : undefined;
+      const pad = padOwner?.pads.find((item) => item.id === id);
+      let target: Selection;
+      let points: Point[];
+      let padding = 8;
+      if (track) {
+        if (!selectionLayers[track.layer]) return false;
+        target = { kind: 'track', id };
+        points = [track.start, track.end];
+        padding += track.width;
+      } else if (via) {
+        if (
+          !(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] as const).some((layer) => selectionLayers[layer])
+        )
+          return false;
+        target = { kind: 'via', id };
+        points = [via];
+        padding += via.diameter;
+      } else if (pad && padOwner) {
+        if (
+          filters.pad === false ||
+          (pad.locked && filters.locked === false) ||
+          !selectionLayers.footprints ||
+          !pcbPadDisplayLayers(pcb, padOwner, pad).some((layer) => selectionLayers[layer])
+        )
+          return false;
+        target = { kind: 'footprint', id: padOwner.id };
+        points = [padPosition(padOwner, pad)];
+        padding += 2 * padReach(pad);
+      } else if (footprint) {
+        const bounds = pcbFootprintBodyBounds(pcb, footprint, selectionLayers);
+        if (!bounds) return false;
+        target = { kind: 'footprint', id };
+        points = [
+          { x: bounds.minX, y: bounds.minY },
+          { x: bounds.minX, y: bounds.maxY },
+          { x: bounds.maxX, y: bounds.minY },
+          { x: bounds.maxX, y: bounds.maxY },
+        ].map((point) => footprintPoint(footprint, point));
+      } else return false;
+      if (!pcbSelectionEligible(pcb, target, filters)) return false;
+      const minX = Math.min(...points.map((point) => point.x));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxY = Math.max(...points.map((point) => point.y));
+      // Retained hidden Properties keep their draft markers. Locating changes
+      // only the existing selection and camera after those drafts are clear.
+      activate('select');
+      setInspector(false);
+      setInspectedPadId(pad?.id ?? '');
+      setSelection([target]);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const spanX = maxX - minX + padding;
+      const spanY = maxY - minY + padding;
+      setView((current) => {
+        const width = Math.max(8, spanX, spanY * ratio, Math.min(current.width, 50));
+        return { x: centerX - width / 2, y: centerY - width / ratio / 2, width };
+      });
+      return true;
+    };
+    analysisObjectLocateRef.current = locate;
+    return () => {
+      if (analysisObjectLocateRef.current === locate) analysisObjectLocateRef.current = null;
+    };
+  });
   function releasePointer() {
     const id = pointer.current;
     const panning = pan.current;
@@ -1785,6 +1985,7 @@ function LayoutEditor({
     setDrag(null);
     setTrackDrag(null);
     setMarquee(null);
+    setPlacementSuggestion(null);
     setSelectionChoice(null);
     setGesture(null);
     setOutlineResize(null);
@@ -1864,18 +2065,26 @@ function LayoutEditor({
       setError((e as Error).message);
     }
   }
-  async function exportImage() {
-    if (!svg.current || exporting) return;
-    setExporting(true);
-    setImageStatus('');
-    try {
+  const saveImage = useDrawingImageExport(
+    capabilityHost,
+    'Layout',
+    pcb,
+    active && visible && Boolean(board) && !imageExportBlocked,
+    setExporting,
+    async (check) => {
+      if (!svg.current) throw new Error('The Layout drawing is not ready.');
+      setImageStatus('');
       const image = await captureLayoutPNG(svg.current, pcbDisplayBounds(pcb, 'board', layers));
-      const name = await saveDrawingPNG(image, schematic.title);
+      check();
+      return saveDrawingPNG(image, schematic.title);
+    },
+  );
+  async function exportImage() {
+    try {
+      const { name } = await saveImage();
       if (name) setImageStatus(`Exported ${name}`);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setExporting(false);
     }
   }
   function zoom(factor: number, at?: Point) {
@@ -1886,15 +2095,14 @@ function LayoutEditor({
     snapped = true,
     transform = svg.current!.getScreenCTM(),
   ): Point {
-    const p = transform
-      ? new DOMPoint(e.clientX, e.clientY).matrixTransform(transform.inverse())
-      : cursorPosition.current;
-    const presented = committedCameraBinding.current?.getPresentedView();
-    // Navigation state is synchronous even when its DOM presentation waits
-    // for the next frame. Rebase the displayed CTM to that exact latest pose.
-    const current =
-      transform && presented ? rebaseLayoutCameraPoint(p, presented, camera.getSnapshot()) : p;
-    return snapped ? { x: snap(current.x), y: snap(current.y) } : current;
+    return layoutCanvasPoint(
+      e,
+      transform,
+      cursorPosition.current,
+      committedCameraBinding.current?.getPresentedView(),
+      camera.getSnapshot(),
+      snapped ? snap : undefined,
+    );
   }
   function measurementPoint(e: { clientX: number; clientY: number; altKey?: boolean }) {
     const raw = canvasPoint(e, false);
@@ -2031,7 +2239,7 @@ function LayoutEditor({
     setPartId(unplaced[0]?.id ?? '');
     setChoosing(true);
   }
-  function chooseFootprint(detail: FootprintDetail) {
+  async function chooseFootprint(detail: FootprintDetail) {
     if (!active || !visible || tool !== 'place') return;
     if (!unplaced.some((part) => part.id === partId)) {
       setPlacement(null);
@@ -2040,14 +2248,26 @@ function LayoutEditor({
       setCanvasFocusRequest((value) => value + 1);
       return;
     }
+    packageRequest.current?.abort();
+    const control = new AbortController();
+    packageRequest.current = control;
+    const revision = getRevision?.();
     try {
-      const footprint = createPCBFootprint(detail, schematic, partId, cursorPosition.current);
+      const resolved = onlineFootprintLibrary(detail.id)
+        ? await loadLibraryFootprint(detail.id, control.signal)
+        : detail;
+      control.signal.throwIfAborted();
+      if (revision !== getRevision?.())
+        throw new Error('The project changed while loading. Try again.');
+      const footprint = createPCBFootprint(resolved, schematic, partId, cursorPosition.current);
+      placementSource.current = { id: footprint.id, source: resolved };
       setPlacement(footprint);
       setChoosing(false);
       setTool('place');
       setError('');
       svg.current?.focus({ preventScroll: true });
     } catch (e) {
+      if (control.signal.aborted) return;
       setChoosing(false);
       setError((e as Error).message);
     }
@@ -2169,7 +2389,8 @@ function LayoutEditor({
     if (!candidate.selection && !filters.pad) return;
     expandedSelection.current = null;
     if (!candidate.selection) {
-      const clear = mode === 'subtract' || (mode === 'toggle' && inspectedPadId === candidate.padId);
+      const clear =
+        mode === 'subtract' || (mode === 'toggle' && inspectedPadId === candidate.padId);
       setInspectedPadId(clear ? '' : candidate.padId);
       setSelection([]);
     } else {
@@ -2201,7 +2422,10 @@ function LayoutEditor({
     } else if (candidate.selection.kind === 'graphic') {
       const graphic = findPCBGraphic(pcb, candidate.selection.id)?.graphic;
       const value = footprintTextValues.get(candidate.selection.id) ?? graphic?.text?.value;
-      label = [value?.trim() || (graphic?.kind === 'dimension' ? 'Dimension' : 'Graphic'), graphic?.layer]
+      label = [
+        value?.trim() || (graphic?.kind === 'dimension' ? 'Dimension' : 'Graphic'),
+        graphic?.layer,
+      ]
         .filter(Boolean)
         .join(' · ');
       icon = graphic?.kind === 'text' ? Type : Pentagon;
@@ -2275,7 +2499,13 @@ function LayoutEditor({
           directText.add(object.id);
       }
     }
-    const candidates: SelectionCandidate[] = selectPCBPadPoint(pcb, selectionLayers, filters, raw, margin).map((id) => ({
+    const candidates: SelectionCandidate[] = selectPCBPadPoint(
+      pcb,
+      selectionLayers,
+      filters,
+      raw,
+      margin,
+    ).map((id) => ({
       id: `pad:${id}`,
       padId: id,
     }));
@@ -2353,14 +2583,15 @@ function LayoutEditor({
           )?.padId
         : undefined);
     const pickupPad = footprint?.pads.find((pad) => pad.id === pickupPadId);
-    const graphic = ids.length === 1 && ids[0].kind === 'graphic'
-      ? findPCBGraphic(pcb, ids[0].id)
-      : undefined;
+    const graphic =
+      ids.length === 1 && ids[0].kind === 'graphic' ? findPCBGraphic(pcb, ids[0].id) : undefined;
     const anchor = footprint
       ? pickupPad
         ? padPosition(footprint, pickupPad)
         : { x: footprint.x, y: footprint.y }
-      : graphic?.owner ? footprintPoint(graphic.owner, graphic.graphic.start) : at;
+      : graphic?.owner
+        ? footprintPoint(graphic.owner, graphic.graphic.start)
+        : at;
     setSelection(ids);
     setInspectedPadId('');
     setInspector(true);
@@ -2819,8 +3050,9 @@ function LayoutEditor({
     shiftKey?: boolean;
   }) {
     const raw = canvasPoint(event, false);
-    const snapped =
-      isCommandModifier(event) ? { x: raw.x, y: raw.y } : { x: snap(raw.x), y: snap(raw.y) };
+    const snapped = isCommandModifier(event)
+      ? { x: raw.x, y: raw.y }
+      : { x: snap(raw.x), y: snap(raw.y) };
     if (event.shiftKey) return snapped;
     const radius = (view.width / size.width) * 8;
     let distance = radius;
@@ -2926,7 +3158,9 @@ function LayoutEditor({
           ...(zoneId ? { zoneId } : {}),
         });
       } else {
-        const next = zoneId ? fillCopperZone(pcb, zoneId) : fillCopperZones(pcb);
+        const next = zoneId
+          ? fillCopperZone(pcb, zoneId, undefined, fillRules)
+          : fillCopperZones(pcb, undefined, fillRules);
         if (!onCommit(next)) return;
       }
       setLayers((current) => ({ ...current, copper: true }));
@@ -2971,11 +3205,12 @@ function LayoutEditor({
       host.current?.classList.add('is-panning');
       return;
     }
+    setPlacementSuggestion(null);
     if (tool === 'measure') return;
     if (analysisProbing || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
     const p =
-      (tool === 'route' || trackDrag) && (isCommandModifier(e))
+      (tool === 'route' || trackDrag) && isCommandModifier(e)
         ? routeFreePoint(canvasPoint(e, false))
         : canvasPoint(e);
     if (trackDrag) {
@@ -3149,7 +3384,12 @@ function LayoutEditor({
       pickedForDrag?.selection?.kind !== 'via'
     ) {
       const object = { kind: 'footprint' as const, id: footprintId };
-      pointerSelection.current = { selection: object, basis: pcb, choices };
+      pointerSelection.current = {
+        selection: object,
+        basis: pcb,
+        choices,
+        clickCandidate: candidate,
+      };
       const ids = selection.some((item) => item.kind === 'footprint' && item.id === footprintId)
         ? selection
         : [object];
@@ -3166,7 +3406,8 @@ function LayoutEditor({
     }
     if (
       candidate &&
-      ((choices && !pickedForDrag) || !pointerDragsObject(leftButtonDrag, selectedForDrag(candidate)))
+      ((choices && !pickedForDrag) ||
+        !pointerDragsObject(leftButtonDrag, selectedForDrag(candidate)))
     ) {
       setMarquee({
         start: canvasPoint(e, false),
@@ -3174,6 +3415,7 @@ function LayoutEditor({
         selection,
         mode,
         basis: pcb,
+        revision: placementSuggestionRevision,
         clickCandidate: candidate,
         clickChoices: choices,
       });
@@ -3212,6 +3454,7 @@ function LayoutEditor({
         selection,
         mode,
         basis: pcb,
+        revision: placementSuggestionRevision,
       });
     }
   }
@@ -3250,7 +3493,7 @@ function LayoutEditor({
       : (tool === 'route' ||
             trackDrag ||
             (drag?.mode === 'pointer' && connectedPCBDragKind(drag.ids))) &&
-          (isCommandModifier(e))
+          isCommandModifier(e)
         ? routeFreePoint(raw)
         : { x: snap(raw.x), y: snap(raw.y) };
     const overlayOpen = hasOpenOverlay();
@@ -3391,7 +3634,9 @@ function LayoutEditor({
     )
       return;
     try {
-      const candidates = selectionCandidates(e).filter((candidate) => parasiticsTerminal(candidate));
+      const candidates = selectionCandidates(e).filter((candidate) =>
+        parasiticsTerminal(candidate),
+      );
       let choices: SelectionCandidate[] | undefined;
       const candidate = pointCandidate(e, candidates, false, (items) => {
         choices = items;
@@ -3489,7 +3734,14 @@ function LayoutEditor({
           basis: pcb,
           position: { x: e.clientX, y: e.clientY },
         });
-      else setSelection([picked.selection]);
+      else
+        selectCandidate(
+          picked.clickCandidate ?? {
+            id: `${picked.selection.kind}:${picked.selection.id}`,
+            selection: picked.selection,
+          },
+          'replace',
+        );
     }
     if (trackDrag?.pointer)
       finishTrackDrag(
@@ -3522,11 +3774,29 @@ function LayoutEditor({
           basis: pcb,
           position: { x: e.clientX, y: e.clientY },
         });
-      else if (!moved && marquee.clickCandidate) selectCandidate(marquee.clickCandidate, marquee.mode);
+      else if (!moved && marquee.clickCandidate)
+        selectCandidate(marquee.clickCandidate, marquee.mode);
       else {
         const next = mergePCBSelection(marquee.selection, ids, marquee.mode);
         setSelection(next);
         if (next.length) setInspector(true);
+        if (
+          moved &&
+          canSuggestPlacement &&
+          !baselineConnectivity.error &&
+          marquee.revision === placementSuggestionRevision &&
+          marquee.revision === getRevision?.()
+        ) {
+          const preview = suggestPCBPlacement(pcb, next, baselineConnectivity.edges, gridSpacing);
+          if (preview)
+            setPlacementSuggestion({
+              basis: pcb,
+              revision: marquee.revision,
+              selection: next,
+              spacing: gridSpacing,
+              preview,
+            });
+        }
       }
     }
     setMarquee(null);
@@ -3607,6 +3877,23 @@ function LayoutEditor({
       return;
     flushLayoutCamera(svg.current);
     const key = e.key.toLowerCase();
+    if (
+      key === 'tab' &&
+      suggestion &&
+      placementSuggestion?.revision === getRevision?.() &&
+      e.target === e.currentTarget &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !trackDrag &&
+      !marquee &&
+      pointer.current === null
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (commit(suggestion.board, true)) setPlacementSuggestion(null);
+      return;
+    }
     const layerKey = ['pageup', 'pagedown', '+', '-'].includes(key);
     if (tool === 'measure' && key !== ' ' && key !== 'home') {
       if (key === 'escape') {
@@ -3649,8 +3936,7 @@ function LayoutEditor({
         if (key === 'escape') {
           if (parasiticsProbe) parasiticsProbe.onPick(null);
           else onAnalysisProbe?.(null);
-        }
-        else if (key === 'home') fit(isCommandModifier(e) ? 'all' : 'board');
+        } else if (key === 'home') fit(isCommandModifier(e) ? 'all' : 'board');
         else if (!e.ctrlKey && !e.metaKey) fit('board');
       }
       return;
@@ -4003,6 +4289,8 @@ function LayoutEditor({
     fillPreviewZones,
     boardSurface,
     zoneOwners,
+    lockedFootprintZones,
+    selectionZones,
     selectionPaint,
     highlightNets,
   ];
@@ -4065,7 +4353,14 @@ function LayoutEditor({
     selectionPaint,
     placement?.id,
   ];
-  const viaInputs = [copperLayers, motionBoard.vias, layers, selectionPaint, highlightNets, netNames];
+  const viaInputs = [
+    copperLayers,
+    motionBoard.vias,
+    layers,
+    selectionPaint,
+    highlightNets,
+    netNames,
+  ];
   const graphicInputs = [motionBoard.graphics, layers, selectionPaint];
   const drillFootprints = useMemo(
     () => displayBoard.footprints.filter((footprint) => footprint.pads.some((pad) => pad.drill)),
@@ -4114,6 +4409,7 @@ function LayoutEditor({
                   layer: zone.layer,
                   netId: zone.netId,
                   ownerId: zoneOwners.get(zone.id) ?? zone.id,
+                  locked: selectionZones.get(zone.id)?.locked || lockedFootprintZones.has(zone.id),
                   path: copperPaths.get(zone.id) ?? '',
                   preview:
                     fillPreview.changed && fillPreviewZones.get(zone.id)?.needsMask
@@ -4147,6 +4443,7 @@ function LayoutEditor({
                   key: zone.id,
                   zoneId: zone.id,
                   layer: zone.layer,
+                  locked: zone.locked,
                   path: drawing?.path ?? '',
                   target: drawing?.target,
                   selection: selectionPaint,
@@ -4165,7 +4462,8 @@ function LayoutEditor({
         {copperOutlineDrawing.get(copperLayer)}
         {retainTrackBatches(
           copperLayer,
-          motionBoard.tracks.filter((track) => track.layer === copperLayer)
+          motionBoard.tracks
+            .filter((track) => track.layer === copperLayer)
             .map((track) =>
               retainTrack(
                 {
@@ -4382,7 +4680,7 @@ function LayoutEditor({
     (outline && layers[outlineLayer]) ||
     viaPreviewVisible ||
     gesture ||
-    ruleFocus?.location ||
+    (showRuleMarker && ruleFocus?.location) ||
     marquee,
   );
   // Artwork and captions share one pass per native layer, including fallback references.
@@ -4677,8 +4975,7 @@ function LayoutEditor({
     () => ({ pcb, selection, inspectedPadId, tool, revision: getRevision?.() }),
     [pcb, selection, inspectedPadId, tool, getRevision?.()],
   );
-  const copperPour = (zone: PCB['zones'][number]) =>
-    !zone.keepout && zone.layer.endsWith('.Cu');
+  const copperPour = (zone: PCB['zones'][number]) => !zone.keepout && zone.layer.endsWith('.Cu');
   const enabledPour = (zone: PCB['zones'][number]) =>
     copperPour(zone) && zone.fillEnabled !== false;
   const contextFillAll: CanvasMenuAction[] =
@@ -4696,6 +4993,13 @@ function LayoutEditor({
         ]
       : [];
   const contextObjectActions: CanvasMenuAction[] = [];
+  if (
+    contextIdle &&
+    selection.length === 1 &&
+    selection[0].kind === 'footprint' &&
+    getComponentActions
+  )
+    contextObjectActions.push(...getComponentActions(selection[0].id));
   if (contextIdle && (selection.length || inspectedPad)) {
     contextObjectActions.push({
       id: 'properties',
@@ -5038,6 +5342,12 @@ function LayoutEditor({
               aria-label="PCB layout editor"
               data-testid="layout-canvas"
               data-layout-active={active ? 'true' : 'false'}
+              data-layout-edit={
+                tool === 'select' && !analysisProbing && !drag && !trackDrag && !marquee
+                  ? 'select'
+                  : undefined
+              }
+              data-layout-selection-count={selection.length}
               onPointerDown={start}
               onPointerMove={move}
               onPointerUp={end}
@@ -5140,6 +5450,51 @@ function LayoutEditor({
                 {detailDrawing}
                 {footprintMotionDrawing}
               </g>
+              {suggestion && (
+                <g
+                  data-layout-placement-suggestion
+                  data-annotation-overlay
+                  pointerEvents="none"
+                  aria-hidden="true"
+                >
+                  {suggestion.board.footprints.map((footprint) => {
+                    const offset = suggestion.offsets.get(footprint.id);
+                    if (!offset) return null;
+                    return (
+                      <g
+                        key={footprint.id}
+                        data-suggested-footprint={footprint.id}
+                        data-suggested-rotation={footprint.rotation}
+                      >
+                        <line
+                          x1={footprint.x - offset.x}
+                          y1={footprint.y - offset.y}
+                          x2={footprint.x}
+                          y2={footprint.y}
+                          stroke="var(--selection-shadow)"
+                          strokeDasharray="3 3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <g opacity={0.45}>
+                          <LayoutFootprintGraphic
+                            copperLayers={pcb.layers}
+                            footprint={footprint}
+                            reference={footprint.reference}
+                            value={footprint.value}
+                            layers={layers}
+                            selection={selectionPaint}
+                            placement={false}
+                            layer={layer}
+                            inspectedPadId=""
+                            netNames={netNames}
+                            highlightNets={highlightNets}
+                          />
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {analysisDrawing && (
                 <g data-annotation-overlay pointerEvents="none">
                   {analysisDrawing}
@@ -5170,7 +5525,7 @@ function LayoutEditor({
                           y={-6}
                           width={12}
                           height={12}
-                          color="var(--text-strong)"
+                          color="var(--pcb-locked)"
                         />
                       </g>
                     ))}
@@ -5497,7 +5852,7 @@ function LayoutEditor({
                       </g>
                     )}
                     <RuleCheckMarker
-                      location={ruleFocus?.location}
+                      location={showRuleMarker ? ruleFocus?.location : undefined}
                       radius={(view.width / size.width) * 8}
                     />
                     {marquee && (
@@ -5770,7 +6125,12 @@ function LayoutEditor({
                       : item.padId === inspectedPadId,
                   );
                   if (!candidate) {
-                    setSelectionChoice({ candidates: choices, basis: pcb, mode: 'replace', position });
+                    setSelectionChoice({
+                      candidates: choices,
+                      basis: pcb,
+                      mode: 'replace',
+                      position,
+                    });
                     return;
                   }
                 }
@@ -5846,10 +6206,13 @@ function LayoutEditor({
             className="layout-status"
             active={active && visible}
             ruleStatus={ruleStatus}
+            center={suggestion ? <span role="status">Tab to apply placement</span> : undefined}
             centerCoordinates
             mode={
               analysisProbing
-                ? (parasiticsProbe ? 'Parasitics' : 'Analysis probe')
+                ? parasiticsProbe
+                  ? 'Parasitics'
+                  : 'Analysis probe'
                 : trackDrag
                   ? trackDrag.mode === 'corner'
                     ? 'Dragging track corner'
@@ -5895,7 +6258,8 @@ function LayoutEditor({
                   label="Non-active layers"
                   icon={<Layers2 size={14} aria-hidden="true" />}
                   showChevron={false}
-                  popupClassName="grid-density-popup"
+                  popupClassName="grid-density-popup status-mode-popup"
+                  popupMatchWidth="content"
                   popupPlacement="top-end"
                   popupBoundary=".editor-drawing-region"
                   active={active && visible}
@@ -6001,7 +6365,9 @@ function LayoutEditor({
                         via={selectedVia}
                         graphic={selectedGraphic}
                         graphicOwner={graphicSelection?.owner}
-                        graphicDisplayText={selectedGraphic && footprintTextValues.get(selectedGraphic.id)}
+                        graphicDisplayText={
+                          selectedGraphic && footprintTextValues.get(selectedGraphic.id)
+                        }
                         zone={selectedZone}
                         pad={inspectedPad}
                         padOwner={inspectedFootprint}
@@ -6078,7 +6444,7 @@ function LayoutEditor({
           kind="footprints"
           title="Place footprint"
           label="Footprint placement"
-          actionLabel="Place footprint"
+          actionLabel="Place"
           canChoose={unplaced.some((part) => part.id === partId)}
           header={
             <div className="layout-placement-target">

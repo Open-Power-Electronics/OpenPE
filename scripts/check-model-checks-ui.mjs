@@ -8,6 +8,8 @@ import { tsImport } from 'tsx/esm/api';
 // Browser-only presentation check; model responses are fixtures, with no native services.
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { emptyCircuit } = await tsImport('../lib/circuit.ts', import.meta.url);
+const { newModelCadObject } = await tsImport('../lib/model-cad.ts', import.meta.url);
+const { waitForAsync } = await import('./async-browser-test-helpers.mjs');
 const board = createEmptyPCB();
 board.graphics = [
   {
@@ -104,26 +106,30 @@ board.footprints.push({
     },
   ],
 });
+const solid = { ...newModelCadObject(board, 'box'), name: 'Heat spreader' };
+const modelCad = { version: 1, objects: [solid] };
 const bundle = await build({
   stdin: {
     contents: `import React,{useState,useRef}from'react';import{createRoot}from'react-dom/client';
 import Preview from'./components/PCBModelPreview';import RulePanel from'./components/RuleCheckPanel';import RuleStatus from'./components/RuleStatus';
+import Find from'./components/PanelFindController';
 function Harness(){const[active,setActive]=useState(true),[readOnly,setReadOnly]=useState(false);
+const workspace=useRef(null),find=useRef(null);const[modelCad,setModelCad]=useState(window.cadFixture);
 const[sidebarVisible,setSidebarVisible]=useState(false),view=useRef(null),sequence=useRef(0);
 const[report,setReport]=useState(null),[open,setOpen]=useState(false);
 const[focus,setFocus]=useState(null),[sourcePending,setSourcePending]=useState(false);
-window.modelCheckHarness={setActive,setReadOnly,view,setSourcePending};window.modelCheckReport=report;
-return <div className="editor" style={{height:'100vh'}}><div style={{position:'absolute',zIndex:20,right:12,top:12}}><RuleStatus kind="model"
+window.modelCheckHarness={setActive,setReadOnly,view,setSourcePending,setModelCad};window.modelCheckReport=report;
+return <div ref={workspace}><div className="editor" style={{height:'100vh'}}><div style={{position:'absolute',zIndex:20,right:12,top:12}}><RuleStatus kind="model"
 report={report?{issues:report.issues,complete:report.state==='ready'}:null}
 state={!report?'unchecked':report.state==='loading'?'checking':report.state==='error'?'failed':'ready'}
 expanded={open} disabled={false} onToggle={()=>setOpen(value=>!value)}/></div>
-<Preview board={window.fixture} schematic={window.schematicFixture} active={active} readOnly={readOnly}
+<div className="file-editor-surface"><Preview board={window.fixture} schematic={window.schematicFixture} active={active} readOnly={readOnly} sourcePending={sourcePending} modelCad={modelCad}
 onModelChecksChange={setReport} modelCheckFocus={focus}
 viewState={view} sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)}
 rulePanel={open&&<RulePanel kind="model" report={null} sourcePending={sourcePending}
 modelReport={report?{...report,canLocate:report.canLocate&&active}:null} onSelectModelCheckIssue={issue=>{setFocus({request:++sequence.current,board:window.fixture,footprintId:issue.footprintId});setOpen(false)}}
 onRun={()=>{throw Error('Model checks must not run ERC/DRC')}} onSelectIssue={()=>{}} onClose={()=>setOpen(false)}/>}/>
-</div>}
+</div></div><Find workspace={workspace} control={find} active={active&&!readOnly} scopeKey="model"/></div>}
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     loader: 'tsx',
     resolveDir: process.cwd(),
@@ -148,7 +154,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
             contents: source.replace(
               marker,
               marker +
-                '\n      window.inspectModelChecks=()=>({camera,orbit,board,selection:selectionRef.current.ids,components,cad:cadRef.current});',
+                '\n      window.inspectModelChecks=()=>({camera,orbit,board,selection:selectionRef.current.ids,components,cad:cadRef.current,cadSelection:cadState.current.selectedBodyIds});',
             ),
           };
         });
@@ -167,12 +173,13 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(
-    ({ board, schematic }) => {
+    ({ board, schematic, modelCad }) => {
       window.fixture = board;
       window.schematicFixture = schematic;
+      window.cadFixture = modelCad;
       window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
     },
-    { board, schematic: emptyCircuit() },
+    { board, schematic: emptyCircuit(), modelCad },
   );
   await page.route('http://localhost/**', (route) => {
     const url = new URL(route.request().url());
@@ -224,29 +231,120 @@ try {
   const inspect = () =>
     page.evaluate(() => {
       const { camera, orbit, selection } = window.inspectModelChecks();
-      return { target: orbit.target.toArray(), quaternion: camera.quaternion.toArray(), selection };
+      return {
+        target: orbit.target.toArray(),
+        quaternion: camera.quaternion.toArray(),
+        selection,
+        zoom: camera.zoom,
+      };
     });
   const assertWarningStyle = async () => {
-    // Theme colors transition; wait until count, text and border all reach gray.
+    // Rows use gray; positive summary/footer warning counts use the warning color.
     await page.waitForFunction(() => {
       const element = document.querySelector('section[aria-label="Rule"]');
       const probe = document.createElement('span');
       probe.style.color = 'var(--muted)';
       element.append(probe);
       const gray = getComputedStyle(probe).color;
+      probe.style.color = 'var(--rule-warning-ink)';
+      const warningColor = getComputedStyle(probe).color;
       probe.remove();
       const warning = element.querySelector('[data-severity="warning"]');
       const summary = element.querySelector('[aria-label="Model summary"]');
       const footerWarning = document.querySelector('[data-rule-warnings]');
       return (
         summary.children.length === 2 &&
-        getComputedStyle(summary.lastElementChild).color === gray &&
+        getComputedStyle(summary.lastElementChild).color === warningColor &&
         getComputedStyle(warning).color === gray &&
         getComputedStyle(warning).borderInlineStartColor === gray &&
-        getComputedStyle(footerWarning).color === gray
+        getComputedStyle(footerWarning).color === warningColor
       );
     });
   };
+  const modelCanvas = page.locator('.pcb-model-canvas');
+  await modelCanvas.hover();
+  await page.keyboard.press('Control+f');
+  const find = page.getByRole('search', { name: 'Find in Preview', exact: true });
+  const query = find.getByRole('searchbox');
+  const initialView = await inspect();
+  await query.fill('Fixture:');
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '1/2',
+  );
+  assert.deepEqual((await inspect()).selection, ['hole']);
+  assert.ok((await inspect()).zoom > initialView.zoom);
+  await query.press('Enter');
+  await waitForAsync(page, () => window.inspectModelChecks().selection[0] === 'component');
+  const foundConnector = await inspect();
+  assert.ok(Math.abs(foundConnector.target[0] - 82) < 1e-8);
+  initialView.quaternion.forEach((value, index) =>
+    assert.ok(Math.abs(value - foundConnector.quaternion[index]) < 1e-8),
+  );
+  await query.fill('heat spreader');
+  await waitForAsync(page, (id) => window.inspectModelChecks().cadSelection.includes(id), solid.id);
+  const foundSolid = await inspect();
+  assert.ok(Math.abs(foundSolid.target[0] - solid.position.x) < 1e-8);
+  assert.ok(Math.abs(foundSolid.target[1] + solid.position.y) < 1e-8);
+  assert.equal(await query.evaluate((input) => input === document.activeElement), true);
+  const searchBounds = await find.boundingBox(),
+    canvasBounds = await modelCanvas.boundingBox();
+  assert.ok(
+    Math.abs(searchBounds.x + searchBounds.width - canvasBounds.x - canvasBounds.width + 8) <= 1,
+  );
+  await page.evaluate(() => window.modelCheckHarness.setSourcePending(true));
+  await query.fill('MH1');
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '1/1',
+  );
+  assert.deepEqual((await inspect()).target, foundSolid.target);
+  await page.evaluate(() => window.modelCheckHarness.setSourcePending(false));
+  await query.press('F3');
+  await waitForAsync(page, () => window.inspectModelChecks().selection[0] === 'hole');
+  await query.fill('Fixture:');
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '1/2',
+  );
+  await query.dispatchEvent('compositionstart');
+  await query.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  assert.deepEqual((await inspect()).selection, ['hole']);
+  await query.dispatchEvent('compositionend');
+  await query.press('Shift+Enter');
+  await waitForAsync(page, () => window.inspectModelChecks().selection[0] === 'component');
+  await page.getByRole('tab', { name: 'Display', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Show components', exact: true }).uncheck();
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '0/0',
+  );
+  await page.getByRole('checkbox', { name: 'Show components', exact: true }).check();
+  await waitForAsync(page, () =>
+    document.querySelector('[data-panel-find] [role=status]')?.textContent.endsWith('/2'),
+  );
+  await page.getByRole('checkbox', { name: 'Solids', exact: true }).uncheck();
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '0/0',
+  );
+  await page.getByRole('checkbox', { name: 'Solids', exact: true }).check();
+  await waitForAsync(page, () =>
+    document.querySelector('[data-panel-find] [role=status]')?.textContent.endsWith('/2'),
+  );
+  await query.fill('heat spreader');
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '1/1',
+  );
+  await page.evaluate(() => window.modelCheckHarness.setModelCad(null));
+  await waitForAsync(
+    page,
+    () => document.querySelector('[data-panel-find] [role=status]')?.textContent === '0/0',
+  );
+  await page.evaluate(() => window.modelCheckHarness.setModelCad(window.cadFixture));
+  await query.press('Escape');
+  await page.getByRole('tab', { name: 'Views', exact: true }).click();
   await open();
   assert.equal(await panel.getByLabel('Model summary').textContent(), '1 error2 warnings');
   await assertWarningStyle();
@@ -317,8 +415,13 @@ try {
   const layout = await panel.boundingBox();
   const drawing = await page.locator('.model-drawing-region').boundingBox();
   const sidebar = await page.locator('.model-properties-dock').boundingBox();
-  assert.ok(Math.abs(layout.x - drawing.x - 9) <= 1);
-  assert.ok(layout.width <= 480 && layout.width <= drawing.width - 16);
+  const inset = await page
+    .locator('.model-drawing-region')
+    .evaluate((element) =>
+      parseFloat(getComputedStyle(element).getPropertyValue('--status-control-inset')),
+    );
+  assert.ok(Math.abs(layout.x - drawing.x - inset - 1) <= 1);
+  assert.ok(layout.width <= 480 && layout.width <= drawing.width - 2 * inset);
   assert.ok(layout.x + layout.width <= sidebar.x);
   await page.screenshot({ path: 'test-results/model-checks-ui/checks.png' });
   await page.evaluate(() => {
@@ -329,6 +432,12 @@ try {
   await panel.getByRole('button', { name: 'Close Rule', exact: true }).click();
   await page.getByRole('button', { name: 'Orthographic projection', exact: true }).click();
   await page.waitForFunction(() => window.inspectModelChecks().camera.isPerspectiveCamera);
+  await modelCanvas.hover();
+  await page.keyboard.press('Control+f');
+  await query.fill('J1');
+  await waitForAsync(page, () => window.inspectModelChecks().selection[0] === 'component');
+  assert.ok(Math.abs((await inspect()).target[0] - 82) < 1e-8);
+  await query.press('Escape');
   await open();
   await buttons.nth(1).click();
   assert.ok(Math.abs((await inspect()).target[0] - 82) < 1e-8);
@@ -345,7 +454,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.inspectModelChecks().board), board);
   assert.deepEqual(errors, []);
   console.log(
-    'Model checks: shared error/warning categories, pointer/keyboard locating, mounting holes, IME/Source/activity guards, both projections/themes, read-only and unchanged board passed.',
+    'Model search/checks: component metadata and CAD names, selection/zoom, camera orientation, scene/visibility/filter refresh, Source/IME guards, both projections, existing issue locating and unchanged board passed.',
   );
 } finally {
   await browser.close();

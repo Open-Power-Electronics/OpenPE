@@ -8091,7 +8091,7 @@
     "files": [
       {
         "name": "lm2598-to220-7-buck.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2598-to220-7-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2598 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM2598-ADJ.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2598-to220-7-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2598 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LM2598-ADJ.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lm2598-to220-7-buck.kicad_sym",
@@ -8115,7 +8115,7 @@
     {
       "id": "reference-lm2598-adj",
       "sha256": "b9c26b0f67ed3d7ad6e9f3375a1d7c55d068d5bc3c6298091a2a5e2699613e2f",
-      "file": "circuits/LM2598-ADJ.lib"
+      "file": "models/LM2598-ADJ.lib"
     }
   ]
 }

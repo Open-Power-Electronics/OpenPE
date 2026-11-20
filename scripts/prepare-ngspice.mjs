@@ -25,7 +25,7 @@ const platformId = hostSolverPlatform();
 const platform = assertSolverPlatforms(lock.platforms);
 if (lock.version !== 47 || typeof platform.executable !== 'string' || !platform.files)
   throw new Error(`Invalid ngspice lock for ${platformId}.`);
-if (platformId === 'darwin-arm64') assertLockedRelease(platform.archive);
+if (platformId !== 'win32-x64') assertLockedRelease(platform.archive);
 if (!Object.keys(platform.files).length)
   throw new Error(`ngspice lock has no ${platformId} file manifest.`);
 const root = path.join(workspace, 'resources/ngspice', String(lock.version));
@@ -59,7 +59,7 @@ async function artifact(item, destination) {
     let size = 0;
     for await (const chunk of response.body) {
       size += chunk.length;
-      if (size > 80_000_000) throw new Error('Solver download exceeded 80 MB.');
+      if (size > 512_000_000) throw new Error('Solver download exceeded 512 MB.');
       chunks.push(chunk);
     }
     bytes = Buffer.concat(chunks);
@@ -82,7 +82,8 @@ let valid = true;
 for (const [name, hash] of Object.entries(platform.files))
   valid = (await matches(path.join(root, name), hash)) && valid;
 if (archivePath) {
-  if (!platform.archive) throw new Error('This platform has no single pinned ngspice release archive.');
+  if (!platform.archive)
+    throw new Error('This platform has no single pinned ngspice release archive.');
   await assertPinnedLocalArchive(archivePath, platform.archive);
 }
 if (!valid) {
@@ -117,7 +118,7 @@ if (!valid) {
         throw new Error('Invalid staging path.');
       await rm(stage, { recursive: true, force: true });
     }
-  } else if (platformId === 'darwin-arm64') {
+  } else if (platformId === 'darwin-arm64' || platformId === 'linux-x64') {
     const archive = platform.archive;
     const cached = archivePath ?? path.join(downloads, archive.name);
     if (!archivePath)
@@ -139,18 +140,25 @@ if (!verify) {
         'ngspice licensing and authors: Spice64/docs/COPYING and AUTHORS; combined dependency notices: About OpenPE > Third-party licenses > ngspice.\n' +
         'Complete corresponding source archives: resources/third-party-source/ngspice-47.tar.gz, libsndfile-1.2.2.tar.gz and libsamplerate-0.2.2.tar.gz. Follow their included build instructions; upstream Windows dependency configuration is documented in ngspice README.wavsim.\n' +
         'The solver and DLLs are replaceable under resources/ngspice/47/Spice64. Reverse engineering for debugging modifications to LGPL libraries is permitted. OpenPE never discovers a system solver or accepts renderer-supplied executables.\n'
-      : 'OpenPE stages the ngspice 47 darwin-arm64 console from the pinned GitHub release archive.\n' +
-        'npm run simulation:prepare downloads that archive, checks its SHA-256 and size, then checks every file hash. --archive installs the same pinned archive from a local file and does not download it. It does not compile.\n' +
-        'Maintainers rebuild the archive with npm run solvers:build-macos. scripts/build-ngspice-macos.sh requires Apple clang 17.0.0, macOS SDK 26.2, deployment target 26.0 and the pinned ngspice 47, libsndfile 1.2.2, libsamplerate 0.2.2 and LLVM OpenMP 14.0.6 sources. That command is not part of ordinary setup.\n' +
-        'The console matches the Windows feature set recorded from ngspice 47 visualc/config.h and vngspice.vcxproj: XSPICE code models, OSDI, OpenMP, CIDER, KLU, libsndfile and libsamplerate, without X11, readline or the separate fftw archive.\n' +
-        'Code-model paths use the same Windows spinit (visualc/spinit_all). A pinned source patch resolves those paths from the executable directory because the process working directory is the job directory.\n' +
-        'ngspice licensing and authors: Spice64/docs/COPYING and AUTHORS. Corresponding sources: resources/third-party-source/ngspice-47.tar.gz, libsndfile-1.2.2.tar.gz and libsamplerate-0.2.2.tar.gz. The OpenMP 14.0.6 source pin is in scripts/build-ngspice-macos.sh.\n' +
-        'The solver and libraries are replaceable under resources/ngspice/47/Spice64. OpenPE never discovers a system solver or accepts renderer-supplied executables.\n';
+      : platformId === 'linux-x64'
+        ? 'OpenPE bundles ngspice 47 for glibc Linux x64.\n' +
+          'Maintainer build: npm run solvers:build-linux, using GCC 14.2.0, glibc 2.41 and CMake 4.4.5.\n' +
+          'The build enables XSPICE, OSDI, OpenMP, CIDER, KLU, libsndfile 1.2.2 and libsamplerate 0.2.2 without X11 or readline.\n' +
+          'The Linux code-model patch resolves spinit paths from the executable directory. Bundled ELF libraries use relative $ORIGIN runpaths; glibc remains a system dependency.\n' +
+          'Corresponding ngspice, libsndfile, libsamplerate and Debian GCC source archives and patches are shipped in third-party-source. Licenses and authors are in Spice64/docs.\n' +
+          'Libraries remain replaceable; reverse engineering to debug LGPL modifications is permitted. Runtime never searches for system solvers or accepts executable/environment overrides.\n'
+        : 'OpenPE stages the ngspice 47 darwin-arm64 console from the pinned GitHub release archive.\n' +
+          'npm run simulation:prepare downloads that archive, checks its SHA-256 and size, then checks every file hash. --archive installs the same pinned archive from a local file and does not download it. It does not compile.\n' +
+          'Maintainers rebuild the archive with npm run solvers:build-macos. scripts/build-ngspice-macos.sh requires Apple clang 17.0.0, macOS SDK 26.2, deployment target 26.0 and the pinned ngspice 47, libsndfile 1.2.2, libsamplerate 0.2.2 and LLVM OpenMP 14.0.6 sources. That command is not part of ordinary setup.\n' +
+          'The console matches the Windows feature set recorded from ngspice 47 visualc/config.h and vngspice.vcxproj: XSPICE code models, OSDI, OpenMP, CIDER, KLU, libsndfile and libsamplerate, without X11, readline or the separate fftw archive.\n' +
+          'Code-model paths use the same Windows spinit (visualc/spinit_all). A pinned source patch resolves those paths from the executable directory because the process working directory is the job directory.\n' +
+          'ngspice licensing and authors: Spice64/docs/COPYING and AUTHORS. Corresponding sources: resources/third-party-source/ngspice-47.tar.gz, libsndfile-1.2.2.tar.gz and libsamplerate-0.2.2.tar.gz. The OpenMP 14.0.6 source pin is in scripts/build-ngspice-macos.sh.\n' +
+          'The solver and libraries are replaceable under resources/ngspice/47/Spice64. OpenPE never discovers a system solver or accepts renderer-supplied executables.\n';
   await writeGeneratedFile(path.join(root, 'manifest.json'), JSON.stringify(lock, null, 2) + '\n');
   await writeGeneratedFile(path.join(root, 'SOURCE-NOTICE.txt'), notice);
 }
 const executable = path.join(root, platform.executable);
-if (platformId === 'win32-x64' || platformId === 'darwin-arm64') {
+{
   const { stdout } = await exec(executable, ['-n', '--version'], {
     windowsHide: true,
     timeout: 15000,

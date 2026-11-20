@@ -87,160 +87,26 @@ var reference_models_lock_default = {
   ]
 };
 
-// lib/ti-dcdc.ts
+// lib/reference-models.ts
 var referenceModels = reference_models_lock_default.models;
-var tiModels = [
-  {
-    id: "lm2596-3.3",
-    voltage: 3.3,
-    archive: "snvma65",
-    file: "LM2596_3P3_TRANS.LIB",
-    subcircuit: "LM2596_3P3_TRANS",
-    sha256: "b387d7bdc153fc515d7f979b6d60634415b158957ce9b3682b3e3842f48bcc66",
-    modelSha256: "433ac0453d98beb58abf8f0bd60cd674e573846b08f3056118049b71ad8c66d3"
-  },
-  {
-    id: "lm2596-5",
-    voltage: 5,
-    archive: "snvma62",
-    file: "LM2596_5P0_TRANS.LIB",
-    subcircuit: "LM2596_5P0_TRANS",
-    sha256: "c8d6730cb669b577e013acd14653ef2be12035e778b3b4449e384c93bab8636f",
-    modelSha256: "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134"
-  },
-  {
-    id: "lm2596-12",
-    voltage: 12,
-    archive: "snvma63",
-    file: "LM2596_12P0_TRANS.LIB",
-    subcircuit: "LM2596_12P0_TRANS",
-    sha256: "8157546e5e9d715c0d891339cbcedc92424b9dc72e0fd63ee2fc88789940c091",
-    modelSha256: "4dea9cd7347281c5dce060fbdc4d58c887ffeba2d8d2213541a6507ad8d2d0a5"
-  }
-];
+var lm2596SourceModel = {
+  id: "lm2596-5",
+  archive: "snvma62",
+  file: "LM2596_5P0_TRANS.LIB",
+  subcircuit: "LM2596_5P0_TRANS",
+  sha256: "c8d6730cb669b577e013acd14653ef2be12035e778b3b4449e384c93bab8636f",
+  modelSha256: "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134"
+};
+var controllerModelSources = [lm2596SourceModel, ...referenceModels];
 var lm2596AdjustableDerivedModel = {
   id: "openpe-lm2596-adj",
   library: "OpenPE:lm2596-adj-derived",
   subcircuit: "OPENPE_DERIVED_LM2596_ADJ_TRANS",
-  sourceModelId: tiModels[1].id,
-  sourceSha256: tiModels[1].modelSha256,
-  sourceSubcircuit: tiModels[1].subcircuit,
+  sourceModelId: lm2596SourceModel.id,
+  sourceSha256: lm2596SourceModel.modelSha256,
+  sourceSubcircuit: lm2596SourceModel.subcircuit,
   referenceVoltage: 1.235,
   description: "OpenPE-derived adjustable model based on the official TI LM2596 5 V model; internal feedback divider removed. Not a TI-issued ADJ model."
-};
-var tiDcdcParts = tiModels.flatMap(
-  (model) => ["S", "T"].map((pkg) => ({
-    id: `Regulator_Switching:LM2596${pkg}-${model.voltage}`,
-    name: `LM2596${pkg}-${model.voltage}`,
-    library: "Regulator_Switching",
-    description: `Texas Instruments \xB7 ${model.voltage} V, 3 A Buck \xB7 150 kHz \xB7 ${pkg === "S" ? "TO-263-5" : "TO-220-5"}`,
-    keywords: "TI Texas Instruments DC/DC buck regulator power supply",
-    footprint: pkg === "S" ? "Package_TO_SOT_SMD:TO-263-5_TabPin3" : "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
-    model
-  }))
-);
-
-// resources/example-models-lock.json
-var example_models_lock_default = {
-  version: 1,
-  models: [
-    {
-      id: "example-1n4002",
-      file: "1N4002.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/1N4002.lib",
-      sha256: "f1c010faba354671fcd72cf227b33a28b21281a2f05d40fa07ed08dcb7e4a0aa"
-    },
-    {
-      id: "example-1n5818",
-      file: "1N5818.mod",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/royer/1N5818.mod",
-      sha256: "1590eb855e74a600fb62462691128b135d6bf24fdad32510762a02c9ae827037"
-    },
-    {
-      id: "example-ad8009",
-      file: "ad8009.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/ad8009.lib",
-      sha256: "6a93f52fbdd073c470a6cc7b217cee2c6124bb520dfe0f10a85aa99325abfb50"
-    },
-    {
-      id: "example-bc337-25-spice",
-      file: "bc337-25_spice.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/royer/bc337-25_spice.lib",
-      sha256: "f04b72fab18a8ac60761dc2ea9b656b652d657a41bef8007330937aebb03039c"
-    },
-    {
-      id: "example-daudiodriver",
-      file: "DAudioDriver.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/class-d/DAudioDriver.lib",
-      sha256: "0659f9c521d2b157650d71f3f253340017bc07d1142629468beb29c11bed523a"
-    },
-    {
-      id: "example-diode-bridge",
-      file: "diode_bridge.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/diode_bridge.lib",
-      sha256: "91faedbd293cd681b80e07cbf3d6a04c940854474560c958f7b753dd8174d4f0"
-    },
-    {
-      id: "example-diode",
-      file: "diode.mod",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/rectifier/diode.mod",
-      sha256: "b160f44c4bb90e7528633ce691d6ea94e94210bc9afc33335cb40961815911ce"
-    },
-    {
-      id: "example-fzt1049a",
-      file: "fzt1049a.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/fzt1049a.lib",
-      sha256: "c7060c71ac0e6c7bfa553362347495dd3d3d1b3758d7d746aed6bc95998786df"
-    },
-    {
-      id: "example-gan-pspice-gs-065-018-2-l-l1v3p3",
-      file: "GaN_PSpice_GS-065-018-2-L_L1V3P3.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/hv_converter/GaN_PSpice_GS-065-018-2-L_L1V3P3.lib",
-      sha256: "5cba9f7783c9e184792f4ccaf0c45807af1cb2b89bebf848a2944da0f9938e9b"
-    },
-    {
-      id: "example-genopamp",
-      file: "GenOpAmp.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/boost/GenOpAmp.lib",
-      sha256: "26097cf1a070a66711eec9de5f55bf74bd31be71bf17aa09f6cf2067a2a5c557"
-    },
-    {
-      id: "example-laser",
-      file: "laser.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/laser.lib",
-      sha256: "f8df727383c4562aa270efdfbf4909b8ed65295117b72162843b39e9053bee79"
-    },
-    {
-      id: "example-lm317",
-      file: "LM317.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/LM317.lib",
-      sha256: "e3e6eb3133235a69aa1d5e35182ac761631e2a72e2f359cf987cc35b5491aa0d"
-    },
-    {
-      id: "example-pwm2-model",
-      file: "pwm2_model.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/boost/pwm2_model.lib",
-      sha256: "ce9e5f45105beb27bf0755defb0e226ad6a883c0a6a5d4f71dd4d972c33bf485"
-    },
-    {
-      id: "example-st-silicon-carbide-schottky-v9",
-      file: "ST_SILICON_CARBIDE_SCHOTTKY_V9.LIB",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/hv_converter/ST_SILICON_CARBIDE_SCHOTTKY_V9.LIB",
-      sha256: "cdbad712387f633563d33e23ba84dc37326ff2fb43111ea51a7a1baeaec87d6c"
-    },
-    {
-      id: "example-xformer",
-      file: "xformer.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/xformer.lib",
-      sha256: "bda594e208eafb4f0464c1abf9320a4606df4245699985a357cf7b76508e24e1"
-    },
-    {
-      id: "example-simulation-spice",
-      file: "Simulation_SPICE.sp",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-symbols/495444d353551ba5f610d47d22c979c50b0bd70c/Simulation_SPICE.sp",
-      sha256: "093202ee7a2dd2446cdfe03107c273d14d5dc4bacac6e15a9e0320fa261a200d"
-    }
-  ]
 };
 
 // resources/emc-flyback-models-lock.json
@@ -249,22 +115,22 @@ var emc_flyback_models_lock_default = {
   models: [
     {
       id: "emc-flyback-control",
-      file: "circuits/EMC_flyback_control.lib",
+      file: "models/EMC_flyback_control.lib",
       sha256: "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990"
     },
     {
       id: "emc-flyback-irf520n",
-      file: "circuits/EMC_IRF520N.lib",
+      file: "models/EMC_IRF520N.lib",
       sha256: "18f550ce97364443584040a446fda2da0f80112e8f8a3e5e19c540db14fabf24"
     },
     {
       id: "emc-flyback-es2d",
-      file: "circuits/EMC_ES2D.lib",
+      file: "models/EMC_ES2D.lib",
       sha256: "efdb2de11b34a6ac43143733dab76c0b56fc8d9d763e2ebc7084d9d16affa1e7"
     },
     {
       id: "emc-flyback-ss510c",
-      file: "circuits/EMC_SS510C.lib",
+      file: "models/EMC_SS510C.lib",
       sha256: "f514e87c3677bd64e0b28b6ad5189f41dc790ec10812d36e1d23c69df3cc3291"
     }
   ]
@@ -272,27 +138,22 @@ var emc_flyback_models_lock_default = {
 
 // lib/simulation-models.ts
 var simulationModelDefinitions = [
-  ...tiModels.map((model) => ({
+  ...[lm2596SourceModel].map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.toUpperCase()}.lib`
+    file: `models/${model.id.toUpperCase()}.lib`
   })),
   ...referenceModels.map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.replace(/^reference-/, "").toUpperCase()}.lib`
-  })),
-  ...example_models_lock_default.models.map((model) => ({
-    id: model.id,
-    sha256: model.sha256,
-    file: `circuits/${model.file.replace(/\.[^.]+$/, ".lib")}`
+    file: `models/${model.id.replace(/^reference-/, "").toUpperCase()}.lib`
   })),
   ...emc_flyback_models_lock_default.models
 ];
 var definitionsByFile = /* @__PURE__ */ new Map();
 var caseInsensitiveFiles = /* @__PURE__ */ new Set();
 for (const definition of simulationModelDefinitions) {
-  if (!/^circuits\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) || caseInsensitiveFiles.has(definition.file.toLowerCase()))
+  if (!/^models\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) || caseInsensitiveFiles.has(definition.file.toLowerCase()))
     throw new Error("Simulation component filenames must be safe and unique.");
   caseInsensitiveFiles.add(definition.file.toLowerCase());
   definitionsByFile.set(definition.file, { ...definition });

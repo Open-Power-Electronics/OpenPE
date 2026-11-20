@@ -29,7 +29,6 @@ function relativePath(path: string) {
   return path
     .replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, '')
     .replace(/^\$\{KIPRJMOD\}\/(?:footprints\/)?models\//, '')
-    .replace(/^\$\{KIPRJMOD\}\/(?:3D|footprints)\//, '')
     .replace(/\.wrl$/i, '.step');
 }
 export function exampleModelPath(relative: string) {
@@ -49,7 +48,7 @@ export function resolveExampleModelRelative(allowed: readonly string[], path: st
 }
 export function portableExampleModelSource(source: string) {
   return source.replace(
-    /\$\{KIPRJMOD\}\/(?:(?:footprints\/)?models\/|footprints\/|3D\/)([^"\r\n]+)/g,
+    /\$\{KIPRJMOD\}\/(?:footprints\/)?models\/([^"\r\n]+)/g,
     (original, relative) => {
       const portable = portablePaths.get(relative);
       return portable ? '$' + '{KIPRJMOD}/' + portable : original;

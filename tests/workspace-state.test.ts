@@ -302,7 +302,7 @@ test('recovery metadata reuse matches exact source and never accepts or retains 
 });
 
 test('reused recovery metadata retains explicit example identity and filename', () => {
-  const manifest = createRequire(import.meta.url)('./fixtures/kicad/manifest.json');
+  const manifest = createRequire(import.meta.url)('../resources/example-catalog/manifest.json');
   const example = manifest.examples[0];
   const project = createProject();
   project.name = example.title;

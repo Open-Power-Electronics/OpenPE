@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 const { switchingStageFixture } = await tsImport(

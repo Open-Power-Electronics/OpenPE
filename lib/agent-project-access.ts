@@ -18,7 +18,7 @@ export function agentProjectSource(source: string): string {
   return source ? JSON.stringify(agentProject(JSON.parse(source))) : source;
 }
 
-export function agentNativeFiles(bundle: KiCadProjectFiles): KiCadProjectFiles {
+function agentNativeFiles(bundle: KiCadProjectFiles): KiCadProjectFiles {
   return { ...bundle, files: bundle.files.filter((file) => !isAgentRestrictedFile(file.name)) };
 }
 

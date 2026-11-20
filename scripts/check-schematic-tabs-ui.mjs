@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -12,7 +13,7 @@ import {
 } from './source-editor-test-helpers.mjs';
 
 // Isolated renderer with private IPC snapshots and native Source files in memory.
-const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+const source = formatTestProjectSource();
 // Source tree display order is presentation; compare exact filenames and bytes.
 const byName = (bundle) => ({
   ...bundle,
@@ -58,6 +59,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       releaseFile: async () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       open: async () => ({
@@ -200,7 +204,7 @@ try {
   await button('Source').click();
   await fillSource(page, '{discard this draft');
   await button('Close project').click();
-  await button("Don't save").click();
+  await button('Discard').click();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   assert.equal(saved, baseline, 'Discarding a project never deletes its saved file.');
   assert.deepEqual(errors, []);

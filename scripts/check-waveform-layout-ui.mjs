@@ -2,14 +2,16 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 // Isolated presentation checks: no Electron, provider, service or solver.
 const bundle = await build({
   stdin: {
     contents: `import React, {useState} from 'react';
       import {createRoot} from 'react-dom/client';
-      import Waveforms from './components/SimulationWaveforms';
+      import Waveforms from './plugins/spice-simulation/renderer/SimulationWaveforms';
       import {createCapabilityHost} from './api/capabilities';
+      import {loadWorkbenchPlugins} from './lib/workbench-plugins';
       const host = createCapabilityHost();
       window.waveformCapabilities = host;
       const time = Array.from({length: 101}, (_, i) => i / 10000);
@@ -26,7 +28,7 @@ const bundle = await build({
           capabilityHost={host} presentationRef={presentation}
           frequency={2000} running={false} message=""/>;
       }
-      createRoot(document.getElementById('root')).render(<App/>);`,
+      void loadWorkbenchPlugins().then(() => createRoot(document.getElementById('root')).render(<App/>));`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -44,7 +46,18 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.setContent('<div id="root" style="display:flex;width:1100px;height:700px"></div>');
+  await page.addInitScript(() => {
+    window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
+  });
+  await page.route('http://localhost/**', (route) =>
+    new URL(route.request().url()).pathname === '/api/workbench-plugins'
+      ? route.fulfill({ json: bundledWorkbenchCatalog() })
+      : route.fulfill({
+          contentType: 'text/html',
+          body: '<div id="root" style="display:flex;width:1100px;height:700px"></div>',
+        }),
+  );
+  await page.goto('http://localhost');
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });

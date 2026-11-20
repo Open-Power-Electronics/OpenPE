@@ -1,14 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createExample } from '../lib/examples';
+import { createReferenceExample } from '../lib/reference-examples';
 import { symbolBodyBounds } from '../lib/symbol-bounds';
 import { parseSExpr } from '../lib/sexpr';
 
-test('Rectifier D1 and C1 body targets do not overlap even when C1 is painted last', () => {
-  const d = createExample('kicad-rectifier').schematic;
-  const before = JSON.stringify(d);
+test('adjacent Home diode/capacitor body targets remain separate in either paint order', () => {
+  const d = createReferenceExample('reference-lm2596-to220-5-buck').schematic;
   const diode = d.parts.find((p) => p.ref === 'D1')!,
     capacitor = d.parts.find((p) => p.ref === 'C1')!;
+  diode.x = 0; diode.y = 0; diode.rotation = 0;
+  capacitor.x = 0; capacitor.y = 7.62; capacitor.rotation = 0;
+  d.parts = [diode, capacitor];
+  const before = JSON.stringify(d);
   // Reproduce the old 19 x 20 mm region swallowing the visible diode.
   assert.ok(
     diode.x >= capacitor.x - 9 &&

@@ -5,15 +5,15 @@ import { mkdtemp, readFile, writeFile, rm, cp, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { bundledWorkbenchCatalog, createWorkbenchPlugins } from '../server/workbench-plugins.mjs';
 import {
-  bundledWorkbenchCatalog,
-  createWorkbenchPlugins,
-  pcbDesignPluginId,
-  spicePluginId,
-  thermalPluginId,
-} from '../server/workbench-plugins.mjs';
-import { createPcbDesignGuidance } from '../server/pcb-design.mjs';
-import { pcbDesignDocuments, PCB_DESIGN_PLUGIN_ID } from '../lib/workbench-plugins';
+  PCB_DESIGN_PLUGIN_ID as pcbDesignPluginId,
+  SPICE_PLUGIN_ID as spicePluginId,
+  THERMAL_PLUGIN_ID as thermalPluginId,
+} from '../plugins/catalog.mjs';
+import { createPcbDesignGuidance } from '../plugins/pe-layout-skill/host/guidance.mjs';
+import { pcbDesignDocuments } from '../plugins/pe-layout-skill/renderer/capabilities';
+import { PCB_DESIGN_PLUGIN_ID } from '../plugins/catalog.mjs';
 import { startServer } from '../server/index.mjs';
 import { makePrompt } from '../server/agents.mjs';
 
@@ -47,9 +47,9 @@ test('partial plugin catalogs fail closed without adding or changing bundled ent
     await writeFile(file, bytes);
     const plugins = createWorkbenchPlugins(dir);
     await assert.rejects(plugins.list(), /preserved/);
-    await assert.rejects(plugins.requireSpice(), /preserved/);
-    await assert.rejects(plugins.requireThermal(), /preserved/);
-    await assert.rejects(plugins.requirePcbDesign(), /preserved/);
+    await assert.rejects(plugins.require('spice-simulation@openpe'), /preserved/);
+    await assert.rejects(plugins.require('pcb-thermal@openpe'), /preserved/);
+    await assert.rejects(plugins.require('ai-pcb-layout@openpe'), /preserved/);
     await assert.rejects(plugins.change('install', pcbDesignPluginId), /preserved/);
     assert.equal(await readFile(file, 'utf8'), bytes);
   }
@@ -63,15 +63,18 @@ test('partial plugin catalogs fail closed without adding or changing bundled ent
   });
   await writeFile(file, complete);
   const plugins = createWorkbenchPlugins(dir);
-  await plugins.requirePcbDesign();
-  await assert.rejects(plugins.requireSpice(), /Install and enable/);
-  await assert.rejects(plugins.requireThermal(), /Install and enable/);
+  await plugins.require('ai-pcb-layout@openpe');
+  await assert.rejects(plugins.require('spice-simulation@openpe'), /Install and enable/);
+  await assert.rejects(plugins.require('pcb-thermal@openpe'), /Install and enable/);
   assert.equal(await readFile(file, 'utf8'), complete);
   await plugins.change('uninstall', pcbDesignPluginId);
-  await assert.rejects(createWorkbenchPlugins(dir).requirePcbDesign(), /Install and enable/);
+  await assert.rejects(
+    createWorkbenchPlugins(dir).require('ai-pcb-layout@openpe'),
+    /Install and enable/,
+  );
   await assert.rejects(plugins.change('enable', pcbDesignPluginId), /Install the plugin/);
   await plugins.change('install', pcbDesignPluginId);
-  await createWorkbenchPlugins(dir).requirePcbDesign();
+  await createWorkbenchPlugins(dir).require('ai-pcb-layout@openpe');
 });
 
 test('all pinned documents, attribution and capability selectors agree with the packaged offline bundle', async (t) => {
@@ -79,7 +82,9 @@ test('all pinned documents, attribution and capability selectors agree with the 
   const plugins = createWorkbenchPlugins(dir);
   const guidance = createPcbDesignGuidance(plugins);
   t.after(() => guidance.close());
-  const manifest = JSON.parse(await readFile('server/pcb-design/manifest.json', 'utf8'));
+  const manifest = JSON.parse(
+    await readFile('plugins/pe-layout-skill/resources/manifest.json', 'utf8'),
+  );
   assert.equal(PCB_DESIGN_PLUGIN_ID, pcbDesignPluginId);
   assert.deepEqual(
     manifest.documents.map((row: any) => row.id).sort(),
@@ -87,7 +92,7 @@ test('all pinned documents, attribution and capability selectors agree with the 
   );
   assert.equal(manifest.documents.length, 11);
   for (const entry of manifest.documents) {
-    const bytes = await readFile(path.join('server/pcb-design', entry.file));
+    const bytes = await readFile(path.join('plugins/pe-layout-skill/resources', entry.file));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
     const result = await guidance.read(entry.id, undefined);
     assert.equal(result.text, bytes.toString('utf8'));
@@ -98,7 +103,7 @@ test('all pinned documents, attribution and capability selectors agree with the 
     assert.match(result.integration, /does not waive engineering gates/);
   }
   const license = await readFile('public/licenses/ai-pcb-layout.txt', 'utf8');
-  assert.ok(license.includes(await readFile('server/pcb-design/LICENSE', 'utf8')));
+  assert.ok(license.includes(await readFile('plugins/pe-layout-skill/resources/LICENSE', 'utf8')));
   assert.ok(license.includes(manifest.revision));
   await assert.rejects(guidance.read('../LICENSE', undefined), /Unknown PCB design document/);
   await plugins.change('disable', pcbDesignPluginId);
@@ -119,8 +124,8 @@ test('disabling guidance revokes an in-flight read even if re-enabled before it 
   });
   const guidance = createPcbDesignGuidance({
     ...plugins,
-    async requirePcbDesign() {
-      await plugins.requirePcbDesign();
+    async require(_id: string) {
+      await plugins.require('ai-pcb-layout@openpe');
       entered();
       await blocked;
     },
@@ -139,20 +144,14 @@ test('a corrupted or missing bundled document fails visibly and a cancelled read
   const dir = await temporary(t);
   // Load an isolated copy to exercise the real fixed-resource reader, without
   // touching the application's resources or introducing a runtime path option.
-  for (const filename of [
-    'pcb-design.mjs',
-    'workbench-plugins.mjs',
-    'workbench-plugin-catalog.json',
-    'pcb-design',
-  ])
-    await cp(path.join('server', filename), path.join(dir, filename), { recursive: true });
+  await cp('plugins', path.join(dir, 'plugins'), { recursive: true });
   const { createPcbDesignGuidance: createIsolated } = await import(
-    pathToFileURL(path.join(dir, 'pcb-design.mjs')).href
+    pathToFileURL(path.join(dir, 'plugins/pe-layout-skill/host/guidance.mjs')).href
   );
   const plugins = createWorkbenchPlugins(dir);
   const guidance = createIsolated(plugins);
   t.after(() => guidance.close());
-  const manifestFile = path.join(dir, 'pcb-design', 'manifest.json');
+  const manifestFile = path.join(dir, 'plugins/pe-layout-skill/resources', 'manifest.json');
   const manifestBytes = await readFile(manifestFile, 'utf8');
   await unlink(manifestFile);
   await assert.rejects(guidance.read('workflow'), /missing or corrupt/);
@@ -162,7 +161,7 @@ test('a corrupted or missing bundled document fails visibly and a cancelled read
   await assert.rejects(guidance.read('workflow'), /missing or corrupt/);
   await writeFile(manifestFile, manifestBytes);
   assert.match((await guidance.read('workflow')).text, /Human review gates/);
-  const file = path.join(dir, 'pcb-design', 'SKILL.md');
+  const file = path.join(dir, 'plugins/pe-layout-skill/resources', 'SKILL.md');
   const control = new AbortController();
   control.abort();
   await assert.rejects(guidance.read('workflow', control.signal), /cancelled/);

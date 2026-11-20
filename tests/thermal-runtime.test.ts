@@ -6,14 +6,14 @@ import {
   thermalGeometry,
   parseThermalPlanarMesh,
   extrudeThermalMesh,
-} from '../server/thermal-mesh.mjs';
+} from '../plugins/layout-thermal/host/thermal-mesh.mjs';
 import {
   thermalResultFromVtu,
   thermalSif,
   runThermalSimulation,
   detectThermal,
   readThermalGmshLog,
-} from '../server/thermal-runtime.mjs';
+} from '../plugins/layout-thermal/host/thermal-runtime.mjs';
 
 const polygon = {
   outer: [

@@ -13,7 +13,7 @@ const directorySource = readFileSync(
   'utf8',
 );
 const spicePickerSource = readFileSync(
-  new URL('../electron/spice-model-picker.cjs', import.meta.url),
+  new URL('../plugins/spice-simulation/electron/spice-model-picker.cjs', import.meta.url),
   'utf8',
 );
 
@@ -28,7 +28,7 @@ test('desktop preload forwards every operation to a registered main channel and 
         readFileSync(new URL('../electron/cursor-credential.cjs', import.meta.url), 'utf8'),
       ]
         .join('\n')
-        .matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
+        .matchAll(/(?:ipcMain|workbenchIpc)\.handle\(\s*'([^']+)'/g),
     ].map((match) => match[1]),
   );
   const closeChannels = [...mainSource.matchAll(/win\.webContents\.send\(\s*'([^']+)'/g)].map(
@@ -69,6 +69,9 @@ test('desktop preload forwards every operation to a registered main channel and 
   const options = { fileId: 'opaque-project-id', source: 'validated native source' };
   const operations: Array<[string, string, unknown[]]> = [
     ['connection', 'connection', []],
+    ['setRawKiCadMode', 'set-raw-kicad-mode', [true]],
+    ['chooseRawKiCadFiles', 'choose-raw-kicad-files', []],
+    ['openLibraryHomepage', 'open-library-homepage', ['jlceda']],
     ['cursorCredentialStatus', 'cursor-credential-status', []],
     ['cursorCredentialStore', 'cursor-credential-store', ['cursor_test_key_value_0001']],
     ['cursorCredentialRemove', 'cursor-credential-remove', []],
@@ -77,6 +80,7 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['openRecent', 'open-recent', ['recent-id']],
     ['listRecent', 'list-recent', []],
     ['removeRecent', 'remove-recent', ['recent-id']],
+    ['pinRecent', 'pin-recent', ['recent-id', true]],
     ['previewRecent', 'preview-recent', ['recent-id']],
     ['acceptOpen', 'accept-open', [1]],
     ['newFile', 'new', []],
@@ -85,8 +89,8 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['releaseFile', 'release-file', ['opaque-project-id']],
     ['revealFile', 'reveal-file', ['opaque-project-id']],
     ['projectDirectory', 'project-directory', ['opaque-project-id']],
-    ['chooseSpiceModel', 'choose-spice-model', ['opaque-project-id', 'circuits/controller.lib']],
-    ['inspectSpiceModel', 'inspect-spice-model', ['opaque-project-id', 'circuits/controller.lib']],
+    ['chooseSpiceModel', 'choose-spice-model', ['opaque-project-id', 'models/controller.lib']],
+    ['inspectSpiceModel', 'inspect-spice-model', ['opaque-project-id', 'models/controller.lib']],
     [
       'projectFilePreview',
       'project-file-preview',
@@ -127,7 +131,10 @@ test('desktop preload forwards every operation to a registered main channel and 
   }
   assert.deepEqual(new Set(calls.map((call) => call.channel)), mainChannels);
 
-  assert.deepEqual([...new Set(closeChannels)], ['openpe:recent-changed', 'openpe:close-requested']);
+  assert.deepEqual(
+    [...new Set(closeChannels)],
+    ['openpe:recent-changed', 'openpe:close-requested'],
+  );
   let recentCalls = 0;
   const unsubscribeRecent = (bridge.onRecentChanged as (callback: () => void) => () => void)(
     (...args) => {
@@ -207,9 +214,10 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
             './native-project.cjs',
             './workspace-recovery.cjs',
             './project-directory.cjs',
-            './spice-model-picker.cjs',
+            '../plugins/spice-simulation/electron/spice-model-picker.cjs',
             './component-model-picker.cjs',
             './cursor-credential.cjs',
+            './plugin-installer.cjs',
           ].includes(specifier),
           `Unexpected bootstrap dependency: ${specifier}`,
         );
@@ -230,7 +238,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
   }
 });
 
-test('desktop chrome is overlay on Windows and inset on macOS', () => {
+test('desktop chrome is overlay on Windows/Linux and inset on macOS', () => {
   const expose = (platform: string) => {
     let api: Record<string, unknown> | undefined;
     new vm.Script(preloadSource, { filename: 'electron/preload.cjs' }).runInNewContext({
@@ -254,5 +262,9 @@ test('desktop chrome is overlay on Windows and inset on macOS', () => {
     { overlay: expose('darwin').titleBarOverlay, inset: expose('darwin').titleBarInset },
     { overlay: true, inset: true },
   );
-  assert.throws(() => expose('linux'), /Unsupported desktop platform linux/);
+  assert.deepEqual(
+    { overlay: expose('linux').titleBarOverlay, inset: expose('linux').titleBarInset },
+    { overlay: true, inset: false },
+  );
+  assert.throws(() => expose('freebsd'), /Unsupported desktop platform freebsd/);
 });

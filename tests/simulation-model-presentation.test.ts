@@ -10,17 +10,17 @@ import { createPart, emptyCircuit } from '../lib/circuit';
 import { createHomeExample } from '../lib/create-home-example';
 import { createReferenceExample } from '../lib/reference-examples';
 import { switchingStageFixture } from './fixtures/switching-stage';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { partFields } from '../lib/library';
 
 test('model lookup stays inside the selected library, with only the reviewed derivative using its pinned source declaration', () => {
   const declarations = [{ name: 'RES_A' }, { name: 'RES_B' }];
   assert.equal(
-    simulationLibraryDeclaration('circuits/vendor.lib', 'RES_B', declarations),
+    simulationLibraryDeclaration('models/vendor.lib', 'RES_B', declarations),
     declarations[1],
   );
   assert.equal(
-    simulationLibraryDeclaration('circuits/vendor.lib', 'MISSING', declarations),
+    simulationLibraryDeclaration('models/vendor.lib', 'MISSING', declarations),
     undefined,
   );
   const source = [{ name: 'LM2596_5P0_TRANS' }];
@@ -33,7 +33,7 @@ test('model lookup stays inside the selected library, with only the reviewed der
     source[0],
   );
   assert.equal(
-    simulationLibraryDeclaration('circuits/other.lib', 'OPENPE_DERIVED_LM2596_ADJ_TRANS', source),
+    simulationLibraryDeclaration('models/other.lib', 'OPENPE_DERIVED_LM2596_ADJ_TRANS', source),
     undefined,
   );
 });
@@ -87,7 +87,7 @@ test('EMC initial values and model names match the generated execution bench', (
       circuit.parts.find((p) => p.ref === 'Q1')!,
       circuit,
     ).model,
-    'circuits/EMC_IRF520N.lib',
+    'models/EMC_IRF520N.lib',
   );
   assert.equal(
     simulationComponentPresentation(
@@ -101,16 +101,19 @@ test('EMC initial values and model names match the generated execution bench', (
 
 test('portable path presentation preserves distinct native identities sharing one model file', () => {
   for (const library of ['TI:lm2596-5', 'OpenPE:lm2596-adj-derived']) {
-    assert.equal(simulationLibraryPath(library), 'circuits/LM2596-5.lib');
-    assert.equal(simulationLibraryForPath('circuits/LM2596-5.lib', library), library);
+    assert.equal(simulationLibraryPath(library), 'models/LM2596-5.lib');
+    assert.equal(simulationLibraryForPath('models/LM2596-5.lib', library), library);
   }
-  assert.equal(simulationLibraryPath('TI:reference-lm25017'), 'circuits/LM25017.lib');
-  assert.equal(simulationLibraryForPath('circuits/LM25017.lib', ''), 'TI:reference-lm25017');
-  assert.equal(simulationLibraryPath('diode.mod'), 'circuits/diode.lib');
+  assert.equal(simulationLibraryPath('TI:reference-lm25017'), 'models/LM25017.lib');
+  assert.equal(simulationLibraryForPath('models/LM25017.lib', ''), 'TI:reference-lm25017');
+  assert.equal(simulationLibraryPath('diode.mod'), 'diode.mod');
   const upstream = '${KICAD7_SYMBOL_DIR}/Simulation_SPICE.sp';
-  assert.equal(simulationLibraryPath(upstream), 'circuits/Simulation_SPICE.lib');
-  assert.equal(simulationLibraryForPath('circuits/Simulation_SPICE.lib', ''), upstream);
-  const custom = 'circuits/custom.lib';
+  assert.equal(simulationLibraryPath(upstream), upstream);
+  assert.equal(
+    simulationLibraryForPath('models/Simulation_SPICE.lib', ''),
+    'models/Simulation_SPICE.lib',
+  );
+  const custom = 'models/custom.lib';
   assert.equal(simulationLibraryForPath(custom, 'TI:reference-lm25017'), custom);
   assert.equal(simulationLibraryPath(custom), custom);
 });

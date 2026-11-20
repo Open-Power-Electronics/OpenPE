@@ -6,10 +6,17 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
 import { createLibraryService, createStepParserPool } from './libraries.mjs';
+import { libraryAssetFailure } from './library-asset-error.mjs';
+import { registerLibraryDatasheetPreview } from './library-datasheets.mjs';
+import { isLibraryPriceRequest } from './library-prices.mjs';
 import { createWorkbenchPlugins, registerWorkbenchPlugins } from './workbench-plugins.mjs';
-import { createPcbDesignGuidance, registerPcbDesignGuidance } from './pcb-design.mjs';
-import { registerSpice } from './spice.mjs';
-import { registerThermal } from './thermal.mjs';
+
+import {
+  createPcbDesignGuidance,
+  registerPcbDesignGuidance,
+} from '../plugins/pe-layout-skill/host/guidance.mjs';
+import { registerSpice } from '../plugins/spice-simulation/host/spice.mjs';
+import { registerThermal } from '../plugins/layout-thermal/host/thermal.mjs';
 import { createPluginService, registerPlugins } from './plugins.mjs';
 
 function browserProviderPlugins() {
@@ -101,7 +108,7 @@ function mountBrowserPlugins(app, providerService) {
  * @param {{origin?: string, previewFactory?: typeof createModelCadPreviewService,
  * providerPluginService?: ReturnType<typeof createPluginService>,
  * libraryFactory?: (options: Parameters<typeof createLibraryService>[0]) =>
- * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'close'>}} [options]
+ * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'price' | 'datasheet' | 'close'>}} [options]
  */
 export async function startBrowserPreviewServer({
   origin = 'http://127.0.0.1:3000',
@@ -136,7 +143,10 @@ export async function startBrowserPreviewServer({
     close() {},
   };
   const previews = previewFactory({ parseStep: sharedParsers.run });
-  const libraries = libraryFactory({ allowModelDownloads: false, stepParserPool: sharedParsers });
+  const libraries = libraryFactory({
+    allowModelDownloads: false,
+    stepParserPool: sharedParsers,
+  });
   const requests = new Set();
   function requestSignal(res) {
     const control = new AbortController();
@@ -194,6 +204,19 @@ export async function startBrowserPreviewServer({
       if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
     }
   });
+  app.post('/api/browser-preview/price', express.json({ limit: '2kb' }), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!isLibraryPriceRequest(req.body))
+      return res.status(400).json({ error: 'Send a component ID, library kind and price source.' });
+    const signal = requestSignal(res);
+    try {
+      const result = await libraries.price(req.body, signal);
+      if (!res.destroyed) res.json(result);
+    } catch (error) {
+      if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));
+    }
+  });
+  registerLibraryDatasheetPreview(app, '/api/browser-preview/datasheet', libraries);
   for (const kind of ['footprint', 'model']) {
     app.post(`/api/browser-preview/${kind}`, express.json({ limit: '1kb' }), async (req, res) => {
       const body = req.body;
@@ -220,7 +243,7 @@ export async function startBrowserPreviewServer({
         signal.throwIfAborted();
         if (!res.destroyed) res.json(result);
       } catch (error) {
-        if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
+        if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));
       }
     });
   }

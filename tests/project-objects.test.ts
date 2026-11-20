@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createPart, emptyCircuit, pinPositions, uid } from '../lib/circuit';
 import { exampleProject } from '../lib/project-example';
 import { createReferenceExample } from '../lib/reference-examples';
-import { createExample } from '../lib/examples';
 import {
   createProject,
   exportKiCad,
@@ -281,8 +280,10 @@ test('ambiguous duplicate ownership, parent links and obsolete layouts fail befo
     assert.throws(() => parseProject(JSON.stringify(document)), /Invalid OpenPE project/);
     assert.throws(() => serviceParse(JSON.stringify(document)), /Invalid OpenPE project/);
   }
-  const simulation = JSON.parse(serializeProject(createExample('kicad-buck')));
-  const part = simulation.schematic.components.find((item: any) => item.reference === 'R101');
-  part.simulation.parameters = 'r=99';
+  const simulation = JSON.parse(
+    serializeProject(createReferenceExample('reference-lm2598-to220-7-buck')),
+  );
+  const part = simulation.schematic.components.find((item: any) => item.reference === 'R1');
+  part.simulation = { device: 'R', type: '=', pins: '1=+ 2=-', valueFormat: 'r=${VALUE}', parameters: 'r=99' };
   assert.throws(() => parseProject(JSON.stringify(simulation)), /replaces Sim.Params/);
 });

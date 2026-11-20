@@ -1,3 +1,4 @@
+import { prepareWorkbenchPlugins } from './fixtures/workbench-plugins';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityHost } from '../api/capabilities';
@@ -5,7 +6,9 @@ import { resolveAgentCapability, type AgentCapabilityRequest } from '../lib/chat
 import {
   registerSimulationCapabilities,
   type SimulationCapabilityAdapter,
-} from '../lib/simulation-capabilities';
+} from '../plugins/spice-simulation/renderer/simulation-capabilities';
+
+await prepareWorkbenchPlugins();
 
 function fixture(revision?: () => string) {
   let enabled = true;

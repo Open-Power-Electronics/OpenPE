@@ -3,14 +3,16 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertLockedRelease, sha256File } from './solver-release.mjs';
+import { hostSolverPlatform } from '../server/solver-platform.mjs';
 
 const workspace = fileURLToPath(new URL('../', import.meta.url));
 const repo = 'fleaxiao/OpenPE';
+const platform = hostSolverPlatform();
 const releases = [
-  ['resources/ngspice-lock.json', 'OpenPE darwin-arm64 ngspice 47 console.'],
+  ['resources/ngspice-lock.json', `OpenPE ${platform} ngspice 47 console.`],
   [
     'resources/thermal-lock.json',
-    'OpenPE darwin-arm64 Gmsh 4.15.2, Elmer 26.1 and OpenBLAS 0.3.13.',
+    `OpenPE ${platform} Gmsh 4.15.2, Elmer 26.1 and OpenBLAS 0.3.13.`,
   ],
 ];
 
@@ -30,7 +32,7 @@ function gh(args) {
 
 for (const [lockFile, summary] of releases) {
   const lock = JSON.parse(await readFile(path.join(workspace, lockFile), 'utf8'));
-  const archive = assertLockedRelease(lock.platforms['darwin-arm64'].archive);
+  const archive = assertLockedRelease(lock.platforms[platform].archive);
   const file = path.join(workspace, 'release/solvers', archive.name);
   const packed = await sha256File(file);
   if (!packed || packed.sha256 !== archive.sha256 || packed.size !== archive.size)

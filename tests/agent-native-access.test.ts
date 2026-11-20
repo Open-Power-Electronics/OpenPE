@@ -22,7 +22,7 @@ function fixture(withModel = true) {
   project.schematic.title = 'Original';
   project.pcb = createEmptyPCB();
   const native = projectNativeFiles(project, 'Example.kicad_pro');
-  if (withModel) native.files.splice(1, 0, { name: 'circuits/device.lib', source: secret });
+  if (withModel) native.files.splice(1, 0, { name: 'models/device.lib', source: secret });
   native.files.push({ name: 'Example.kicad_dru', source: '(version 1)\n' });
   const core = new ProjectCore(projectFromNativeFiles(native));
   const host = createCapabilityHost({ revision: () => String(core.getSnapshot().revision) });
@@ -34,7 +34,7 @@ function fixture(withModel = true) {
       expectedRevision: String(core.getSnapshot().revision),
     });
   const protectedBytes = () =>
-    core.getNativeFiles().files.find((file) => file.name === 'circuits/device.lib')!.source;
+    core.getNativeFiles().files.find((file) => file.name === 'models/device.lib')!.source;
   return { core, host, query, execute, protectedBytes };
 }
 
@@ -130,7 +130,7 @@ test('Agent raw snapshot, Source and paste inputs cannot introduce or change pro
     ['project.replace', { source: JSON.stringify(current) }],
     ['source.update', { draft: JSON.stringify(current) }],
     ['source.update', { draft: JSON.stringify(native) }],
-    ['source.updateFile', { name: 'circuits/device.lib', source: 'changed' }],
+    ['source.updateFile', { name: 'models/device.lib', source: 'changed' }],
     [
       'schematic.paste',
       {
@@ -162,7 +162,7 @@ test('pending GUI model edits and malformed private drafts stay private and cann
   const f = fixture();
   await f.host.execute(
     'source.updateFile',
-    { name: 'circuits/device.lib', source: secret + '* GUI edit\n' },
+    { name: 'models/device.lib', source: secret + '* GUI edit\n' },
     { actor: 'human' },
   );
   const before = f.core.getSnapshot();

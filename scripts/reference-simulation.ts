@@ -12,9 +12,9 @@ import { createLibraryPart, partFields, unitGraphics } from '../lib/library';
 import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
 import { moveSelection } from '../lib/schematic-edit';
 import { onWire, samePoint } from '../lib/wiring';
-import { spiceNets } from '../lib/spice';
+import { spiceNets } from '../plugins/spice-simulation/domain/spice';
 import models from '../resources/reference-models-lock.json';
-import { lm2596AdjustableDerivedModel, tiModels } from '../lib/ti-dcdc';
+import { lm2596AdjustableDerivedModel, lm2596SourceModel } from '../lib/reference-models';
 
 const stable = (seed: string) => {
   const h = createHash('sha256').update(seed).digest('hex');
@@ -204,7 +204,7 @@ function simulationBenchPosition(d: Circuit, id: string) {
 export function prepareReferenceSimulation(d: Circuit, id: string, modelId: string) {
   const config = settings[modelId];
   if (!config) throw new Error(`${id}: missing official simulation model.`);
-  const model = [...tiModels, ...models.models].find((m) => m.id === modelId)!;
+  const model = [lm2596SourceModel, ...models.models].find((m) => m.id === modelId)!;
   const controller = d.parts.find((p) => p.ref === 'U1')!;
   const originalIdentity = controller.libId;
   // Preserve source-embedded geometry, while giving modified dataset drawings an

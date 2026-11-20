@@ -5,6 +5,7 @@ import { schematicTexts } from './schematic-text';
 import { extraSymbolAnnotations } from './library';
 import type { SchematicLayers } from './schematic-layers';
 import { isOwnedCircuit } from './immutable-project';
+import { schematicSectionIds, type SchematicSectionView } from './schematic-section';
 
 export function globalLabelPath(label: Label) {
   const end = Math.max(9, label.text.length * 1.4 + 5),
@@ -45,26 +46,42 @@ const visibilityLayerKeys = [
   'noConnects',
 ] as const;
 
-/** Electrical targets ignore annotation visibility, retaining the same displayed
- * junction filtering as selection and drawing. */
+/** Electrical targets use active section membership independently of emphasis,
+ * retaining the same junction filtering as selection and drawing. */
 export function visibleSchematicWireTargetIds(
   doc: Circuit,
   layers: Pick<SchematicLayers, 'symbols' | 'wires' | 'labels'>,
+  sectionView: SchematicSectionView = 'all',
 ): Set<string> {
-  return new Set([
+  const ids = new Set([
     ...(layers.symbols ? doc.parts.map((part) => part.id) : []),
     ...(layers.wires ? [...doc.wires, ...visibleJunctions(doc)].map((item) => item.id) : []),
     ...(layers.labels ? doc.labels.map((label) => label.id) : []),
   ]);
+  if (sectionView !== 'all') {
+    const section = schematicSectionIds(doc, sectionView);
+    for (const id of ids) if (!section.has(id)) ids.delete(id);
+  }
+  return ids;
 }
 
 const ownedVisibleIds = new WeakMap<Circuit, Map<number, Set<string>>>();
-export function visibleSchematicIds(doc: Circuit, layers: SchematicLayers): Set<string> {
+/** Layer-visible interaction IDs. A section limits eligible targets; geometry in
+ * other sections remains displayed dimmed by the renderer. Omit it for display bounds. */
+export function visibleSchematicIds(
+  doc: Circuit,
+  layers: SchematicLayers,
+  sectionView: SchematicSectionView = 'all',
+): Set<string> {
   const owned = isOwnedCircuit(doc);
-  const key = visibilityLayerKeys.reduce(
+  const layerKey = visibilityLayerKeys.reduce(
     (value, name, index) => value | (layers[name] ? 1 << index : 0),
     0,
   );
+  const key =
+    layerKey |
+    ((sectionView === 'hardware' ? 1 : sectionView === 'simulation' ? 2 : 0) <<
+      visibilityLayerKeys.length);
   const variants = owned ? ownedVisibleIds.get(doc) : undefined;
   const cached = variants?.get(key);
   if (cached) return new Set(cached);
@@ -83,6 +100,10 @@ export function visibleSchematicIds(doc: Circuit, layers: SchematicLayers): Set<
     ...(layers.noConnects ? doc.noConnects || [] : []),
   ])
     ids.add(item.id);
+  if (sectionView !== 'all') {
+    const section = schematicSectionIds(doc, sectionView);
+    for (const id of ids) if (!section.has(id)) ids.delete(id);
+  }
   if (owned) {
     const next = variants ?? new Map<number, Set<string>>();
     next.set(key, ids);

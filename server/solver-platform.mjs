@@ -1,4 +1,4 @@
-const solverPlatforms = ['win32-x64', 'darwin-arm64'];
+export const solverPlatforms = ['win32-x64', 'darwin-arm64', 'linux-x64'];
 
 export function hostSolverPlatform() {
   const id = `${process.platform}-${process.arch}`;

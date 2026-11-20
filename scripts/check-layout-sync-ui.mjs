@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import {
   parseProject,
   serializeProject,
@@ -32,7 +33,7 @@ import {
 
 // Isolated full workspace: no Electron, provider, solver or native file access.
 const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
-const fixture = parseProject(await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8'));
+const fixture = parseProject(formatTestProjectSource());
 // This test exercises physical package synchronization, so assign the source
 // embedded packages explicitly rather than treating virtual parts as physical.
 for (const footprint of fixture.pcb.footprints) {

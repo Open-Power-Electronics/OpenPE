@@ -114,7 +114,7 @@ function validateAnnotations(value) {
     const elements = /* @__PURE__ */ new Set();
     for (const rawElement of a.elements) {
       const e = record(rawElement, ["id", "kind", "label", "properties"]);
-      if (!text(e.id, 64) || !uuid.test(e.id) && (layout || !/^field\/[0-9a-f-]{36}\/(Reference|Value|Sim\.Params)$/i.test(e.id)) || elements.has(e.id) || !(layout ? ["footprint", "pad", "track", "via", "graphic", "zone"] : ["component", "field", "wire", "label", "junction", "no-connect", "text"]).includes(String(e.kind)) || !text(e.label, 4096))
+      if (!text(e.id, 64) || !uuid.test(e.id) && (layout || !/^field\/[0-9a-f-]{36}\/(Reference|Value|Sim\.Params)$/i.test(e.id)) || elements.has(e.id) || !(a.target === "object" && e.kind === "solid") && !(layout ? ["footprint", "pad", "track", "via", "graphic", "zone"] : ["component", "field", "wire", "label", "junction", "no-connect", "text"]).includes(String(e.kind)) || !text(e.label, 4096))
         throw new Error("Invalid annotated element.");
       elements.add(e.id);
       const properties = record(e.properties);
@@ -279,7 +279,7 @@ var home_manifest_default = {
 
 // lib/home-examples.ts
 var homeExamples = home_manifest_default.examples;
-var homeRecent = home_manifest_default.recent;
+var homeRecent = home_manifest_default.recent.map((entry) => ({ ...entry, pinned: true }));
 var homeExampleCatalog = [...homeRecent, ...homeExamples];
 
 // lib/workspace-example.ts
@@ -334,6 +334,14 @@ function isReasoningEffort(value) {
 }
 function isAgentProvider(value) {
   return agentProviders.some(({ id }) => id === value);
+}
+function validModelId(value) {
+  return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(value);
+}
+function validAgentModelId(provider, value) {
+  if (provider === "deepseek")
+    return typeof value === "string" && value.length <= 512 && Boolean(value.trim()) && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+  return validModelId(value);
 }
 
 // lib/workspace-state.ts
@@ -463,7 +471,7 @@ function restoreWorkspace(value) {
   if (Object.keys(models).length !== agentProviderIds.length)
     throw new Error("Invalid saved Agent model list.");
   for (const id of agentProviderIds)
-    if (typeof models[id] !== "string" || models[id] !== "" && !/^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(models[id]))
+    if (typeof models[id] !== "string" || models[id] !== "" && !validAgentModelId(id, models[id]))
       throw new Error("Invalid saved Agent model.");
   return {
     version: 2,

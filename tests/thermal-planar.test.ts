@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { polygonResolution } from '../lib/pcb-polygons';
-import { thermalContourSnapTolerance, thermalPlanarGraph } from '../server/thermal-planar.mjs';
+import {
+  thermalContourSnapTolerance,
+  thermalPlanarGraph,
+} from '../plugins/layout-thermal/host/thermal-planar.mjs';
 
 const square = (left: number, top: number, right: number, bottom: number) => [
   { x: left, y: top },

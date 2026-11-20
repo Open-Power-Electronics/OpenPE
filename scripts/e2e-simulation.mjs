@@ -4,7 +4,10 @@ const { switchingStageSource } = await tsImport(
   import.meta.url,
 );
 const { parseProject } = await tsImport('../lib/project.ts', import.meta.url);
-const { buildSpiceDeck } = await tsImport('../lib/spice.ts', import.meta.url);
+const { buildSpiceDeck } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
 // Run only when desktop testing is explicitly requested. Waveforms here are test fixtures.
 import { _electron as electron } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';

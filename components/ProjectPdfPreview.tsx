@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import WorkspaceLoading from './WorkspaceLoading';
 
 const maximumPdfBytes = 32 * 1024 * 1024;
 
@@ -67,9 +68,9 @@ export default function ProjectPdfPreview({
     );
   if (document?.key !== key)
     return (
-      <p role="status" data-agent-private>
-        Loading PDF…
-      </p>
+      <div className="project-pdf-loading" data-agent-private>
+        <WorkspaceLoading panel label="Loading PDF" />
+      </div>
     );
   return (
     <iframe

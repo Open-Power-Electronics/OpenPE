@@ -83,7 +83,12 @@ export default function FieldProperties({
   }
 
   return (
-    <div className="field-properties">
+    <div
+      className="field-properties"
+      data-pending-edit={
+        draft !== text || coordinates.x !== fmt(position.x) || coordinates.y !== fmt(position.y)
+      }
+    >
       <label>
         {field}
         <input
@@ -107,16 +112,12 @@ export default function FieldProperties({
               event.nativeEvent.isComposing ||
               event.nativeEvent.keyCode === 229
             ) {
-              if ((isCommandModifier(event)) && event.key.toLowerCase() === 's')
+              if (isCommandModifier(event) && event.key.toLowerCase() === 's')
                 event.preventDefault();
               event.stopPropagation();
               return;
             }
-            if (
-              onRequestSave &&
-              (isCommandModifier(event)) &&
-              event.key.toLowerCase() === 's'
-            ) {
+            if (onRequestSave && isCommandModifier(event) && event.key.toLowerCase() === 's') {
               event.preventDefault();
               event.stopPropagation();
               if (saveText()) onRequestSave(event.shiftKey);
@@ -155,11 +156,7 @@ export default function FieldProperties({
                   event.stopPropagation();
                   return;
                 }
-                if (
-                  onRequestSave &&
-                  (isCommandModifier(event)) &&
-                  event.key.toLowerCase() === 's'
-                ) {
+                if (onRequestSave && isCommandModifier(event) && event.key.toLowerCase() === 's') {
                   event.preventDefault();
                   event.stopPropagation();
                   if (savePosition(axis)) onRequestSave(event.shiftKey);

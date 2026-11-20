@@ -2,15 +2,8 @@ import path from 'node:path';
 import { open, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-const catalog = JSON.parse(
-  await readFile(new URL('./workbench-plugin-catalog.json', import.meta.url), 'utf8'),
-);
+import { bundledPlugins as catalog } from '../plugins/catalog.mjs';
 const actions = ['install', 'uninstall', 'enable', 'disable'];
-const disabledMessage =
-  'Install and enable SPICE Simulation in Plugins > Marketplace to run simulations.';
-export const spicePluginId = 'spice-simulation@openpe';
-export const thermalPluginId = 'pcb-thermal@openpe';
-export const pcbDesignPluginId = 'ai-pcb-layout@openpe';
 
 export function bundledWorkbenchCatalog() {
   return {
@@ -21,6 +14,7 @@ export function bundledWorkbenchCatalog() {
     updatedAt: Date.now(),
     plugins: catalog.map((plugin) => ({
       ...plugin,
+      marketplace: 'OpenPE Marketplace',
       scope: 'application',
       origin: 'openpe',
       managed: false,
@@ -96,34 +90,36 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
         ...plugin,
         ...rows.find((row) => row.id === plugin.id),
       }));
+      if (options.runtime) result.plugins.push(...(await options.runtime.list()));
       return result;
     },
-    async requireSpice() {
+    async require(id) {
       await tail;
-      const plugin = (await read()).find((row) => row.id === spicePluginId);
-      if (!plugin?.installed || !plugin.enabled) throw new Error(disabledMessage);
-    },
-    async requireThermal() {
-      await tail;
-      const plugin = (await read()).find((row) => row.id === thermalPluginId);
+      const builtin = catalog.find((row) => row.id === id);
+      // A local package failure cannot block an unrelated built-in solver/guidance gate.
+      const plugin = builtin
+        ? { ...builtin, ...(await read()).find((row) => row.id === id) }
+        : (await options.runtime?.list())?.find((row) => row.id === id);
       if (!plugin?.installed || !plugin.enabled)
         throw new Error(
-          'Install and enable Layout Thermal in Plugins > Marketplace to run thermal analysis.',
-        );
-    },
-    async requirePcbDesign() {
-      await tail;
-      const plugin = (await read()).find((row) => row.id === pcbDesignPluginId);
-      if (!plugin?.installed || !plugin.enabled)
-        throw new Error(
-          'Install and enable PE Layout Skill in Plugins > Marketplace to read PCB design guidance.',
+          `Install and enable ${plugin?.name ?? id} in Plugins > Marketplace to use this plugin.`,
         );
     },
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      const removeRuntime = options.runtime?.subscribe(listener);
+      return () => {
+        listeners.delete(listener);
+        removeRuntime?.();
+      };
     },
     async change(action, id, signal) {
+      if (
+        !catalog.some((plugin) => plugin.id === id) &&
+        options.runtime &&
+        actions.includes(action)
+      )
+        return options.runtime.change(action, id, signal);
       if (!actions.includes(action) || !catalog.some((plugin) => plugin.id === id))
         throw new Error('Unknown OpenPE plugin or action. Choose a plugin from Marketplace.');
       const operation = tail.then(async () => {
@@ -145,9 +141,13 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
         if (file) {
           const temp = `${file}.${randomUUID()}.tmp`;
           try {
-            await (options.write || writeFile)(temp, JSON.stringify({ version: 1, plugins: next }), {
-              flag: 'wx',
-            });
+            await (options.write || writeFile)(
+              temp,
+              JSON.stringify({ version: 1, plugins: next }),
+              {
+                flag: 'wx',
+              },
+            );
             if (signal?.aborted)
               throw new Error('Plugin operation cancelled. Refresh to check its state.');
             await rename(temp, file);
@@ -188,7 +188,7 @@ export function registerWorkbenchPlugins(app, service) {
       !req.body ||
       Object.keys(req.body).some((key) => !['id', 'action'].includes(key)) ||
       !actions.includes(req.body.action) ||
-      !catalog.some((plugin) => plugin.id === req.body.id)
+      typeof req.body.id !== 'string'
     )
       return res
         .status(400)
@@ -196,6 +196,11 @@ export function registerWorkbenchPlugins(app, service) {
     const control = new AbortController();
     res.on('close', () => control.abort());
     try {
+      if (!(await service.list()).plugins.some((plugin) => plugin.id === req.body.id))
+        return res.status(400).json({
+          error:
+            'Unknown OpenPE plugin. Choose an installed plugin or a bundled Marketplace entry.',
+        });
       res.json(await service.change(req.body.action, req.body.id, control.signal));
     } catch (error) {
       if (!res.destroyed) res.status(503).json({ error: error.message });

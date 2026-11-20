@@ -12,12 +12,12 @@ const bundle = await build({
     contents: `
       import React, {useRef, useState} from 'react';
       import {createRoot} from 'react-dom/client';
-      import SimulationDialog from './components/SimulationDialog';
+      import SimulationDialog from './plugins/spice-simulation/renderer/SimulationDialog';
       import {switchingStageFixture} from './tests/fixtures/switching-stage';
       import {createProject, serializeProject, parseProject} from './lib/project';
-      import {buildSpiceDeck, defaultTransient} from './lib/spice';
+      import {buildSpiceDeck, defaultTransient} from './plugins/spice-simulation/domain/spice';
       import {createCapabilityHost} from './api/capabilities';
-      import {loadWorkbenchPlugins} from './lib/workbench-plugins';
+      import { loadWorkbenchPlugins } from './lib/workbench-plugins';
       const original = serializeProject(createProject(switchingStageFixture()));
       const flyBuckOriginal = ${JSON.stringify(flyBuckSource)};
       function Harness({generation, renameInput=false, example='switching', fileId: initialFileId='00000000-0000-4000-8000-000000000001', visible: initiallyVisible=true, pending: initiallyPending=false}) {

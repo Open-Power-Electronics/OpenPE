@@ -4,8 +4,8 @@ import {
   spiceConvergenceDecks,
   runSpiceAttempts,
   convergenceProgress,
-} from '../server/spice-convergence.mjs';
-import { spiceFailure } from '../server/spice-errors.mjs';
+} from '../plugins/spice-simulation/host/spice-convergence.mjs';
+import { spiceFailure } from '../plugins/spice-simulation/host/spice-errors.mjs';
 
 const deck = {
   netlist:

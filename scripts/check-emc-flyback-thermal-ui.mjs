@@ -26,13 +26,16 @@ await Promise.all(
   [nativeDirectory, dataDir, staticDir].map((folder) => mkdir(folder, { recursive: true })),
 );
 const { parseProject, projectNativeFiles } = await tsImport('../lib/project.ts', import.meta.url);
-const { buildSpiceDeck, defaultTransient } = await tsImport('../lib/spice.ts', import.meta.url);
+const { buildSpiceDeck, defaultTransient } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
 const { defaultThermalConfig, deriveThermalSpiceSources, prepareThermalModel } = await tsImport(
-  '../lib/thermal.ts',
+  '../plugins/layout-thermal/domain/thermal.ts',
   import.meta.url,
 );
 const { thermalSurface, hottestThermalNode, closestThermalNode } = await tsImport(
-  '../lib/thermal-view.ts',
+  '../plugins/layout-thermal/domain/thermal-view.ts',
   import.meta.url,
 );
 const { circuitFingerprint } = await tsImport('../lib/circuit.ts', import.meta.url);

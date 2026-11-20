@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { exampleFootprintSearchCatalog } from './example-footprints.mjs';
 import {
   parseLibrary,
   propertyValue,
@@ -14,6 +15,8 @@ import {
   createProject,
   validateProject,
   createLibraryPart,
+  libraryPackageQuery,
+  matchesNativeFootprintPackage,
   searchLibrary,
 } from './library-format.mjs';
 
@@ -48,7 +51,7 @@ async function symbols(file) {
   cache.set(file, result);
   return result;
 }
-let indexed;
+let indexed, footprintSearchCatalog;
 async function index() {
   try {
     const saved = JSON.parse(await readSafe(path.join(root, 'library-index.json'), 30_000_000));
@@ -161,14 +164,34 @@ parentPort.on(
         };
       else if (action === 'search') {
         if (!Object.hasOwn(catalogs, kind)) throw new Error('Unknown library kind.');
+        const entries =
+          kind === 'footprints'
+            ? (footprintSearchCatalog ??= exampleFootprintSearchCatalog(catalogs.footprints))
+            : catalogs[kind];
         let search = searches.get(kind);
         if (!search || search.query !== query || search.library !== library) {
-          search = { query, library, matches: searchLibrary(catalogs[kind], query, library) };
+          const packageQuery = libraryPackageQuery(query);
+          const matches =
+            packageQuery === undefined
+              ? searchLibrary(entries, query, library)
+              : searchLibrary(
+                  entries.filter((entry) =>
+                    matchesNativeFootprintPackage(
+                      kind === 'symbols' ? entry.footprint : entry.id,
+                      packageQuery,
+                    ),
+                  ),
+                  '',
+                  library,
+                );
+          search = { query, library, matches };
           searches.set(kind, search);
         }
         const { matches } = search;
-        if (!libraryNames.has(kind))
-          libraryNames.set(kind, [...new Set(catalogs[kind].map((e) => e.library))]);
+        if (!libraryNames.has(kind)) {
+          const names = [...new Set(entries.map((entry) => entry.library))];
+          libraryNames.set(kind, names.sort((a, b) => a.localeCompare(b)));
+        }
         result = {
           entries: matches.slice(offset, offset + 100),
           total: matches.length,

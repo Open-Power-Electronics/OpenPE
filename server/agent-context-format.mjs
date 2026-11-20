@@ -8076,7 +8076,14 @@ function isOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
 var val = (n, i = 1) => n ? atom(n[i]) : "";
@@ -8798,8 +8805,105 @@ function compileCapabilitySchema(schema) {
   };
 }
 
-// lib/pcb-polygons.ts
+// lib/pcb-custom-pad.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-polygons.ts
+var import_clipper_lib2 = __toESM(require_clipper(), 1);
+
+// lib/design-rule-checks.ts
+var pcbDesignRuleLimits = {
+  clearance: [0.15, 0, "min_clearance", "Minimum copper clearance (board-wide)", "pcb.clearance"],
+  minTrackWidth: [0.2, 0.2, "min_track_width", "Minimum track width", "pcb.track-width"],
+  minThroughHole: [
+    0.1,
+    0.3,
+    "min_through_hole_diameter",
+    "Minimum through-hole diameter",
+    "pcb.via-drill"
+  ],
+  minViaDiameter: [0.2, 0.5, "min_via_diameter", "Minimum via diameter", "pcb.via-diameter"],
+  minAnnularRing: [0.05, 0.1, "min_via_annular_width", "Minimum annular ring", "pcb.annular-ring"],
+  copperToEdge: [0.25, 0.5, "min_copper_edge_clearance", "Copper to board edge", "pcb.copper-edge"],
+  copperToHole: [0.25, 0.25, "min_hole_clearance", "Copper to hole", "pcb.copper-hole"],
+  holeToHole: [0, 0.25, "min_hole_to_hole", "Hole to hole", "pcb.hole-spacing"],
+  minSilkClearance: [
+    0,
+    0,
+    "min_silk_clearance",
+    "Minimum silkscreen clearance",
+    "pcb.silk-clearance"
+  ],
+  minTextHeight: [
+    0,
+    0.8,
+    "min_text_height",
+    "Minimum silkscreen text height",
+    "pcb.silk-text-height"
+  ],
+  minTextThickness: [
+    0,
+    0.08,
+    "min_text_thickness",
+    "Minimum silkscreen text thickness",
+    "pcb.silk-text-thickness"
+  ]
+};
+var pcbDesignRuleScopes = {
+  dimensions: [
+    "pcb.track-width",
+    "pcb.via-drill",
+    "pcb.pad-drill",
+    "pcb.via-diameter",
+    "pcb.annular-ring"
+  ],
+  clearance: ["pcb.short", "pcb.clearance"],
+  edge: ["pcb.outline", "pcb.copper-edge"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
+  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
+  keepouts: ["pcb.keepout"],
+  connectivity: ["pcb.unrouted"]
+};
+var pcbDesignRuleIds = Object.values(pcbDesignRuleScopes).flat();
+var schematicRuleDefinitions = {
+  "erc.reference-conflict": ["Reference conflict", "error"],
+  "erc.pin-type-unsupported": ["Unsupported pin type", "warning"],
+  "erc.pin-type-inconsistent": ["Inconsistent pin type", "warning"],
+  "erc.pin-unconnected": ["Unconnected pin", "error"],
+  "erc.input-undriven": ["Undriven input", "error"],
+  "erc.power-undriven": ["Undriven power input", "error"],
+  "erc.output-conflict": ["Output conflict", "error"],
+  "erc.pin-conflict": ["Pin conflict", "warning"],
+  "erc.net-name-conflict": ["Net name conflict", "error"],
+  "erc.wire-dangling": ["Dangling wire", "warning"],
+  "erc.wire-zero-length": ["Zero-length wire", "warning"],
+  "erc.label-dangling": ["Dangling label", "error"],
+  "erc.no-connect-misplaced": ["Misplaced no-connect marker", "warning"],
+  "erc.no-connect-connected": ["Connected no-connect marker", "error"]
+};
+var schematicRuleIds = Object.keys(schematicRuleDefinitions);
+var pcbDesignRuleLimitKeys = Object.keys(pcbDesignRuleLimits);
+var pcbDesignRuleScopeKeys = Object.keys(pcbDesignRuleScopes);
+var defaultPCBDesignRules = {
+  ...Object.fromEntries(
+    pcbDesignRuleLimitKeys.map((key) => [key, pcbDesignRuleLimits[key][0]])
+  ),
+  scopes: pcbDesignRuleScopeKeys,
+  useZoneClearance: false,
+  useKiCadClearance: false,
+  clearanceOverrides: [],
+  severities: {}
+};
+var workbenchPCBDesignRules = {
+  ...defaultPCBDesignRules,
+  useKiCadClearance: true,
+  holeToHole: pcbDesignRuleLimits.holeToHole[1],
+  minTextHeight: pcbDesignRuleLimits.minTextHeight[1],
+  minTextThickness: pcbDesignRuleLimits.minTextThickness[1]
+};
+
+// lib/pcb-polygons.ts
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
 var padCornerSegments = 8;
@@ -8807,7 +8911,7 @@ var padCornerStep = Math.PI / 2 / padCornerSegments;
 var clearanceArcTolerance = 1e-3;
 var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 
-// lib/thermal.ts
+// plugins/layout-thermal/domain/thermal.ts
 var THERMAL_LIMITS = {
   points: 2e5,
   triangles: 25e4,
@@ -9700,7 +9804,7 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
   finiteJSON(value);
   if (!context || context.version !== 1 || typeof context.capturedAt !== "string" || !Number.isFinite(Date.parse(context.capturedAt)) || !context.source || typeof context.source.pending !== "boolean" || !["", sourceError].includes(context.source.error) || context.source.draft !== null || !Number.isSafeInteger(context.source.draftCharacters) || context.source.draftCharacters < 0 || context.source.draftCharacters > 8 * 1024 * 1024 || !context.source.pending && context.source.draftCharacters !== 0 || Object.keys(context.source).some(
     (key) => !["pending", "draft", "error", "draftCharacters"].includes(key)
-  ) || !context.ui || Array.isArray(context.ui) || !context.simulation)
+  ) || !context.ui || Array.isArray(context.ui) || context.ui.schematicSection !== void 0 && !["hardware", "simulation", "all"].includes(context.ui.schematicSection) || !context.simulation)
     fail2();
   if (context.project && typeof context.project === "object" && Object.hasOwn(context.project, "nativeFiles"))
     fail2();

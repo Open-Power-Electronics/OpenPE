@@ -18,6 +18,20 @@ Voltage-source and EMC IPULSE current-source waveform selection stores optional 
 
 ## Document ownership
 
+Schematic section membership uses Footprint assignment and the native symbol
+`on_board` attribute. Components without a Footprint and components with
+`on_board no` belong to Virtual; assigned, board-included components belong
+to Real. Power and electrical markers use the same rule. This does not replace
+`exclude_from_sim` or simulation model fields.
+Opening and switching views do not rewrite these flags or infer membership from
+a library namespace. Explicit board-inclusion edits update all units of the
+component in one Core transaction.
+Setting board inclusion without a Footprint leaves the component in Virtual.
+Moving to Virtual removes its linked PCB package while retaining copper and
+the saved Footprint assignment; returning to Real uses normal package
+preparation. [Schematic sections](../DESIGN.md#real-and-virtual-sections)
+own view behavior. Save, Source, recovery and history retain the complete sheet.
+
 Custom single-unit symbols are native embedded `.kicad_sch` definitions. Editing
 one instance forks its embedded name while preserving its original `lib_id`
 through native `lib_name` aliasing where needed. Custom footprints are native
@@ -38,6 +52,27 @@ project stem when available and owns the optional PCB; sheets have no cross-file
 electrical joins. Geometry determines connectivity. UUIDs, embedded libraries,
 fields, assignments, copper and model transforms survive round trips.
 
+Explicitly added [parasitic study components](LAYOUT.md#parasitic-study-schematics)
+are ordinary content in the selected existing `.kicad_sch`: embedded passive
+symbols, endpoint-identifying local labels, hidden native group properties
+and wires. A series insertion shortens the end pin's exclusive leaf lead and
+adds connection-label copies as part of the same native edit. The edit changes that native file through
+Source and Save without adding a sheet, native file or private plugin
+format. Other schematics and PCB native bytes are preserved.
+
+Every inserted R/L stores `OpenPE.Parasitics.Connection` as `series`, one shared
+UUID in `OpenPE.Parasitics.GroupId`, and its `OpenPE.Parasitics.Role` as
+`resistor` or `inductor`. `OpenPE.Parasitics.StartLabel` and
+`OpenPE.Parasitics.EndLabel` store the two generated endpoint label names.
+`OpenPE.Parasitics.BoardId`, `OpenPE.Parasitics.StartId` and
+`OpenPE.Parasitics.EndId` retain the exact board and mapped pad UUIDs;
+`OpenPE.Parasitics.Start` and `OpenPE.Parasitics.End` retain readable endpoint
+descriptions. These are hidden ordinary native symbol properties retained by
+Source, Save, recovery and undo. Only a complete validated series group can
+participate in the [PCB-only conductive projection](LAYOUT.md#project-integrity-and-schematic-synchronization);
+names or provenance alone do not establish it. SPICE compiles the native
+geometry rather than interpreting these fields as an instruction to rewire.
+
 New Untitled project starts with complete empty `untitled.kicad_pro`,
 `untitled.kicad_sch` and `untitled.kicad_pcb` native texts. Its empty Model CAD
 is stored in `OPENPE_MODEL_CAD` within the project settings, not a separate design
@@ -57,9 +92,17 @@ needed; UUIDs are replayed globally and embedded-library identity remains part
 of board acceptance. Native validation checks track locks without separate
 snapshot compatibility metadata.
 
-Supported notes include horizontal plain/bold/italic text with inert HTTP(S)
-links and finite unfilled Notes polylines. Polylines are read-only on canvas and
-editable in Source. Native footprint, pad, track, via, graphic and zone locks map
+Supported notes include horizontal plain/bold/italic text with bounded stroke
+thickness and inert HTTP(S) links, and finite unfilled polylines, rectangles
+and horizontal text boxes. Outlines and text boxes are read-only on canvas
+and editable in Source. Quoted native strings can contain
+literal tabs, including in embedded-library descriptions.
+Notes can also display up to 16 embedded PNG images per sheet, with dimensions up
+to 4,096 pixels on either axis, at most 16 million pixels in total and up to 1 MB
+of base64 text per image. Source
+retains the native image data and placement. The canvas uses the recorded scale
+and image density and edits the image only through Source.
+Native footprint, pad, track, via, graphic and zone locks map
 to optional `locked: true`; unlocked objects omit it. Serialization synchronizes
 the canonical lock state with retained native text. Properties and `layout.lock`
 share lock/unlock transactions; locked objects reject ordinary property/geometry
@@ -68,7 +111,12 @@ edits and removal. Source remains explicit native editing. See
 Pad pin-function/type metadata, non-rendered footprint properties and unit records
 survive edits. Footprint
 mask/paste margins are retained; pad mask overrides take precedence over the
-footprint default. Multi-layer zones have one editable instance per layer;
+footprint default. Up to 256 native `point` records on `F.Fab` or `B.Fab` per
+footprint are retained with their native identifiers and sizes. They follow
+footprint movement, rotation and side changes. Source edits their native values.
+OpenPE leaves these reference points out of canvas artwork and manufacturing output.
+An unlinked footprint retains an explicitly blank native Reference or Value.
+Multi-layer zones have one editable instance per layer;
 the first retains the native UUID and later instances use deterministic UUIDs.
 Clean files retain their exact original bytes; a PCB edit writes equivalent
 single-layer zones with their original per-layer fills and rules. Disabled
@@ -125,8 +173,8 @@ transaction carries these edits through Source, recovery, undo, Save and Save as
 See [Design rules](DESIGN-RULES.md#layout-drc) for coverage and precedence.
 
 Source lists regular project folders and files, including empty folders,
-`footprints/`, `symbols/`, `circuits/`, `models/`, native `3D/`, `spice/` and
-`thermal/`. Native files keep validated editing; fully loaded ordinary text files
+`footprints/`, `symbols/`, `models/`, native `3D/`, `spice-simulation/` and
+`layout-thermal/`. Native files keep validated editing; fully loaded ordinary text files
 are editable through the project file editor, with OpenSCAD highlighting for
 `.scad`. PDFs open in an inline viewer.
 Refresh project files, returning to Source and window focus reload the listing.
@@ -173,7 +221,17 @@ create a separate datasheet JSON file in a native project. There is no synthetic
 data remains separately matched to the validated controller; see the
 [datasheet contract](DATASHEETS.md).
 
-Generated project `spice/` and `thermal/` directories are excluded from native discovery and file-set validation. Current artifacts are direct `<native-stem>.*` files in those directories, with a project-bound v2 manifest; no project/run/mesh subdirectories are written. Source can edit fully loaded artifact text as ordinary files; solver artifacts/results never enter editable design, native drafts, undo or recovery. Private sibling staging/rollback folders end in `-backups` and remain outside native discovery. Only current v2 manifests and direct result files are read; retired nested records are ignored. Publication contracts are in [Simulation](SIMULATION.md#execution-streaming-and-completed-results) and [Layout Thermal](THERMAL.md#completed-desktop-records).
+Project-owned plugin files live in a directory named after their plugin package.
+Shared project-root `models/` contains model assets, including portable native `.lib` sidecars, and follows
+normal Source/Save/history preservation. Plugin-owned data is excluded from
+native discovery and file-set validation, including flat `<native-stem>.*`
+SPICE/thermal artifacts and private `.pending-<uuid>-backups` /
+`.previous-<uuid>-backups` directories inside the owning plugin folder. Source
+can inspect/edit fully loaded artifact text as ordinary files; results never
+enter design undo, recovery or dirty state. Only current project-bound v2
+manifests are loaded. Unknown files remain untouched. [Project plugin data](PLUGINS.md#project-data-directories)
+owns directory identities; [Simulation](SIMULATION.md#execution-streaming-and-completed-results)
+and [Layout Thermal](THERMAL.md#completed-desktop-records) own publication.
 
 ## Native access and writes
 
@@ -266,15 +324,35 @@ zones, perform DRC, change geometry or acquire a project destination.
 
 - Gerber X2 uses metric 6.6 coordinates for two/four copper layers, front/back
   mask, paste and silk, and Edge.Cuts. Lines, arcs, circular/oval/rectangular/
-  rounded/chamfered pads and saved zone contours are plotted independently of
+  rounded/chamfered pads, custom polygon pads and saved zone contours are plotted independently of
   view visibility. Arc direction follows the upward-Y output plane. Separate
-  metric Excellon files contain plated and non-plated round through drills,
-  including via drills and rotated pad drill offsets.
+  metric Excellon files contain plated and non-plated round through drills and
+  straight slots. Slots use a G85 command between the two tool centreline
+  endpoints with the slot width as the tool diameter. The coordinates retain
+  native drill anchors and pad rotation, including offset drills. KiCad native
+  pad anchors locate the hole, and the native drill offset locates the copper
+  land relative to that anchor. Native slots use `(drill oval x y)`.
+  OpenPE retains mechanical numbers on non-plated slots through Save and
+  reopen. KiCad 10 clears those numbers when it reads a pad.
+  [KiCad pad numbering](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pad.cpp#L288-L299)
+  [KiCad pad parser](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pcb_io/kicad_sexpr/pcb_io_kicad_sexpr_parser.cpp#L6110-L6115)
 - Full Gerber requires a closed unambiguous board outline and saved fills for every enabled
   non-keepout zone. Keepouts and disabled fills contribute no plotted area.
   Native board-level via tenting and pad/footprint/board mask/paste margins apply.
+  Mask- and paste-only apertures plot their native pad geometry without expansion.
+  Footprint-owned routed cutouts appear in the Edge.Cuts profile. The
+  Excellon files carry pad and via drill operations.
+  Straight-chamfered pads support uniform mask and paste margins. Positive
+  margins use round polygon offsets with a 0.0005 mm arc tolerance and
+  0.0001 mm clipping grid. Negative margins resize the pad dimensions and
+  retain the chamfer ratio.
+  Custom pads use outline clearance and the single outline defined in [Layout](LAYOUT.md).
+  Gerber uses the whole outline for
+  copper and applies uniform mask or paste expansion or contraction using the
+  same tolerance and grid. A relative paste margin uses the native anchor size.
 - Reject unused-layer removal, nonzero minimum mask web, enabled via covering/
-  plugging/capping/filling, margins on chamfered pads, elliptical pad apertures,
+  plugging/capping/filling, asymmetric margins on chamfered or custom pads, margins on
+  pads with both rounded and chamfered corners, elliptical pad apertures,
   dashed artwork, dimensions, font faces/knockout, formatted/unresolved text
   and characters outside the pinned U+0020–U+03FF stroke glyph subset on
   manufacturing layers. Unsupported output never silently omits geometry.

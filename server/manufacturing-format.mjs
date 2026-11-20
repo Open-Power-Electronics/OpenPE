@@ -4220,21 +4220,21 @@ var require_clipper = __commonJS({
           }
         }
       };
-      ClipperLib.Clipper.GetBounds = function(paths) {
-        var i = 0, cnt = paths.length;
-        while (i < cnt && paths[i].length === 0) i++;
+      ClipperLib.Clipper.GetBounds = function(paths2) {
+        var i = 0, cnt = paths2.length;
+        while (i < cnt && paths2[i].length === 0) i++;
         if (i === cnt) return new ClipperLib.IntRect(0, 0, 0, 0);
         var result = new ClipperLib.IntRect();
-        result.left = paths[i][0].X;
+        result.left = paths2[i][0].X;
         result.right = result.left;
-        result.top = paths[i][0].Y;
+        result.top = paths2[i][0].Y;
         result.bottom = result.top;
         for (; i < cnt; i++)
-          for (var j = 0, jlen = paths[i].length; j < jlen; j++) {
-            if (paths[i][j].X < result.left) result.left = paths[i][j].X;
-            else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
-            if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
-            else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
+          for (var j = 0, jlen = paths2[i].length; j < jlen; j++) {
+            if (paths2[i][j].X < result.left) result.left = paths2[i][j].X;
+            else if (paths2[i][j].X > result.right) result.right = paths2[i][j].X;
+            if (paths2[i][j].Y < result.top) result.top = paths2[i][j].Y;
+            else if (paths2[i][j].Y > result.bottom) result.bottom = paths2[i][j].Y;
           }
         return result;
       };
@@ -4667,20 +4667,20 @@ var require_clipper = __commonJS({
       ClipperLib.Clipper.MinkowskiSum = function(pattern, path_or_paths, pathIsClosed) {
         if (!(path_or_paths[0] instanceof Array)) {
           var path = path_or_paths;
-          var paths = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
+          var paths2 = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
           var c = new ClipperLib.Clipper();
-          c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-          c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-          return paths;
+          c.AddPaths(paths2, ClipperLib.PolyType.ptSubject, true);
+          c.Execute(ClipperLib.ClipType.ctUnion, paths2, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+          return paths2;
         } else {
-          var paths = path_or_paths;
+          var paths2 = path_or_paths;
           var solution = new ClipperLib.Paths();
           var c = new ClipperLib.Clipper();
-          for (var i = 0; i < paths.length; ++i) {
-            var tmp = ClipperLib.Clipper.Minkowski(pattern, paths[i], true, pathIsClosed);
+          for (var i = 0; i < paths2.length; ++i) {
+            var tmp = ClipperLib.Clipper.Minkowski(pattern, paths2[i], true, pathIsClosed);
             c.AddPaths(tmp, ClipperLib.PolyType.ptSubject, true);
             if (pathIsClosed) {
-              var path = ClipperLib.Clipper.TranslatePath(paths[i], pattern[0]);
+              var path = ClipperLib.Clipper.TranslatePath(paths2[i], pattern[0]);
               c.AddPath(path, ClipperLib.PolyType.ptClip, true);
             }
           }
@@ -4700,18 +4700,18 @@ var require_clipper = __commonJS({
         return outPath;
       };
       ClipperLib.Clipper.MinkowskiDiff = function(poly1, poly2) {
-        var paths = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
+        var paths2 = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
         var c = new ClipperLib.Clipper();
-        c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-        c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-        return paths;
+        c.AddPaths(paths2, ClipperLib.PolyType.ptSubject, true);
+        c.Execute(ClipperLib.ClipType.ctUnion, paths2, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+        return paths2;
       };
       ClipperLib.Clipper.PolyTreeToPaths = function(polytree) {
         var result = new Array();
         ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntAny, result);
         return result;
       };
-      ClipperLib.Clipper.AddPolyNodeToPaths = function(polynode, nt, paths) {
+      ClipperLib.Clipper.AddPolyNodeToPaths = function(polynode, nt, paths2) {
         var match = true;
         switch (nt) {
           case ClipperLib.Clipper.NodeType.ntOpen:
@@ -4723,9 +4723,9 @@ var require_clipper = __commonJS({
             break;
         }
         if (polynode.m_polygon.length > 0 && match)
-          paths.push(polynode.m_polygon);
+          paths2.push(polynode.m_polygon);
         for (var $i3 = 0, $t3 = polynode.Childs(), $l3 = $t3.length, pn = $t3[$i3]; $i3 < $l3; $i3++, pn = $t3[$i3])
-          ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths);
+          ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths2);
       };
       ClipperLib.Clipper.OpenPathsFromPolyTree = function(polytree) {
         var result = new ClipperLib.Paths();
@@ -4802,9 +4802,9 @@ var require_clipper = __commonJS({
             this.m_lowest = new ClipperLib.IntPoint2(this.m_polyNodes.ChildCount() - 1, k);
         }
       };
-      ClipperLib.ClipperOffset.prototype.AddPaths = function(paths, joinType, endType) {
-        for (var i = 0, ilen = paths.length; i < ilen; i++)
-          this.AddPath(paths[i], joinType, endType);
+      ClipperLib.ClipperOffset.prototype.AddPaths = function(paths2, joinType, endType) {
+        for (var i = 0, ilen = paths2.length; i < ilen; i++)
+          this.AddPath(paths2[i], joinType, endType);
       };
       ClipperLib.ClipperOffset.prototype.FixOrientations = function() {
         if (this.m_lowest.X >= 0 && !ClipperLib.Clipper.Orientation(this.m_polyNodes.Childs()[this.m_lowest.X].m_polygon)) {
@@ -5124,9 +5124,9 @@ var require_clipper = __commonJS({
       ClipperLib.JS.BoundsOfPath = function(path, scale2) {
         return ClipperLib.JS.BoundsOfPaths([path], scale2);
       };
-      ClipperLib.JS.BoundsOfPaths = function(paths, scale2) {
+      ClipperLib.JS.BoundsOfPaths = function(paths2, scale2) {
         if (!scale2) scale2 = 1;
-        var bounds = ClipperLib.Clipper.GetBounds(paths);
+        var bounds = ClipperLib.Clipper.GetBounds(paths2);
         bounds.left /= scale2;
         bounds.bottom /= scale2;
         bounds.right /= scale2;
@@ -5325,11 +5325,11 @@ var require_clipper = __commonJS({
         if (closed) path.pop();
         return perimeter / scale2;
       };
-      ClipperLib.JS.PerimeterOfPaths = function(paths, closed, scale2) {
+      ClipperLib.JS.PerimeterOfPaths = function(paths2, closed, scale2) {
         if (!scale2) scale2 = 1;
         var perimeter = 0;
-        for (var i = 0; i < paths.length; i++) {
-          perimeter += ClipperLib.JS.PerimeterOfPath(paths[i], closed, scale2);
+        for (var i = 0; i < paths2.length; i++) {
+          perimeter += ClipperLib.JS.PerimeterOfPath(paths2[i], closed, scale2);
         }
         return perimeter;
       };
@@ -5343,14 +5343,14 @@ var require_clipper = __commonJS({
           p.Y = p.Y / scale2;
         }
       };
-      ClipperLib.JS.ScaleDownPaths = function(paths, scale2) {
+      ClipperLib.JS.ScaleDownPaths = function(paths2, scale2) {
         var i, j, p;
         if (!scale2) scale2 = 1;
-        i = paths.length;
+        i = paths2.length;
         while (i--) {
-          j = paths[i].length;
+          j = paths2[i].length;
           while (j--) {
-            p = paths[i][j];
+            p = paths2[i][j];
             p.X = p.X / scale2;
             p.Y = p.Y / scale2;
           }
@@ -5366,14 +5366,14 @@ var require_clipper = __commonJS({
           p.Y = round3(p.Y * scale2);
         }
       };
-      ClipperLib.JS.ScaleUpPaths = function(paths, scale2) {
+      ClipperLib.JS.ScaleUpPaths = function(paths2, scale2) {
         var i, j, p, round3 = Math.round;
         if (!scale2) scale2 = 1;
-        i = paths.length;
+        i = paths2.length;
         while (i--) {
-          j = paths[i].length;
+          j = paths2[i].length;
           while (j--) {
-            p = paths[i][j];
+            p = paths2[i][j];
             p.X = round3(p.X * scale2);
             p.Y = round3(p.Y * scale2);
           }
@@ -5405,14 +5405,14 @@ var require_clipper = __commonJS({
       };
       ClipperLib.JS.ExPolygonsToPaths = function(expolygons) {
         var a, i, alen, ilen;
-        var paths = new ClipperLib.Paths();
+        var paths2 = new ClipperLib.Paths();
         for (a = 0, alen = expolygons.length; a < alen; a++) {
-          paths.push(expolygons[a].outer);
+          paths2.push(expolygons[a].outer);
           for (i = 0, ilen = expolygons[a].holes.length; i < ilen; i++) {
-            paths.push(expolygons[a].holes[i]);
+            paths2.push(expolygons[a].holes[i]);
           }
         }
-        return paths;
+        return paths2;
       };
       ClipperLib.JS.PolyTreeToExPolygons = function(polytree) {
         var expolygons = new ClipperLib.ExPolygons();
@@ -5430,6 +5430,244 @@ var require_clipper = __commonJS({
 // lib/manufacturing-export.ts
 import { validateProject as validateProject3 } from "./project-format.mjs";
 
+// plugins/spice-simulation/manifest.json
+var manifest_default = {
+  id: "spice-simulation@openpe",
+  name: "SPICE Simulation",
+  description: "Run supported circuit transients and inspect voltage and current waveforms.",
+  detail: "Simulate supported power-electronics circuits locally with the bundled ngspice solver. Configure transient timing, probe net voltages and component currents, and compare actual solver samples with waveform cursors. Supported circuits and verified model limits apply; results are not ERC, DRC or production validation.",
+  version: "1.0.0",
+  author: "OpenPE",
+  category: "Simulation",
+  capabilities: ["Transient analysis", "Voltage and current probes", "Waveforms", "Local solver"],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: [
+      "simulation.status",
+      "simulation.configure",
+      "simulation.probes",
+      "simulation.run",
+      "simulation.cancel",
+      "simulation.presentation"
+    ]
+  },
+  projectDirectory: "spice-simulation"
+};
+
+// plugins/layout-thermal/manifest.json
+var manifest_default2 = {
+  id: "pcb-thermal@openpe",
+  name: "Layout Thermal",
+  description: "Compute steady board temperatures with Gmsh and Elmer.",
+  detail: "Solve steady heat conduction through supported two- and four-layer PCB copper, dielectric and plated holes using bundled Gmsh and Elmer. Configure power into the board, material assumptions and cooling boundaries, inspect temperature maps and export images. Results describe board temperature under the specified assumptions; package junction temperature and airflow are outside this model.",
+  version: "1.0.0",
+  author: "OpenPE",
+  category: "Simulation",
+  capabilities: [
+    "Steady board temperature",
+    "Temperature maps",
+    "Temperature probes",
+    "PNG export",
+    "Local Gmsh and Elmer"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: [
+      "thermal.status",
+      "thermal.configure",
+      "thermal.importSpice",
+      "thermal.run",
+      "thermal.cancel",
+      "thermal.probe",
+      "thermal.exportImage"
+    ]
+  },
+  projectDirectory: "layout-thermal"
+};
+
+// plugins/pe-layout-skill/manifest.json
+var manifest_default3 = {
+  id: "ai-pcb-layout@openpe",
+  name: "PE Layout Skill",
+  description: "Guide power-electronics PCB review, placement and routing with the Agent.",
+  detail: "Use the power-pcb-design workflow by Chengmin Li and Xiao Yang, with nine engineering stages and ten offline references for switching loops, insulation, copper capability and verification. The Agent reads guidance on demand and uses available OpenPE capabilities. Engineering review gates remain part of the workflow. This plugin adds guidance, not an autorouter, new CAD support or compliance certification. Licensed under CC BY 4.0.",
+  version: "1.0.0",
+  author: "Chengmin Li, Xiao Yang \xB7 OpenPE integration",
+  category: "PCB design",
+  capabilities: [
+    "Power PCB design workflow",
+    "Layout review",
+    "Switching and gate loops",
+    "Insulation and copper guidance",
+    "Offline reference documents"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: ["pcbDesign.guide"]
+  },
+  projectDirectory: "pe-layout-skill"
+};
+
+// plugins/layout-parasitics/manifest.json
+var manifest_default4 = {
+  id: "layout-parasitics@openpe",
+  name: "Layout Parasitics",
+  description: "Extract PCB parasitics and add editable schematic components.",
+  detail: "Choose two pads or vias on the same net. Estimate DC resistance, shortest route length and partial inductance with explicit copper and via assumptions. Add a labelled R/L block to the selected schematic while retaining its existing circuit and PCB.",
+  version: "1.1.0",
+  author: "OpenPE",
+  category: "PCB design",
+  capabilities: [
+    "Two-terminal DC resistance",
+    "Parallel copper paths",
+    "Shortest path length",
+    "Partial inductance",
+    "Labelled schematic studies"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: ["parasitics.measure", "parasitics.createStudy"]
+  },
+  projectDirectory: "layout-parasitics"
+};
+
+// plugins/emc-analysis/manifest.json
+var manifest_default5 = {
+  id: "emc-analysis@openpe",
+  name: "EMC Analysis",
+  description: "Review EMC layout intent, geometric findings and missing evidence.",
+  detail: "Declare critical and sensitive nets, reference copper, decoupling and connector intent. Inspect actual PCB geometry with your own review limits, locate measured findings, record manual reviews and justified exceptions, and download traceable HTML or JSON reports. Missing evidence stays unverified. No regulatory compliance or certification assessment.",
+  version: "1.1.0",
+  author: "OpenPE",
+  category: "PCB design",
+  capabilities: [
+    "Explicit PCB design intent",
+    "Geometric EMC screening",
+    "Measured findings and remediation",
+    "Board occurrence locating",
+    "Manual review and justified exceptions",
+    "HTML and JSON review reports"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: ["emc.inspectLayout", "emc.reviewLayout"]
+  },
+  projectDirectory: "emc-analysis"
+};
+
+// plugins/runtime/manifest.mjs
+var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var text = (value, max = 200) => typeof value === "string" && value.length > 0 && value.length <= max && !value.includes("\0");
+var keys = (value, allowed) => record(value) && Object.keys(value).every((key2) => allowed.includes(key2));
+var idPattern = /^[a-z][a-z0-9-]{0,63}@[a-z][a-z0-9-]{0,63}$/;
+var capabilityPattern = /^[a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+$/;
+function validateExternalSchema(schema) {
+  let nodes = 0;
+  function visit(value, depth) {
+    if (++nodes > 4096 || depth > 16) throw new Error("Plugin input schema is too complex.");
+    if (value && typeof value === "object") {
+      if (Object.hasOwn(value, "pattern"))
+        throw new Error("Plugin input schemas do not support regular expressions.");
+      for (const child2 of Object.values(value)) visit(child2, depth + 1);
+    }
+  }
+  if (JSON.stringify(schema).length > 65536) throw new Error("Plugin input schema is too large.");
+  visit(schema, 0);
+}
+function validatePluginManifest(value, { builtin = false } = {}) {
+  if (!keys(value, [
+    "apiVersion",
+    "id",
+    "name",
+    "version",
+    "description",
+    "detail",
+    "author",
+    "category",
+    "capabilities",
+    "runtime",
+    "permissions",
+    "entry",
+    "contributes",
+    "projectDirectory"
+  ]) || value.apiVersion !== 1 || !text(value.id, 129) || !idPattern.test(value.id) || !text(value.name) || !text(value.description, 2e3) || !text(value.author) || !text(value.version, 50) || !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(value.version) || value.detail !== void 0 && !text(value.detail, 1e4) || value.category !== void 0 && !text(value.category) || value.capabilities !== void 0 && (!Array.isArray(value.capabilities) || value.capabilities.length > 32 || value.capabilities.some((item) => !text(item))) || value.runtime !== (builtin ? "builtin" : "javascript") || !Array.isArray(value.permissions) || value.permissions.length > 1 || value.permissions.some((permission) => permission !== "project.read") || !keys(value.contributes, builtin ? ["capabilities"] : ["commands"]))
+    throw new Error("Invalid OpenPE plugin manifest or unsupported API version.");
+  if (builtin) {
+    if (!text(value.projectDirectory, 64) || !/^[a-z][a-z0-9-]{0,63}$/.test(value.projectDirectory) || ["models", "footprints", "symbols"].includes(value.projectDirectory) || value.entry !== void 0 || !Array.isArray(value.contributes.capabilities) || value.contributes.capabilities.some((id) => !capabilityPattern.test(id)) || new Set(value.contributes.capabilities).size !== value.contributes.capabilities.length)
+      throw new Error("Invalid built-in plugin directory or capability declarations.");
+  } else {
+    if (value.projectDirectory !== void 0)
+      throw new Error("Local plugin project directories are bound to their qualified IDs.");
+    const commands = value.contributes.commands;
+    const [name, publisher] = value.id.split("@");
+    const prefix = `extension.${publisher.replaceAll("-", "_")}.${name.replaceAll("-", "_")}.`;
+    if (value.entry !== "main.js" || !Array.isArray(commands) || commands.length < 1 || commands.length > 32 || new Set(commands.map((command) => command?.id)).size !== commands.length || commands.some(
+      (command) => !keys(command, ["id", "name", "description", "inputSchema", "handler"]) || !text(command.id) || !command.id.startsWith(prefix) || !/^extension\.[a-z0-9_]+\.[a-z0-9_]+\.[a-z][a-zA-Z0-9]*$/.test(command.id) || !text(command.name) || !text(command.description, 2e3) || !record(command.inputSchema) || !text(command.handler, 64) || !/^[a-z][a-zA-Z0-9]*$/.test(command.handler)
+    ))
+      throw new Error("Invalid sandbox plugin commands or capability namespace.");
+    for (const command of commands) validateExternalSchema(command.inputSchema);
+  }
+  return structuredClone(value);
+}
+function createPluginCatalog(manifests) {
+  const catalog = manifests.map((value) => validatePluginManifest(value, { builtin: true }));
+  if (new Set(catalog.map((manifest) => manifest.id)).size !== catalog.length)
+    throw new Error("Duplicate OpenPE plugin ID.");
+  if (new Set(catalog.map((manifest) => manifest.projectDirectory)).size !== catalog.length)
+    throw new Error("Duplicate OpenPE plugin project directory.");
+  const capabilities = catalog.flatMap((manifest) => manifest.contributes.capabilities);
+  if (new Set(capabilities).size !== capabilities.length)
+    throw new Error("Duplicate OpenPE plugin capability.");
+  const freeze = (value) => {
+    if (value && typeof value === "object") {
+      for (const child2 of Object.values(value)) freeze(child2);
+      Object.freeze(value);
+    }
+    return value;
+  };
+  return freeze(catalog);
+}
+
+// plugins/catalog.mjs
+var bundledPlugins = createPluginCatalog([manifest_default, manifest_default2, manifest_default3, manifest_default4, manifest_default5]);
+var SPICE_PLUGIN_ID = manifest_default.id;
+var THERMAL_PLUGIN_ID = manifest_default2.id;
+var PCB_DESIGN_PLUGIN_ID = manifest_default3.id;
+var LAYOUT_PARASITICS_PLUGIN_ID = manifest_default4.id;
+var EMC_PLUGIN_ID = manifest_default5.id;
+
+// plugins/runtime/project-data.mjs
+function pluginProjectDirectory(id) {
+  const builtin = bundledPlugins.find((plugin) => plugin.id === id);
+  if (builtin) {
+    if (typeof builtin.projectDirectory !== "string")
+      throw new Error("Invalid built-in plugin project directory.");
+    return builtin.projectDirectory;
+  }
+  if (typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}@[a-z][a-z0-9-]{0,63}$/.test(id))
+    throw new Error("Invalid plugin identity for project data.");
+  return id;
+}
+var spiceProjectDirectory = pluginProjectDirectory(SPICE_PLUGIN_ID);
+var directories = new Set(bundledPlugins.map((plugin) => plugin.projectDirectory));
+function isPluginProjectData(name) {
+  return isPluginProjectDirectory(name.split("/")[0]);
+}
+function isPluginProjectDirectory(name) {
+  const root = name.toLowerCase();
+  return directories.has(root) || /^[a-z][a-z0-9-]{0,63}@[a-z][a-z0-9-]{0,63}$/.test(root);
+}
+
 // lib/immutable-project-ownership.mjs
 var ownedNodes = /* @__PURE__ */ new WeakSet();
 function isOwnedProjectNode(value) {
@@ -5440,7 +5678,14 @@ function recordOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var quote = (v) => JSON.stringify(v);
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
@@ -5475,7 +5720,7 @@ function parseSExprValue(source, maxLength, owned) {
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
-            JSON.parse(t);
+            decodeKiCadString(t);
           } catch {
             throw new Error("Invalid string.");
           }
@@ -6024,7 +6269,7 @@ for (const [relative, entry] of records) {
 }
 var files = /* @__PURE__ */ new Map();
 var portablePaths = /* @__PURE__ */ new Map();
-var keys = /* @__PURE__ */ new Map();
+var keys2 = /* @__PURE__ */ new Map();
 for (const [relative, entry] of records) {
   const name = relative.split("/").at(-1);
   const file = basenames.get(name).size > 1 ? name.replace(/\.step$/i, "-" + entry.sha256.slice(0, 8) + ".step") : name;
@@ -6032,8 +6277,8 @@ for (const [relative, entry] of records) {
   files.set(relative, portable);
   portablePaths.set(relative, portable);
   portablePaths.set(file, portable);
-  keys.set(relative, entry.sha256);
-  keys.set(file, entry.sha256);
+  keys2.set(relative, entry.sha256);
+  keys2.set(file, entry.sha256);
 }
 
 // lib/library.ts
@@ -6155,50 +6400,159 @@ function symbolAnnotation(part, library, field) {
 }
 
 // lib/schematic-text.ts
+function readNote(node, geometry) {
+  const effects = child(node, "effects") || [];
+  const font = child(effects, "font") || [];
+  const at = child(node, "at");
+  const size = child(font, "size");
+  const thickness = child(font, "thickness");
+  const color = child(font, "color");
+  const justify = child(effects, "justify")?.slice(1) || [];
+  const known = (n, keys3) => n.slice(1).every((v) => !Array.isArray(v) || keys3.includes(String(v[0])));
+  if (!known(node, ["at", ...geometry, "effects", "uuid", "exclude_from_sim"]) || !known(effects, ["font", "justify", "href"]) || !known(font, ["size", "thickness", "color", "bold", "italic"]) || children(font, "thickness").length > 1 || thickness !== void 0 && (thickness.length !== 2 || !val(thickness) || !Number.isFinite(num(thickness)) || num(thickness) < 0 || num(thickness) > 1e3) || children(effects, "href").length > 1 || child(effects, "href") && (child(effects, "href").length !== 2 || !/^https?:\/\/[^\s\x00-\x1f]{1,2040}$/.test(val(child(effects, "href")))) || children(font, "color").length > 1 || color && (color.length !== 5 || color.slice(1).some(
+    (value, i) => typeof value !== "string" || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > (i === 3 ? 1 : 255)
+  )) || font.slice(1).some((v) => !Array.isArray(v) && !["bold", "italic"].includes(String(v))) || effects.slice(1).some((v) => !Array.isArray(v)) || justify.some((v) => !["left", "right", "top", "bottom"].includes(String(v))) || justify.includes("left") && justify.includes("right") || justify.includes("top") && justify.includes("bottom") || !at || !size || num(at, 3) !== 0 || num(size) !== num(size, 2) || ![num(at), num(at, 2), num(size)].every(Number.isFinite) || Math.abs(num(at)) > 1e5 || Math.abs(num(at, 2)) > 1e5 || num(size) <= 0 || num(size) > 1e3 || val(node).length > 4096 || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(val(child(node, "uuid"))))
+    throw new Error(
+      "Unsupported schematic text. Use horizontal, plain text with equal font dimensions in KiCad. The original file was not modified."
+    );
+  return {
+    id: val(child(node, "uuid")),
+    text: val(node),
+    x: num(at),
+    y: num(at, 2),
+    size: num(size),
+    ...thickness ? { thickness: num(thickness) } : {},
+    ...font.includes("bold") || val(child(font, "bold")) === "yes" ? { bold: true } : {},
+    ...font.includes("italic") || val(child(font, "italic")) === "yes" ? { italic: true } : {},
+    ...child(effects, "href") ? { href: val(child(effects, "href")) } : {},
+    ...color ? { color: color.slice(1).map(Number) } : {},
+    anchor: justify.includes("left") ? "start" : justify.includes("right") ? "end" : "middle",
+    vertical: justify.includes("top") ? "top" : justify.includes("bottom") ? "bottom" : "middle"
+  };
+}
 function schematicTexts(original) {
-  return children(original || [], "text").map((node) => {
-    const effects = child(node, "effects") || [];
-    const font = child(effects, "font") || [];
-    const at = child(node, "at");
-    const size = child(font, "size");
-    const color = child(font, "color");
-    const justify = child(effects, "justify")?.slice(1) || [];
-    const known = (n, keys2) => n.slice(1).every((v) => !Array.isArray(v) || keys2.includes(String(v[0])));
-    if (!known(node, ["at", "effects", "uuid", "exclude_from_sim"]) || !known(effects, ["font", "justify", "href"]) || !known(font, ["size", "color", "bold", "italic"]) || children(effects, "href").length > 1 || child(effects, "href") && (child(effects, "href").length !== 2 || !/^https?:\/\/[^\s\x00-\x1f]{1,2040}$/.test(val(child(effects, "href")))) || children(font, "color").length > 1 || color && (color.length !== 5 || color.slice(1).some(
-      (value, i) => typeof value !== "string" || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > (i === 3 ? 1 : 255)
-    )) || font.slice(1).some((v) => !Array.isArray(v) && !["bold", "italic"].includes(String(v))) || effects.slice(1).some((v) => !Array.isArray(v)) || justify.some((v) => !["left", "right", "top", "bottom"].includes(String(v))) || justify.includes("left") && justify.includes("right") || justify.includes("top") && justify.includes("bottom") || !at || !size || num(at, 3) !== 0 || num(size) !== num(size, 2) || ![num(at), num(at, 2), num(size)].every(Number.isFinite) || Math.abs(num(at)) > 1e5 || Math.abs(num(at, 2)) > 1e5 || num(size) <= 0 || num(size) > 1e3 || val(node).length > 4096 || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(val(child(node, "uuid"))))
+  return children(original ?? [], "text").map((node) => readNote(node, []));
+}
+function schematicTextBoxes(original) {
+  return children(original ?? [], "text_box").map((node) => {
+    const note = readNote(node, ["size", "margins", "stroke", "fill"]);
+    const size = child(node, "size");
+    const stroke = child(node, "stroke");
+    const fill = child(node, "fill");
+    const marginsRecord = child(node, "margins");
+    const width = num(size), height = num(size, 2);
+    const lineWidth = num(child(stroke ?? [], "width"));
+    const lineType = val(child(stroke ?? [], "type"));
+    const margin = Number((lineWidth / 2).toFixed(6)) + Number((note.size * 0.75).toFixed(6));
+    const margins = marginsRecord?.slice(1).map(Number) ?? [margin, margin, margin, margin];
+    const [left, top, right, bottom] = margins;
+    if (size?.length !== 3 || ![width, height].every((n) => Number.isFinite(n) && n > 0 && n <= 1e5) || Math.abs(note.x + width) > 1e5 || Math.abs(note.y + height) > 1e5 || stroke?.length !== 3 || child(stroke, "width")?.length !== 2 || child(stroke, "type")?.length !== 2 || !Number.isFinite(lineWidth) || lineWidth < 0 || lineWidth > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(lineType) || fill && (fill.length !== 2 || child(fill, "type")?.length !== 2 || val(child(fill, "type")) !== "none") || margins.length !== 4 || !margins.every((n) => Number.isFinite(n) && n >= 0) || left + right >= width || top + bottom >= height)
       throw new Error(
-        "Unsupported schematic text. Use horizontal, plain text with equal font dimensions in KiCad. The original file was not modified."
+        "Unsupported schematic text box. Use finite unfilled rectangular notes. The original file was not modified."
       );
-    return {
-      id: val(child(node, "uuid")),
-      text: val(node),
-      x: num(at),
-      y: num(at, 2),
-      size: num(size),
-      ...font.includes("bold") || val(child(font, "bold")) === "yes" ? { bold: true } : {},
-      ...font.includes("italic") || val(child(font, "italic")) === "yes" ? { italic: true } : {},
-      ...child(effects, "href") ? { href: val(child(effects, "href")) } : {},
-      ...color ? { color: color.slice(1).map(Number) } : {},
-      anchor: justify.includes("left") ? "start" : justify.includes("right") ? "end" : "middle",
-      vertical: justify.includes("top") ? "top" : justify.includes("bottom") ? "bottom" : "middle"
-    };
+    return { ...note, width, height, left, top, right, bottom, lineWidth, lineType };
   });
 }
 function schematicPolylines(original) {
-  return children(original || [], "polyline").map((node) => {
-    const pts = child(node, "pts"), stroke = child(node, "stroke");
-    const points2 = children(pts || [], "xy").map((p) => ({ x: num(p), y: num(p, 2) }));
+  return (original ?? []).filter(
+    (node) => Array.isArray(node) && (node[0] === "polyline" || node[0] === "rectangle")
+  ).map((node) => {
+    const rectangle = node[0] === "rectangle";
+    const pts = child(node, "pts"), stroke = child(node, "stroke"), start = child(node, "start"), end = child(node, "end");
+    const vertices = rectangle ? [start ?? [], end ?? []] : children(pts || [], "xy");
+    const points2 = vertices.map((p) => ({ x: num(p), y: num(p, 2) }));
     const id = val(child(node, "uuid")), width = num(child(stroke || [], "width"));
     const type = val(child(stroke || [], "type"));
-    const known = (n, keys2) => n.slice(1).every((v) => Array.isArray(v) && keys2.includes(String(v[0])));
+    const known = (n, keys3) => n.slice(1).every((v) => Array.isArray(v) && keys3.includes(String(v[0])));
     const fill = child(node, "fill");
-    if (!known(node, ["pts", "stroke", "fill", "uuid"]) || !pts || !stroke || fill && (fill.length !== 2 || !child(fill, "type") || child(fill, "type").length !== 2 || val(child(fill, "type")) !== "none") || !known(pts, ["xy"]) || !known(stroke, ["width", "type"]) || points2.length < 2 || points2.length > 4096 || children(pts, "xy").some((p) => p.length !== 3) || points2.some((p) => ![p.x, p.y].every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5)) || !Number.isFinite(width) || width < 0 || width > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(type) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
+    if (!known(node, [...rectangle ? ["start", "end"] : ["pts"], "stroke", "fill", "uuid"]) || !stroke || fill && (fill.length !== 2 || !child(fill, "type") || child(fill, "type").length !== 2 || val(child(fill, "type")) !== "none") || (rectangle ? points2[0].x === points2[1].x || points2[0].y === points2[1].y : !pts || !known(pts, ["xy"])) || !known(stroke, ["width", "type"]) || points2.length < 2 || points2.length > 4096 || vertices.some(
+      (p) => p.length !== 3 || typeof p[1] !== "string" || typeof p[2] !== "string"
+    ) || points2.some((p) => ![p.x, p.y].every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5)) || !Number.isFinite(width) || width < 0 || width > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(type) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
       throw new Error(
-        "Unsupported schematic polyline. Use finite unfilled native outlines. The original file was not modified."
+        `Unsupported schematic ${node[0]}. Use finite unfilled native outlines. The original file was not modified.`
       );
+    if (rectangle) {
+      const [a, b] = points2;
+      return { id, points: [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }, a], width, type };
+    }
     return { id, points: points2, width, type };
   });
+}
+
+// lib/schematic-image.ts
+var cachedImages = /* @__PURE__ */ new WeakMap();
+var invalidImage = () => {
+  throw new Error(
+    "Unsupported schematic image. Use bounded embedded PNG artwork. The original file was not modified."
+  );
+};
+function pngGeometry(data) {
+  if (!data || data.length > 1e6 || data.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data))
+    return invalidImage();
+  const bytes = atob(data);
+  if (bytes.length < 45 || !bytes.startsWith("\x89PNG\r\n\n")) return invalidImage();
+  const uint32 = (i) => bytes.charCodeAt(i) * 16777216 + bytes.charCodeAt(i + 1) * 65536 + bytes.charCodeAt(i + 2) * 256 + bytes.charCodeAt(i + 3);
+  if (uint32(8) !== 13 || bytes.slice(12, 16) !== "IHDR") return invalidImage();
+  const width = uint32(16), height = uint32(20);
+  if (!width || !height || width > 4096 || height > 4096) return invalidImage();
+  let widthPPI = 300;
+  let imageData = false;
+  let density = false;
+  for (let offset2 = 33; offset2 + 12 <= bytes.length; ) {
+    const length = uint32(offset2);
+    const kind = bytes.slice(offset2 + 4, offset2 + 8);
+    const end = offset2 + length + 12;
+    if (end > bytes.length) return invalidImage();
+    if (kind === "IEND" && !length && end === bytes.length && imageData)
+      return { width, height, widthPPI };
+    if (kind === "IDAT") imageData ||= length > 0;
+    if (kind === "pHYs") {
+      if (density || imageData || length !== 9 || bytes.charCodeAt(offset2 + 16) > 1)
+        return invalidImage();
+      density = true;
+      const ppi = Math.round(uint32(offset2 + 8) * 0.0254);
+      if (bytes.charCodeAt(offset2 + 16) === 1 && ppi > 1) widthPPI = ppi;
+    }
+    offset2 = end;
+  }
+  return invalidImage();
+}
+function readImage(node) {
+  const cached = cachedImages.get(node);
+  if (cached) return cached;
+  const at = child(node, "at"), scaleRecord = child(node, "scale");
+  const uuid = child(node, "uuid"), data = child(node, "data");
+  if (node.length !== (scaleRecord ? 5 : 4) || at?.length !== 3 || !val(at) || !val(at, 2) || uuid?.length !== 2 || !data || scaleRecord && (scaleRecord.length !== 2 || !val(scaleRecord)) || !data.slice(1).every((value) => typeof value === "string"))
+    return invalidImage();
+  const id = val(uuid);
+  const x = num(at), y = num(at, 2), scale2 = scaleRecord ? num(scaleRecord) : 1;
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || ![x, y, scale2].every(Number.isFinite) || scale2 <= 0)
+    return invalidImage();
+  const encoded = data.slice(1).map((_, i) => val(data, i + 1)).join("");
+  const png = pngGeometry(encoded);
+  const mmPerPixel = scale2 * 25.4 / png.widthPPI;
+  const width = png.width * mmPerPixel, height = png.height * mmPerPixel;
+  if (width < 1e-6 || height < 1e-6 || Math.abs(x) + width / 2 > 1e5 || Math.abs(y) + height / 2 > 1e5)
+    return invalidImage();
+  const image = {
+    id,
+    x: x - width / 2,
+    y: y - height / 2,
+    width,
+    height,
+    pixels: png.width * png.height,
+    href: `data:image/png;base64,${encoded}`
+  };
+  if (isOwnedProjectNode(node)) cachedImages.set(node, Object.freeze(image));
+  return image;
+}
+function schematicImages(original) {
+  const records2 = children(original ?? [], "image");
+  if (records2.length > 16) return invalidImage();
+  const images = records2.map(readImage);
+  if (images.reduce((pixels, image) => pixels + image.pixels, 0) > 16e6)
+    return invalidImage();
+  return images;
 }
 
 // lib/circuit.ts
@@ -6484,7 +6838,10 @@ function parseCircuitTree(root) {
     "sheet_instances",
     "embedded_fonts",
     "text",
-    "polyline"
+    "text_box",
+    "image",
+    "polyline",
+    "rectangle"
   ];
   const unsupported = root.filter(Array.isArray).map((x) => String(x[0])).filter((k) => !allowed.includes(k));
   if (unsupported.length)
@@ -6494,6 +6851,8 @@ function parseCircuitTree(root) {
   const d = emptyCircuit();
   d.original = root.filter((node) => !Array.isArray(node) || node[0] !== "paper");
   schematicTexts(root);
+  schematicTextBoxes(root);
+  schematicImages(root);
   schematicPolylines(root);
   d.id = val(child(root, "uuid")) || uid();
   d.title = val(child(child(root, "title_block") || [], "title")) || "Imported schematic";
@@ -6683,9 +7042,274 @@ function footprintModels(root) {
   });
 }
 
-// lib/kicad-pcb.ts
-var round = (n) => Number(n.toFixed(6));
+// lib/pcb-drill.ts
+function padDrillSize({ drill = 0, drillSlot }) {
+  return {
+    x: drillSlot?.axis === "x" ? drillSlot.length : drill,
+    y: drillSlot?.axis === "y" ? drillSlot.length : drill
+  };
+}
+function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
+  const center = drillOffset ?? { x: 0, y: 0 };
+  const halfTravel = drillSlot ? (drillSlot.length - drill) / 2 : 0;
+  const dx = drillSlot?.axis === "x" ? halfTravel : 0;
+  const dy = drillSlot?.axis === "y" ? halfTravel : 0;
+  return [
+    { x: center.x - dx, y: center.y - dy },
+    { x: center.x + dx, y: center.y + dy }
+  ];
+}
+function readPadDrill(node, fail6 = (message) => {
+  throw new Error(message);
+}) {
+  if (!node) return {};
+  const oval = val(node) === "oval";
+  const offset2 = child(node, "offset");
+  const dimensions = oval ? 4 : 2;
+  const offsetValue = (n, i) => {
+    const raw = val(n, i), value = Number(raw);
+    if (!raw || !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9)
+      fail6("Pad drill needs finite dimensions at 0.000001 mm precision.");
+    return value;
+  };
+  if (node.length !== dimensions + Number(!!offset2) || node.slice(1, dimensions).some(Array.isArray) || offset2 && (node[dimensions] !== offset2 || offset2.length !== 3 || offset2.slice(1).some(Array.isArray)))
+    fail6("Use a round or oval drill with at most one XY offset.");
+  const x = offsetValue(node, oval ? 2 : 1);
+  const y = oval ? offsetValue(node, 3) : x;
+  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
+    fail6("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
+  const drillOffset = offset2 && {
+    x: -offsetValue(offset2, 1) || 0,
+    y: -offsetValue(offset2, 2) || 0
+  };
+  return {
+    drill: Math.min(x, y),
+    ...oval ? { drillSlot: { length: Math.max(x, y), axis: x > y ? "x" : "y" } } : {},
+    ...drillOffset ? { drillOffset } : {}
+  };
+}
+
+// lib/pcb-custom-pad.ts
+var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-custom-pad-limits.ts
+var customPadVertexLimit = 128;
+
+// lib/pcb-custom-pad.ts
+var nmPerMm = 1e6;
+var rectangleLimit = 16;
+function nativeNanometres(value, reject) {
+  const nm = Math.round(value * nmPerMm);
+  if (!Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - nm / nmPerMm) > 1e-9)
+    reject("Custom pad rectangles require native coordinate precision.");
+  return nm;
+}
+function readPadPolygon(polygon, reject) {
+  const points2 = child(polygon, "pts");
+  const width = child(polygon, "width");
+  const fill = child(polygon, "fill");
+  if (polygon[0] !== "gr_poly" || polygon.length !== 4 || width?.length !== 2 || !val(width) || Number(val(width)) !== 0 || fill?.length !== 2 || val(fill) !== "yes" || !points2 || points2.length < 4 || points2.length > customPadVertexLimit + 1)
+    reject(
+      `Custom pad polygons must be filled and unstroked with 3\u2013${customPadVertexLimit} vertices.`
+    );
+  return points2.slice(1).map((point2) => {
+    if (!Array.isArray(point2) || point2[0] !== "xy" || point2.length !== 3 || !val(point2) || !val(point2, 2))
+      reject("Invalid custom pad vertex.");
+    return { x: Number(val(point2)), y: Number(val(point2, 2)) };
+  });
+}
+function rectanglePath(left, top, right, bottom) {
+  return [
+    { X: left, Y: top },
+    { X: right, Y: top },
+    { X: right, Y: bottom },
+    { X: left, Y: bottom }
+  ];
+}
+function mergePadRectangles(pad, polygons, reject) {
+  const size = child(pad, "size");
+  const width = nativeNanometres(Number(val(size)), reject);
+  const height = nativeNanometres(Number(val(size, 2)), reject);
+  if (size?.length !== 3 || width <= 0 || height <= 0 || width % 2 || height % 2)
+    reject("Compound custom pads require a rectangular anchor on the native grid.");
+  const paths2 = polygons.map((polygon) => {
+    const points2 = polygon.map(({ x, y }) => ({
+      x: nativeNanometres(x, reject),
+      y: nativeNanometres(y, reject)
+    }));
+    const xs = [...new Set(points2.map(({ x }) => x))].sort((a, b) => a - b);
+    const ys = [...new Set(points2.map(({ y }) => y))].sort((a, b) => a - b);
+    if (points2.length !== 4 || xs.length !== 2 || ys.length !== 2 || points2.some((point2, i) => {
+      const next = points2[(i + 1) % points2.length];
+      return point2.x === next.x === (point2.y === next.y);
+    }) || new Set(points2.map(({ x, y }) => `${x},${y}`)).size !== 4)
+      reject("Compound custom pad primitives must be axis-aligned rectangles.");
+    return rectanglePath(xs[0], ys[0], xs[1], ys[1]);
+  });
+  paths2.unshift(rectanglePath(-width / 2, -height / 2, width / 2, height / 2));
+  const clipper = new import_clipper_lib.default.Clipper();
+  clipper.StrictlySimple = true;
+  const tree = new import_clipper_lib.default.PolyTree();
+  clipper.AddPaths(paths2, import_clipper_lib.default.PolyType.ptSubject, true);
+  clipper.Execute(
+    import_clipper_lib.default.ClipType.ctUnion,
+    tree,
+    import_clipper_lib.default.PolyFillType.pftNonZero,
+    import_clipper_lib.default.PolyFillType.pftNonZero
+  );
+  const regions = import_clipper_lib.default.JS.PolyTreeToExPolygons(tree);
+  if (regions.length !== 1 || regions[0].holes.length)
+    reject("Compound custom pads require a single outline without holes.");
+  return regions[0].outer.map(({ X, Y }) => ({ x: X / nmPerMm, y: Y / nmPerMm }));
+}
+function readCustomPad(pad, reject) {
+  const options = children(pad, "options");
+  const primitives = children(pad, "primitives");
+  if (val(pad, 3) !== "custom") {
+    if (options.length) reject("The pad uses unsupported options.");
+    if (primitives.length) reject("The pad uses unsupported primitives.");
+    return {};
+  }
+  const option = options[0];
+  const clearance = option && children(option, "clearance")[0];
+  const anchor = option && children(option, "anchor")[0];
+  const anchorShape = val(anchor);
+  if (options.length !== 1 || option.length !== 3 || clearance?.length !== 2 || val(clearance) !== "outline" || anchor?.length !== 2 || !["rect", "circle"].includes(anchorShape))
+    reject("Custom pads require outline clearance and a rectangular or circular anchor.");
+  const records2 = primitives[0]?.slice(1) ?? [];
+  if (primitives.length !== 1 || !records2.length || records2.length > rectangleLimit)
+    reject(`Custom pads require one polygon or up to ${rectangleLimit} rectangular primitives.`);
+  const polygons = records2.map((record2) => {
+    if (!Array.isArray(record2)) reject("Invalid custom pad primitive.");
+    return readPadPolygon(record2, reject);
+  });
+  if (polygons.length > 1 && anchorShape !== "rect")
+    reject("Compound custom pads require a rectangular anchor.");
+  const outline = polygons.length === 1 ? polygons[0] : mergePadRectangles(pad, polygons, reject);
+  return { outline, ...anchorShape === "circle" ? { customAnchor: "circle" } : {} };
+}
+
+// lib/pcb-geometry.ts
+function transformPCBGraphic(g, point2, angle3 = (n) => n) {
+  return {
+    ...g,
+    start: point2(g.start),
+    end: point2(g.end),
+    ...g.mid ? { mid: point2(g.mid) } : {},
+    ...g.points ? { points: g.points.map(point2) } : {},
+    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
+    ...g.dimension ? {
+      dimension: {
+        ...g.dimension,
+        caption: {
+          ...g.dimension.caption,
+          ...point2(g.dimension.caption),
+          rotation: angle3(g.dimension.caption.rotation)
+        }
+      }
+    } : {}
+  };
+}
+function transformPCBZone(z, point2) {
+  return {
+    ...z,
+    outline: z.outline.map(point2),
+    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
+    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
+  };
+}
+function pcbArc(g) {
+  const a = g.start, b = g.mid, c = g.end;
+  if (!b) return null;
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-12) return null;
+  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
+  const center = {
+    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
+    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
+  };
+  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
+  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
+  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
+  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
+}
+var pcbPadCorners = [
+  { x: -1, y: -1, name: "top_left" },
+  { x: 1, y: -1, name: "top_right" },
+  { x: 1, y: 1, name: "bottom_right" },
+  { x: -1, y: 1, name: "bottom_left" }
+];
+function pcbPadChamferEndpoints({ x, y }, size, cut) {
+  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
+  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+
+// lib/pcb-text.ts
+function footprintTextPlacement(node, fail6) {
+  const at = child(node, "at");
+  const inPosition = at?.at(-1) === "unlocked";
+  const flags = children(node, "unlocked");
+  const bare = node.filter((item) => item === "unlocked").length;
+  const [flag] = flags;
+  if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
+    fail6("Invalid footprint text orientation flag.");
+  return {
+    at: inPosition ? at.slice(0, -1) : at,
+    unlocked: inPosition || bare === 1 || val(flag) === "yes",
+    flag,
+    bare: bare === 1,
+    inPosition
+  };
+}
+
+// lib/pcb-pad-role.ts
+function isApertureLayer(layer) {
+  return layer === "F.Paste" || layer === "B.Paste" || layer === "F.Mask" || layer === "B.Mask";
+}
+function padApertureLayers(pad) {
+  const { layers } = pad;
+  if (pad.type !== "smd" || pad.number !== "" || !layers?.length || layers.length > 2) return;
+  if (!layers.every(isApertureLayer)) return;
+  const [first, second] = layers;
+  if (!second || first !== second && first[0] === second[0]) return layers;
+}
+function padHasElectricalPin(pad) {
+  return pad.type !== "np_thru_hole" && !padApertureLayers(pad);
+}
+function readPadHeatsink(node, fail6) {
+  const properties = children(node, "property");
+  if (!properties.length) return {};
+  const [property] = properties;
+  if (properties.length !== 1 || property.length !== 2 || property[1] !== "pad_prop_heatsink")
+    fail6("Unsupported pad fabrication property.");
+  return { heatsink: true };
+}
+
+// lib/pcb-layout.ts
+var round = (n) => Number(n.toFixed(6)) + 0;
 var angle = (n) => round((n % 360 + 360) % 360);
+function footprintPoint(footprint, local) {
+  const radians = -footprint.rotation * Math.PI / 180;
+  return {
+    x: round(footprint.x + local.x * Math.cos(radians) - local.y * Math.sin(radians)),
+    y: round(footprint.y + local.x * Math.sin(radians) + local.y * Math.cos(radians))
+  };
+}
+var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
+var padRotation = (footprint, pad) => angle(footprint.rotation + pad.rotation);
+function padDrillPosition(footprint, pad) {
+  return footprintPoint(footprint, pad.drillOffset ? footprintPoint(pad, pad.drillOffset) : pad);
+}
+function padDrillLine(footprint, pad) {
+  const at = { ...padDrillPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+  const [start, end] = localPadDrillLine({ drill: pad.drill, drillSlot: pad.drillSlot });
+  return [footprintPoint(at, start), footprintPoint(at, end)];
+}
+
+// lib/kicad-pcb.ts
+var round2 = (n) => Number(n.toFixed(6));
+var angle2 = (n) => round2((n % 360 + 360) % 360);
 var fail = (message) => {
   throw new Error(`KiCad PCB: ${message}`);
 };
@@ -6741,14 +7365,14 @@ function expandNativeBoardZones(root) {
   });
   return expand(root);
 }
-function textData(n, value) {
+function textData(n, value, at = child(n, "at")) {
   const e = child(n, "effects"), f = e && child(e, "font");
   if (!f) fail("Text has no font geometry.");
   allow(e, ["font", "justify", "hide"], "text effects");
   allow(f, ["size", "thickness", "bold", "italic"], "font");
   return {
     value,
-    rotation: number(child(n, "at"), 3, 0),
+    rotation: number(at, 3, 0),
     size: point(child(f, "size")),
     thickness: number(child(f, "thickness"), 1, 0),
     ...child(e, "justify") ? {
@@ -6811,7 +7435,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
     if (!nets.has(name)) nets.set(name, stable("net:" + name));
     return nets.get(name);
   };
-  const graph = (n, key2, footprintRotation = 0) => {
+  const graph = (n, key2, footprintRotation) => {
     const kind = String(n[0]).replace(/^(fp|gr)_/, "");
     const layer = val(child(n, "layer"));
     const common = {
@@ -6821,12 +7445,29 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       ...nativeLocked(n) ? { locked: true } : {}
     };
     if (kind === "text" || kind === "property") {
-      allow(n, ["at", "layer", "uuid", "effects", "hide", "unlocked", "locked"], "text");
-      const at = point(child(n, "at"));
-      const t = textData(n, val(n, kind === "property" || n[0] === "fp_text" ? 2 : 1));
-      t.rotation = angle(t.rotation - footprintRotation);
+      const inFootprint = footprintRotation !== void 0;
+      allow(
+        n,
+        ["at", "layer", "uuid", "effects", "hide", "locked", ...inFootprint ? ["unlocked"] : []],
+        "text"
+      );
+      const placement = inFootprint ? footprintTextPlacement(n, fail) : { at: child(n, "at") };
+      const at = point(placement.at);
+      const t = textData(
+        n,
+        val(n, kind === "property" || n[0] === "fp_text" ? 2 : 1),
+        placement.at
+      );
+      t.rotation = angle2(t.rotation - (footprintRotation ?? 0));
       if (kind === "property") t.property = val(n);
-      return { ...common, kind: "text", start: at, end: { ...at }, text: t };
+      return {
+        ...common,
+        kind: "text",
+        start: at,
+        end: { ...at },
+        text: t,
+        ..."unlocked" in placement && placement.unlocked ? { keepUpright: false } : {}
+      };
     }
     if (kind === "dimension") {
       allow(
@@ -7045,6 +7686,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         "fp_circle",
         "fp_poly",
         "fp_text",
+        "point",
         "pad",
         "zone",
         "embedded_fonts",
@@ -7062,10 +7704,8 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           fail("Incomplete footprint unit metadata.");
       }
     }
-    const reference = val(
-      children(n, "property").find((p) => val(p) === "Reference"),
-      2
-    ), value = val(
+    const referenceField = children(n, "property").find((p) => val(p) === "Reference");
+    const reference = val(referenceField, 2), value = val(
       children(n, "property").find((p) => val(p) === "Value"),
       2
     );
@@ -7076,11 +7716,15 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       part ? children(schematic.libraries[part.libId], "symbol").flatMap((s) => children(s, "pin")).map((p) => val(child(p, "number"))) : []
     );
     const at = point(child(n, "at")), rotation = number(child(n, "at"), 3, 0);
-    const local = (p) => {
-      const r = rotation * Math.PI / 180, x = p.x - at.x, y = p.y - at.y;
+    const radians = rotation * Math.PI / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const local = (p, digits) => {
+      const x = p.x - at.x;
+      const y = p.y - at.y;
       return {
-        x: round(x * Math.cos(r) - y * Math.sin(r)),
-        y: round(x * Math.sin(r) + y * Math.cos(r))
+        x: Number((x * cosine - y * sine).toFixed(digits)) + 0,
+        y: Number((x * sine + y * cosine).toFixed(digits)) + 0
       };
     };
     const pads = children(n, "pad").map((p, pi) => {
@@ -7101,9 +7745,12 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           "roundrect_rratio",
           "chamfer_ratio",
           "chamfer",
+          "options",
+          "primitives",
           "zone_connect",
           "pinfunction",
           "pintype",
+          "property",
           "locked"
         ],
         "pad"
@@ -7113,26 +7760,29 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         if (fields.length > 1 || fields.some((field) => field.length !== 2 || typeof field[1] !== "string"))
           fail(`Pad has invalid ${key2} metadata.`);
       }
-      const drill = child(p, "drill");
-      if (drill) allow(drill, ["offset"], "drill");
-      if (drill && val(drill) === "oval")
-        fail("Slotted drills are not supported by the editor. The original file was not modified.");
+      const drills = children(p, "drill");
+      if (drills.length > 1) fail("A pad repeats its drill.");
+      const drill = readPadDrill(drills[0], fail);
+      const customPad = readCustomPad(p, fail);
+      const padRotation2 = angle2(number(child(p, "at"), 3, 0) - rotation);
+      const anchor = point(child(p, "at"));
+      const offset2 = drill.drillOffset;
+      const copper = offset2 ? footprintPoint({ ...anchor, rotation: padRotation2 }, { x: -offset2.x, y: -offset2.y }) : anchor;
       const result = {
         id: id(p, `fp:${fi}:pad:${pi}`),
         ...nativeLocked(p) ? { locked: true } : {},
         number: val(p),
         type: val(p, 2),
         shape: val(p, 3),
-        ...point(child(p, "at")),
-        rotation: angle(number(child(p, "at"), 3, 0) - rotation),
+        ...copper,
+        rotation: padRotation2,
+        ...drill,
         size: point(child(p, "size")),
+        ...customPad,
+        ...readPadHeatsink(p, fail),
         netId: net(p),
         layers: child(p, "layers").slice(1).map((_, i) => val(child(p, "layers"), i + 1))
       };
-      if (drill) {
-        result.drill = number(drill);
-        if (child(drill, "offset")) result.drillOffset = point(child(drill, "offset"));
-      }
       for (const [key2, native] of [
         ["roundrectRatio", "roundrect_rratio"],
         ["chamferRatio", "chamfer_ratio"],
@@ -7147,7 +7797,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         result.chamfer = child(p, "chamfer").slice(1).map((_, i) => val(child(p, "chamfer"), i + 1));
       if (child(p, "remove_unused_layers"))
         result.removeUnusedLayers = val(child(p, "remove_unused_layers")) === "yes";
-      if (part && symbolPins.size && !symbolPins.has(result.number) && result.type !== "np_thru_hole") {
+      if (part && symbolPins.size && !symbolPins.has(result.number) && padHasElectricalPin(result)) {
         if (result.netId)
           fail(`${originalReference} package pad ${result.number} has a net but no source pin.`);
         result.unconnected = true;
@@ -7163,7 +7813,21 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       if (g.text?.property === "Reference") g.text.value = "${REFERENCE}";
       if (g.text?.property === "Value") g.text.value = "${VALUE}";
     }
+    const referencePoints = children(n, "point").map((record2) => {
+      const position2 = child(record2, "at");
+      const size = child(record2, "size");
+      const layer = child(record2, "layer");
+      const uuid = child(record2, "uuid");
+      if (record2.length !== 5 || position2?.length !== 3 || size?.length !== 2 || layer?.length !== 2 || uuid?.length !== 2)
+        fail("Invalid footprint reference point.");
+      const layerName = val(layer);
+      if (layerName !== "F.Fab" && layerName !== "B.Fab")
+        return fail("Footprint reference points require a fabrication layer.");
+      return { ...local(point(position2), 12), id: val(uuid), size: number(size), layer: layerName };
+    });
     const hasPins = part && children(schematic.libraries[part.libId], "symbol").some((s) => children(s, "pin").length);
+    if (!hasPins && !originalReference && typeof referenceField?.[2] !== "string")
+      fail("An unlinked footprint requires a native Reference property.");
     return {
       id: id(n, `footprint:${fi}`),
       symbolId: hasPins ? part.id : null,
@@ -7178,8 +7842,13 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       ...!hasPins ? { reference: originalReference, value } : {},
       pads,
       graphics: graphics2,
+      ...referencePoints.length ? { referencePoints } : {},
       ...children(n, "model").length ? { models: footprintModels(n) } : {},
-      ...child(n, "zone") ? { zones: children(n, "zone").map((z, i) => zone(z, `fp:${fi}:zone:${i}`, local)) } : {}
+      ...child(n, "zone") ? {
+        zones: children(n, "zone").map(
+          (z, i) => zone(z, `fp:${fi}:zone:${i}`, (p) => local(p, 6))
+        )
+      } : {}
     };
   });
   const tracks = children(root, "segment").map((n, i) => {
@@ -7419,9 +8088,9 @@ function groupCircuit(circuit, joinNames = true) {
   const physical = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const library = circuit.libraries[part.libId];
-    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const definitions2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
     const positions = pinPositions(part, library);
-    definitions.forEach((pin, i) => {
+    definitions2.forEach((pin, i) => {
       const index = add(positions[i]), number5 = val(child(pin, "number"));
       const key2 = JSON.stringify([part.ref, number5]);
       const previous = physical.get(key2);
@@ -7431,7 +8100,7 @@ function groupCircuit(circuit, joinNames = true) {
         { key: documentPinKey(part.id, number5), index },
         { key: documentPhysicalPinKey(part.ref, number5), index }
       );
-      if (child(library, "power") && definitions.length === 1 && val(pin) === "power_in")
+      if (child(library, "power") && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
       else if (val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
         names.push({ name: val(child(pin, "name")), index });
@@ -7570,10 +8239,10 @@ function packFootprint(footprint, order, shareGeometry = false) {
     order,
     ...models3 ? {
       models: models3.map((model) => {
-        const { offset, scale: scale2, rotation, ...rest } = model;
+        const { offset: offset2, scale: scale2, rotation, ...rest } = model;
         return {
           ...rest,
-          ...!vector(offset, 0) ? { offset } : {},
+          ...!vector(offset2, 0) ? { offset: offset2 } : {},
           ...!vector(scale2, 1) ? { scale: scale2 } : {},
           ...!vector(rotation, 0) ? { rotation } : {}
         };
@@ -7844,8 +8513,8 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
 
 // lib/project-document.ts
 var details = (node, excluded) => {
-  const offset = node[0] === "property" ? 3 : ["label", "global_label"].includes(String(node[0])) ? 2 : 1;
-  return node.slice(offset).flatMap((v) => {
+  const offset2 = node[0] === "property" ? 3 : ["label", "global_label"].includes(String(node[0])) ? 2 : 1;
+  return node.slice(offset2).flatMap((v) => {
     if (Array.isArray(v)) return excluded.includes(String(v[0])) ? [] : [v];
     if (node[0] === "property" && v === "hide") return [["hide", "yes"]];
     throw new Error(
@@ -7945,10 +8614,10 @@ function documentTexts(root) {
     const id = val(child(node, "uuid"));
     if (!byId.has(id)) byId.set(id, node);
   }
-  return texts.map(({ x, y, vertical, ...text }) => {
-    const excluded = child(byId.get(text.id), "exclude_from_sim");
+  return texts.map(({ x, y, vertical, ...text2 }) => {
+    const excluded = child(byId.get(text2.id), "exclude_from_sim");
     return {
-      ...text,
+      ...text2,
       position: { x, y },
       vertical,
       ...excluded ? { excludeFromSimulation: val(excluded) === "yes" } : {}
@@ -8209,8 +8878,8 @@ function rememberNativeSourceJson(file, encode) {
 var fmt2 = (n) => String(Number(n.toFixed(12)));
 function resolvePCBGraphic(g, reference, value) {
   if (!g.text) return g;
-  const text = g.text.property === "Reference" ? reference : g.text.property === "Value" ? value : g.text.value.replaceAll("${REFERENCE}", reference).replaceAll("${VALUE}", value);
-  return text === g.text.value ? g : { ...g, text: { ...g.text, value: text } };
+  const text2 = g.text.property === "Reference" ? reference : g.text.property === "Value" ? value : g.text.value.replaceAll("${REFERENCE}", reference).replaceAll("${VALUE}", value);
+  return text2 === g.text.value ? g : { ...g, text: { ...g.text, value: text2 } };
 }
 var ownedBoardSources = /* @__PURE__ */ new WeakMap();
 var ownedBoardChunks = /* @__PURE__ */ new WeakMap();
@@ -8259,12 +8928,12 @@ function materializedPCBTree(board, schematic) {
 }
 function serializePCBContent(board, schematic, parts) {
   const reusable = isOwnedPCB(board);
-  const retain = (record, context, create) => {
-    const owned = reusable && isOwnedProjectNode(record);
-    const cached = owned ? ownedBoardChunks.get(record) : void 0;
+  const retain = (record2, context, create) => {
+    const owned = reusable && isOwnedProjectNode(record2);
+    const cached = owned ? ownedBoardChunks.get(record2) : void 0;
     if (cached?.context === context) return cached.chunk;
     const chunk = { source: create() };
-    if (owned) ownedBoardChunks.set(record, { context, chunk });
+    if (owned) ownedBoardChunks.set(record2, { context, chunk });
     return chunk;
   };
   const xy2 = (p) => `${fmt2(p.x)} ${fmt2(p.y)}`;
@@ -8275,7 +8944,8 @@ function serializePCBContent(board, schematic, parts) {
     const stroke = `(stroke (width ${fmt2(g.width)}) (type ${g.stroke ?? "default"}))`;
     if (g.kind === "text") {
       const t = g.text;
-      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${t.hidden ? "(hide yes) " : ""}${effects(t)} ${tail}`;
+      const unlocked = prefix === "fp" && g.keepUpright === false ? "(unlocked yes) " : "";
+      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${unlocked}${t.hidden ? "(hide yes) " : ""}${effects(t)} ${tail}`;
     }
     if (g.kind === "dimension") {
       const d = g.dimension, f = d.format, s = d.style;
@@ -8363,21 +9033,32 @@ function serializePCBContent(board, schematic, parts) {
         for (const pad of f.pads) {
           const layers = pad.layers ? pad.layers.map(quote).join(" ") : pad.type !== "smd" ? '"*.Cu" "*.Mask"' : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
           const extras = pad.locked ? ["(locked yes)"] : [];
+          if (pad.heatsink) extras.push("(property pad_prop_heatsink)");
+          if (pad.roundrectRatio !== void 0)
+            extras.push(`(roundrect_rratio ${pad.roundrectRatio})`);
+          if (pad.chamferRatio !== void 0) extras.push(`(chamfer_ratio ${pad.chamferRatio})`);
+          if (pad.solderPasteMarginRatio !== void 0)
+            extras.push(`(solder_paste_margin_ratio ${pad.solderPasteMarginRatio})`);
           for (const [key2, native] of [
-            ["roundrectRatio", "roundrect_rratio"],
-            ["chamferRatio", "chamfer_ratio"],
             ["solderMaskMargin", "solder_mask_margin"],
             ["solderPasteMargin", "solder_paste_margin"],
-            ["solderPasteMarginRatio", "solder_paste_margin_ratio"],
             ["thermalBridgeAngle", "thermal_bridge_angle"],
             ["zoneConnect", "zone_connect"]
           ])
             if (pad[key2] !== void 0) extras.push(`(${native} ${fmt2(pad[key2])})`);
           if (pad.chamfer) extras.push(`(chamfer ${pad.chamfer.join(" ")})`);
+          if (pad.outline)
+            extras.push(
+              `(options (clearance outline) (anchor ${pad.customAnchor ?? "rect"}))`,
+              `(primitives (gr_poly (pts ${pad.outline.map((p2) => `(xy ${fmt2(p2.x)} ${fmt2(p2.y)})`).join(" ")}) (width 0) (fill yes)))`
+            );
           if (pad.removeUnusedLayers !== void 0)
             extras.push(`(remove_unused_layers ${pad.removeUnusedLayers ? "yes" : "no"})`);
+          const offset2 = pad.drillOffset;
+          const anchor = offset2 ? footprintPoint(pad, offset2) : pad;
+          const drill = pad.drill === void 0 ? "" : ` (drill ${pad.drillSlot ? `oval ${xy2(padDrillSize(pad))}` : fmt2(pad.drill)}${offset2 ? ` (offset ${fmt2(-offset2.x)} ${fmt2(-offset2.y)})` : ""})`;
           lines2.push(
-            `    (pad ${quote(pad.number)} ${pad.type} ${pad.shape} (at ${xy2(pad)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${pad.type !== "smd" ? ` (drill ${fmt2(pad.drill)}${pad.drillOffset ? ` (offset ${xy2(pad.drillOffset)})` : ""})` : ""} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
+            `    (pad ${quote(pad.number)} ${pad.type} ${pad.shape} (at ${xy2(anchor)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${drill} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
           );
         }
         const radians = -f.rotation * Math.PI / 180;
@@ -8385,7 +9066,13 @@ function serializePCBContent(board, schematic, parts) {
           x: f.x + p2.x * Math.cos(radians) - p2.y * Math.sin(radians),
           y: f.y + p2.x * Math.sin(radians) + p2.y * Math.cos(radians)
         });
-        lines2.push(...(f.zones ?? []).map((z) => "    " + zone(z, absolute)), "  )");
+        lines2.push(
+          ...(f.referencePoints ?? []).map(
+            (p2) => `    (point (at ${xy2(footprintPoint(f, p2))}) (size ${fmt2(p2.size)}) (layer ${quote(p2.layer)}) (uuid ${quote(p2.id)}))`
+          ),
+          ...(f.zones ?? []).map((z) => "    " + zone(z, absolute)),
+          "  )"
+        );
         return lines2.join("\n");
       })
     );
@@ -8564,12 +9251,12 @@ function compileCapabilitySchema(schema) {
             }
           }
         } else if (plain(value)) {
-          const keys2 = Object.keys(value);
-          if (s.minProperties !== void 0 && keys2.length < s.minProperties || s.maxProperties !== void 0 && keys2.length > s.maxProperties)
+          const keys3 = Object.keys(value);
+          if (s.minProperties !== void 0 && keys3.length < s.minProperties || s.maxProperties !== void 0 && keys3.length > s.maxProperties)
             return error("has an unsupported property count");
           for (const key2 of s.required ?? [])
             if (!Object.hasOwn(value, key2)) return error(`requires ${key2}`);
-          for (const key2 of keys2) {
+          for (const key2 of keys3) {
             if (["__proto__", "prototype", "constructor"].includes(key2))
               return error("contains a reserved field");
             if (!properties.has(key2) && s.additionalProperties === false)
@@ -8596,51 +9283,6 @@ function compileCapabilitySchema(schema) {
       return { valid: false, error: error.message };
     }
   };
-}
-
-// lib/pcb-geometry.ts
-function transformPCBGraphic(g, point2, angle3 = (n) => n) {
-  return {
-    ...g,
-    start: point2(g.start),
-    end: point2(g.end),
-    ...g.mid ? { mid: point2(g.mid) } : {},
-    ...g.points ? { points: g.points.map(point2) } : {},
-    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
-    ...g.dimension ? {
-      dimension: {
-        ...g.dimension,
-        caption: {
-          ...g.dimension.caption,
-          ...point2(g.dimension.caption),
-          rotation: angle3(g.dimension.caption.rotation)
-        }
-      }
-    } : {}
-  };
-}
-function transformPCBZone(z, point2) {
-  return {
-    ...z,
-    outline: z.outline.map(point2),
-    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
-    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
-  };
-}
-function pcbArc(g) {
-  const a = g.start, b = g.mid, c = g.end;
-  if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
-  if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
-  const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
-  };
-  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
-  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
-  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
-  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
 }
 
 // lib/model-cad.ts
@@ -8768,7 +9410,7 @@ var fail2 = (message) => {
 };
 var epsilon = 1e-6;
 var cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-var segmentDistance = (p, a, b) => {
+var segmentDistance2 = (p, a, b) => {
   const dx = b.x - a.x, dy = b.y - a.y;
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
@@ -8782,7 +9424,7 @@ function intersects(a, b, c, d) {
     [cdA, a, c, d],
     [cdB, b, c, d]
   ].some(
-    ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance(point2, start, end) <= epsilon : false
+    ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance2(point2, start, end) <= epsilon : false
   );
 }
 function validateModelCadProfile(input, size) {
@@ -9060,160 +9702,26 @@ var reference_models_lock_default = {
   ]
 };
 
-// lib/ti-dcdc.ts
+// lib/reference-models.ts
 var referenceModels = reference_models_lock_default.models;
-var tiModels = [
-  {
-    id: "lm2596-3.3",
-    voltage: 3.3,
-    archive: "snvma65",
-    file: "LM2596_3P3_TRANS.LIB",
-    subcircuit: "LM2596_3P3_TRANS",
-    sha256: "b387d7bdc153fc515d7f979b6d60634415b158957ce9b3682b3e3842f48bcc66",
-    modelSha256: "433ac0453d98beb58abf8f0bd60cd674e573846b08f3056118049b71ad8c66d3"
-  },
-  {
-    id: "lm2596-5",
-    voltage: 5,
-    archive: "snvma62",
-    file: "LM2596_5P0_TRANS.LIB",
-    subcircuit: "LM2596_5P0_TRANS",
-    sha256: "c8d6730cb669b577e013acd14653ef2be12035e778b3b4449e384c93bab8636f",
-    modelSha256: "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134"
-  },
-  {
-    id: "lm2596-12",
-    voltage: 12,
-    archive: "snvma63",
-    file: "LM2596_12P0_TRANS.LIB",
-    subcircuit: "LM2596_12P0_TRANS",
-    sha256: "8157546e5e9d715c0d891339cbcedc92424b9dc72e0fd63ee2fc88789940c091",
-    modelSha256: "4dea9cd7347281c5dce060fbdc4d58c887ffeba2d8d2213541a6507ad8d2d0a5"
-  }
-];
+var lm2596SourceModel = {
+  id: "lm2596-5",
+  archive: "snvma62",
+  file: "LM2596_5P0_TRANS.LIB",
+  subcircuit: "LM2596_5P0_TRANS",
+  sha256: "c8d6730cb669b577e013acd14653ef2be12035e778b3b4449e384c93bab8636f",
+  modelSha256: "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134"
+};
+var controllerModelSources = [lm2596SourceModel, ...referenceModels];
 var lm2596AdjustableDerivedModel = {
   id: "openpe-lm2596-adj",
   library: "OpenPE:lm2596-adj-derived",
   subcircuit: "OPENPE_DERIVED_LM2596_ADJ_TRANS",
-  sourceModelId: tiModels[1].id,
-  sourceSha256: tiModels[1].modelSha256,
-  sourceSubcircuit: tiModels[1].subcircuit,
+  sourceModelId: lm2596SourceModel.id,
+  sourceSha256: lm2596SourceModel.modelSha256,
+  sourceSubcircuit: lm2596SourceModel.subcircuit,
   referenceVoltage: 1.235,
   description: "OpenPE-derived adjustable model based on the official TI LM2596 5 V model; internal feedback divider removed. Not a TI-issued ADJ model."
-};
-var tiDcdcParts = tiModels.flatMap(
-  (model) => ["S", "T"].map((pkg) => ({
-    id: `Regulator_Switching:LM2596${pkg}-${model.voltage}`,
-    name: `LM2596${pkg}-${model.voltage}`,
-    library: "Regulator_Switching",
-    description: `Texas Instruments \xB7 ${model.voltage} V, 3 A Buck \xB7 150 kHz \xB7 ${pkg === "S" ? "TO-263-5" : "TO-220-5"}`,
-    keywords: "TI Texas Instruments DC/DC buck regulator power supply",
-    footprint: pkg === "S" ? "Package_TO_SOT_SMD:TO-263-5_TabPin3" : "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
-    model
-  }))
-);
-
-// resources/example-models-lock.json
-var example_models_lock_default = {
-  version: 1,
-  models: [
-    {
-      id: "example-1n4002",
-      file: "1N4002.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/1N4002.lib",
-      sha256: "f1c010faba354671fcd72cf227b33a28b21281a2f05d40fa07ed08dcb7e4a0aa"
-    },
-    {
-      id: "example-1n5818",
-      file: "1N5818.mod",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/royer/1N5818.mod",
-      sha256: "1590eb855e74a600fb62462691128b135d6bf24fdad32510762a02c9ae827037"
-    },
-    {
-      id: "example-ad8009",
-      file: "ad8009.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/ad8009.lib",
-      sha256: "6a93f52fbdd073c470a6cc7b217cee2c6124bb520dfe0f10a85aa99325abfb50"
-    },
-    {
-      id: "example-bc337-25-spice",
-      file: "bc337-25_spice.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/royer/bc337-25_spice.lib",
-      sha256: "f04b72fab18a8ac60761dc2ea9b656b652d657a41bef8007330937aebb03039c"
-    },
-    {
-      id: "example-daudiodriver",
-      file: "DAudioDriver.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/class-d/DAudioDriver.lib",
-      sha256: "0659f9c521d2b157650d71f3f253340017bc07d1142629468beb29c11bed523a"
-    },
-    {
-      id: "example-diode-bridge",
-      file: "diode_bridge.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/diode_bridge.lib",
-      sha256: "91faedbd293cd681b80e07cbf3d6a04c940854474560c958f7b753dd8174d4f0"
-    },
-    {
-      id: "example-diode",
-      file: "diode.mod",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/rectifier/diode.mod",
-      sha256: "b160f44c4bb90e7528633ce691d6ea94e94210bc9afc33335cb40961815911ce"
-    },
-    {
-      id: "example-fzt1049a",
-      file: "fzt1049a.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/fzt1049a.lib",
-      sha256: "c7060c71ac0e6c7bfa553362347495dd3d3d1b3758d7d746aed6bc95998786df"
-    },
-    {
-      id: "example-gan-pspice-gs-065-018-2-l-l1v3p3",
-      file: "GaN_PSpice_GS-065-018-2-L_L1V3P3.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/hv_converter/GaN_PSpice_GS-065-018-2-L_L1V3P3.lib",
-      sha256: "5cba9f7783c9e184792f4ccaf0c45807af1cb2b89bebf848a2944da0f9938e9b"
-    },
-    {
-      id: "example-genopamp",
-      file: "GenOpAmp.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/boost/GenOpAmp.lib",
-      sha256: "26097cf1a070a66711eec9de5f55bf74bd31be71bf17aa09f6cf2067a2a5c557"
-    },
-    {
-      id: "example-laser",
-      file: "laser.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/laser_driver/laser.lib",
-      sha256: "f8df727383c4562aa270efdfbf4909b8ed65295117b72162843b39e9053bee79"
-    },
-    {
-      id: "example-lm317",
-      file: "LM317.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/LM317.lib",
-      sha256: "e3e6eb3133235a69aa1d5e35182ac761631e2a72e2f359cf987cc35b5491aa0d"
-    },
-    {
-      id: "example-pwm2-model",
-      file: "pwm2_model.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/boost/pwm2_model.lib",
-      sha256: "ce9e5f45105beb27bf0755defb0e226ad6a883c0a6a5d4f71dd4d972c33bf485"
-    },
-    {
-      id: "example-st-silicon-carbide-schottky-v9",
-      file: "ST_SILICON_CARBIDE_SCHOTTKY_V9.LIB",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/hv_converter/ST_SILICON_CARBIDE_SCHOTTKY_V9.LIB",
-      sha256: "cdbad712387f633563d33e23ba84dc37326ff2fb43111ea51a7a1baeaec87d6c"
-    },
-    {
-      id: "example-xformer",
-      file: "xformer.lib",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-source-mirror/0feeca2a807f428ad2b3fa7c1e39625cb769f02c/demos/simulation/power_supplies/LM317_power_supply/xformer.lib",
-      sha256: "bda594e208eafb4f0464c1abf9320a4606df4245699985a357cf7b76508e24e1"
-    },
-    {
-      id: "example-simulation-spice",
-      file: "Simulation_SPICE.sp",
-      url: "https://raw.githubusercontent.com/KiCad/kicad-symbols/495444d353551ba5f610d47d22c979c50b0bd70c/Simulation_SPICE.sp",
-      sha256: "093202ee7a2dd2446cdfe03107c273d14d5dc4bacac6e15a9e0320fa261a200d"
-    }
-  ]
 };
 
 // resources/emc-flyback-models-lock.json
@@ -9222,22 +9730,22 @@ var emc_flyback_models_lock_default = {
   models: [
     {
       id: "emc-flyback-control",
-      file: "circuits/EMC_flyback_control.lib",
+      file: "models/EMC_flyback_control.lib",
       sha256: "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990"
     },
     {
       id: "emc-flyback-irf520n",
-      file: "circuits/EMC_IRF520N.lib",
+      file: "models/EMC_IRF520N.lib",
       sha256: "18f550ce97364443584040a446fda2da0f80112e8f8a3e5e19c540db14fabf24"
     },
     {
       id: "emc-flyback-es2d",
-      file: "circuits/EMC_ES2D.lib",
+      file: "models/EMC_ES2D.lib",
       sha256: "efdb2de11b34a6ac43143733dab76c0b56fc8d9d763e2ebc7084d9d16affa1e7"
     },
     {
       id: "emc-flyback-ss510c",
-      file: "circuits/EMC_SS510C.lib",
+      file: "models/EMC_SS510C.lib",
       sha256: "f514e87c3677bd64e0b28b6ad5189f41dc790ec10812d36e1d23c69df3cc3291"
     }
   ]
@@ -9245,27 +9753,22 @@ var emc_flyback_models_lock_default = {
 
 // lib/simulation-models.ts
 var simulationModelDefinitions = [
-  ...tiModels.map((model) => ({
+  ...[lm2596SourceModel].map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.toUpperCase()}.lib`
+    file: `models/${model.id.toUpperCase()}.lib`
   })),
   ...referenceModels.map((model) => ({
     id: model.id,
     sha256: model.modelSha256,
-    file: `circuits/${model.id.replace(/^reference-/, "").toUpperCase()}.lib`
-  })),
-  ...example_models_lock_default.models.map((model) => ({
-    id: model.id,
-    sha256: model.sha256,
-    file: `circuits/${model.file.replace(/\.[^.]+$/, ".lib")}`
+    file: `models/${model.id.replace(/^reference-/, "").toUpperCase()}.lib`
   })),
   ...emc_flyback_models_lock_default.models
 ];
 var definitionsByFile = /* @__PURE__ */ new Map();
 var caseInsensitiveFiles = /* @__PURE__ */ new Set();
 for (const definition of simulationModelDefinitions) {
-  if (!/^circuits\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) || caseInsensitiveFiles.has(definition.file.toLowerCase()))
+  if (!/^models\/[A-Za-z0-9][A-Za-z0-9_.-]*\.lib$/.test(definition.file) || caseInsensitiveFiles.has(definition.file.toLowerCase()))
     throw new Error("Simulation component filenames must be safe and unique.");
   caseInsensitiveFiles.add(definition.file.toLowerCase());
   definitionsByFile.set(definition.file, { ...definition });
@@ -9315,7 +9818,7 @@ var safeName = (name) => typeof name === "string" && name.length > 0 && name.len
 );
 var nativeName = (name) => {
   const segments = name.split("/");
-  return segments.length <= 9 && !segments.slice(0, -1).some(
+  return !isPluginProjectData(name) && segments.length <= 9 && !segments.slice(0, -1).some(
     (segment) => [
       ".git",
       "history.git",
@@ -9472,7 +9975,7 @@ function nativeSchematicFingerprint(project, circuit) {
   const owned = isOwnedProject(project) && isOwnedCircuit(circuit);
   const cached = owned ? ownedNativeSchematicFingerprints.get(circuit) : void 0;
   if (cached !== void 0) return cached;
-  const { schematic, libraries } = toProjectDocument(
+  const { schematic, libraries: libraries2 } = toProjectDocument(
     { ...project, schematic: circuit, additionalSchematics: void 0, pcb: null },
     true
   );
@@ -9495,7 +9998,7 @@ function nativeSchematicFingerprint(project, circuit) {
   });
   const fingerprint = JSON.stringify([
     components ? { ...schematic, components } : schematic,
-    libraries
+    libraries2
   ]);
   if (owned && fingerprint.length <= MAX_PROJECT_BYTES)
     ownedNativeSchematicFingerprints.set(circuit, fingerprint);
@@ -9572,8 +10075,8 @@ function schematicProjectInstances(source, original, schematic, projectName, reu
       quote(projectName)
     ];
     if (!foreign.includes(owner)) foreign.push(owner);
-    const paths = owned.length ? structuredClone(owned) : [["path", quote(ownerPath)]];
-    for (const path of paths) {
+    const paths2 = owned.length ? structuredClone(owned) : [["path", quote(ownerPath)]];
+    for (const path of paths2) {
       path[1] = quote(ownerPath);
       for (const [key2, value] of [
         ["reference", quote(part.ref)],
@@ -9672,19 +10175,16 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
   if (oldGeneral && newGeneral)
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== "thickness"));
   const nativeLock = (node) => node.includes("locked") || val(child(node, "locked")) === "yes";
-  const retain = (old, node, keys2, retainLocks = nativeLock(old) === nativeLock(node)) => {
-    for (const key2 of /* @__PURE__ */ new Set([...keys2, ...retainLocks ? ["locked", "unlocked"] : []])) {
+  const retain = (old, node, keys3, retainLocks = nativeLock(old) === nativeLock(node)) => {
+    for (const key2 of /* @__PURE__ */ new Set([...keys3, ...retainLocks ? ["locked"] : []])) {
       const source2 = children(old, key2);
       if (!source2.length) continue;
       for (const item of children(node, key2)) node.splice(node.indexOf(item), 1);
       node.push(...source2);
     }
-    if (retainLocks) {
-      for (const flag of ["locked", "unlocked"])
-        if (old.includes(flag)) {
-          for (const item of children(node, flag)) node.splice(node.indexOf(item), 1);
-          if (!node.includes(flag)) node.push(flag);
-        }
+    if (retainLocks && old.includes("locked")) {
+      for (const item of children(node, "locked")) node.splice(node.indexOf(item), 1);
+      if (!node.includes("locked")) node.push("locked");
     }
     const oldLayer = child(old, "layer");
     let newLayer = child(node, "layer");
@@ -9713,9 +10213,9 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       const node = isOwnedProjectNode(candidate) ? [...candidate] : candidate;
       if (node !== candidate) container[position2] = node;
       originals ??= new Map(
-        old.map((record, index) => [
-          val(child(record, "uuid")) || nativeIdentity(schematicId + ": " + key2(index)),
-          { node: record, index }
+        old.map((record2, index) => [
+          val(child(record2, "uuid")) || nativeIdentity(schematicId + ": " + key2(index)),
+          { node: record2, index }
         ])
       );
       const previous = originals.get(uuid);
@@ -9738,7 +10238,18 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       "property"
     ].includes(String(node[0])) : String(node[0]).startsWith("gr_") || node[0] === "dimension")
   );
-  const retainGraphic = (old, node) => retain(old, node, ["unlocked"]);
+  const retainGraphic = (old, node) => {
+    retain(old, node, []);
+    if (old[0] !== "fp_text" && old[0] !== "property") return;
+    const original2 = footprintTextPlacement(old, fail3);
+    const generated2 = footprintTextPlacement(node, fail3);
+    if (original2.unlocked !== generated2.unlocked) return;
+    if (generated2.flag) node.splice(node.indexOf(generated2.flag), 1);
+    if (original2.flag) node.push(original2.flag);
+    if (original2.bare) node.push("unlocked");
+    if (original2.inPosition && generated2.at)
+      node[node.indexOf(generated2.at)] = [...generated2.at, "unlocked"];
+  };
   const retainZone = (old, node) => retain(old, node, ["hatch", "placement", "name"]);
   matched(
     children(before, "segment"),
@@ -9869,7 +10380,7 @@ function projectNativeFilesSnapshot(project, entryName) {
   const renameLibraryTable = (file) => {
     if (!projectRenamed || !["fp-lib-table", "sym-lib-table"].includes(file.name))
       return file.source;
-    const paths = new Map(
+    const paths2 = new Map(
       [
         ["", ".pretty"],
         ["", ".kicad_sym"],
@@ -9886,7 +10397,7 @@ function projectNativeFilesSnapshot(project, entryName) {
     );
     return file.source.replace(
       /(\(uri\s+)("(?:[^"\\]|\\.)*"|[^\s()]+)/g,
-      (match, prefix, uri) => paths.has(uri) ? prefix + paths.get(uri) : match
+      (match, prefix, uri) => paths2.has(uri) ? prefix + paths2.get(uri) : match
     );
   };
   const nativeSchematicNames = new Set(parsed?.schematics.map((item) => item.file.name) ?? []);
@@ -10071,29 +10582,28 @@ function projectNativeFilesSnapshot(project, entryName) {
   return bundle;
 }
 
-// lib/pcb-layout.ts
-var round2 = (n) => Number(n.toFixed(6));
-var angle2 = (n) => round2((n % 360 + 360) % 360);
-function footprintPoint(footprint, local) {
-  const radians = -footprint.rotation * Math.PI / 180;
-  return {
-    x: round2(footprint.x + local.x * Math.cos(radians) - local.y * Math.sin(radians)),
-    y: round2(footprint.y + local.x * Math.sin(radians) + local.y * Math.cos(radians))
-  };
-}
-var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
-var padRotation = (footprint, pad) => angle2(footprint.rotation + pad.rotation);
-function padDrillPosition(footprint, pad) {
-  const at = padPosition(footprint, pad), offset = pad.drillOffset ?? { x: 0, y: 0 };
-  return footprintPoint({ ...footprint, ...at, rotation: padRotation(footprint, pad) }, offset);
-}
-
 // lib/pcb-polygons.ts
-var import_clipper_lib = __toESM(require_clipper(), 1);
+var import_clipper_lib2 = __toESM(require_clipper(), 1);
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
 var integer = (points2) => points2.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 var decimal = (points2) => points2.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
+function oriented(points2, positive = true) {
+  const path = integer(points2);
+  return import_clipper_lib2.default.Clipper.Orientation(path) === positive ? path : path.reverse();
+}
+var paths = (polygons) => polygons.flatMap((p) => [oriented(p.outer), ...p.holes.map((h) => oriented(h, false))]);
+function offset(polygons, amount, arcTolerance = 0.01) {
+  if (!amount) return polygons;
+  const engine = new import_clipper_lib2.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(paths(polygons), import_clipper_lib2.default.JoinType.jtRound, import_clipper_lib2.default.EndType.etClosedPolygon);
+  engine.Execute(tree, amount * scale);
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+    outer: decimal(p.outer),
+    holes: p.holes.map(decimal)
+  }));
+}
+var offsetPolygons = offset;
 function circleSideCount(radius) {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
@@ -10165,21 +10675,72 @@ function closedGraphicContours(edges, context) {
   return loops;
 }
 function polygonsFromContours(loops) {
-  const engine = new import_clipper_lib.default.Clipper(), tree = new import_clipper_lib.default.PolyTree();
-  engine.AddPaths(loops.map(integer), import_clipper_lib.default.PolyType.ptSubject, true);
+  const engine = new import_clipper_lib2.default.Clipper(), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(loops.map(integer), import_clipper_lib2.default.PolyType.ptSubject, true);
   engine.Execute(
-    import_clipper_lib.default.ClipType.ctUnion,
+    import_clipper_lib2.default.ClipType.ctUnion,
     tree,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd,
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd
   );
-  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
 }
 var padCornerSegments = 8;
 var padCornerStep = Math.PI / 2 / padCornerSegments;
+function padCornerRadius(p) {
+  const side = Math.min(p.size.x, p.size.y);
+  if (p.shape === "oval") return side / 2;
+  if (p.shape === "roundrect") return side * (p.roundrectRatio ?? 0);
+  return 0;
+}
+function padPolygon(f, p) {
+  const w = p.size.x, h = p.size.y;
+  let local;
+  if (p.outline) local = p.outline;
+  else if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
+  else {
+    const radius = padCornerRadius(p);
+    local = pcbPadCorners.flatMap((c, i) => {
+      const cut = p.chamfer?.includes(c.name) ? Math.min(w, h) * (p.chamferRatio ?? 0) : 0;
+      const start = Math.PI + i * Math.PI / 2;
+      if (p.chamfer?.includes(c.name))
+        return cut ? pcbPadChamferEndpoints(c, p.size, cut) : [{ x: c.x * w / 2, y: c.y * h / 2 }];
+      if (!radius) return [{ x: c.x * w / 2, y: c.y * h / 2 }];
+      return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
+        x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
+        y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep)
+      }));
+    });
+    if (p.chamfer?.length)
+      local = local.filter((point2, i) => {
+        const previous = local[(i + local.length - 1) % local.length];
+        return point2.x !== previous.x || point2.y !== previous.y;
+      });
+  }
+  const at = padPosition(f, p), radians = -padRotation(f, p) * Math.PI / 180;
+  return {
+    outer: local.map((v) => ({
+      x: at.x + v.x * Math.cos(radians) - v.y * Math.sin(radians),
+      y: at.y + v.x * Math.sin(radians) + v.y * Math.cos(radians)
+    })),
+    holes: []
+  };
+}
+function offsetPadPolygons(f, pad, margin) {
+  if (pad.outline) {
+    const polygon = padPolygon(f, pad);
+    return margin ? offsetPolygons([polygon], margin, 5e-4) : [polygon];
+  }
+  const straightChamfers = pad.chamfer?.length && !pad.roundrectRatio;
+  if (straightChamfers && margin < 0) {
+    const size = { x: pad.size.x + 2 * margin, y: pad.size.y + 2 * margin };
+    return size.x > 0 && size.y > 0 ? [padPolygon(f, { ...pad, size })] : [];
+  }
+  return offsetPolygons([padPolygon(f, pad)], margin, straightChamfers ? 5e-4 : void 0);
+}
 function worldZones(board) {
   return [
     ...board.zones,
@@ -10195,10 +10756,10 @@ var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 var manufacturing_font_default = ["JZ", "MWRYSZR[QZRYR[ RRSQGRFSGRSRF", "JZNFNJ RVFVJ", "H]LM[M RRDL_ RYVJV RS_YD", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RRCR^", "F^J[ZF RMFOGPIOKMLKKJIKGMF RYZZXYVWUUVTXUZW[YZ", "E_[[Z[XZUWPQNNMKMINGPFQFSGTITJSLRMLQKRJTJWKYLZN[Q[SZTYWUXRXP", "MWSFQJ", "KYVcUbS_R]QZPUPQQLRISGUDVC", "KYNcObQ_R]SZTUTQSLRIQGODNC", "JZRFRK RMIRKWI ROORKUO", "E_JSZS RR[RK", "MWSZS[R]Q^", "E_JSZS", "MWRYSZR[QZRYR[", "G][EI`", "H\\QFSFUGVHWJXNXSWWVYUZS[Q[OZNYMWLSLNMJNHOGQF", "H\\X[L[ RR[RFPINKLL", "H\\LHMGOFTFVGWHXJXLWOK[X[", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY", "H\\VMV[ RQELTYT", "H\\WFMFLPMOONTNVOWPXRXWWYVZT[O[MZLY", "H\\VFRFPGOHMKLOLWMYNZP[T[VZWYXWXRWPVOTNPNNOMPLR", "H\\KFYFP[", "H\\PONNMMLKLJMHNGPFTFVGWHXJXKWMVNTOPONPMQLSLWMYNZP[T[VZWYXWXSWQVPTO", "H\\N[R[TZUYWVXRXJWHVGTFPFNGMHLJLOMQNRPSTSVRWQXO", "MWRYSZR[QZRYR[ RRNSORPQORNRP", "MWSZS[R]Q^ RRNSORPQORNRP", "E_ZMJSZY", "E_JPZP RZVJV", "E_JMZSJY", "I[QYRZQ[PZQYQ[ RMGOFTFVGWIWKVMUNSORPQRQS", "D_VQUPSOQOOPNQMSMUNWOXQYSYUXVW RVOVWWXXXZW[U[PYMVKRJNKKMIPHTIXK[N]R^V]Y[", "I[MUWU RK[RFY[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[", "H[MPTP RW[M[MFWF", "HZTPMP RM[MFWF", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR", "G]L[LF RLPXP RX[XF", "MWR[RF", "JZUFUUTXRZO[M[", "G\\L[LF RX[OO RXFLR", "HYW[M[MF", "F^K[KFRUYFY[", "G]L[LFX[XF", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G\\L[LFTFVGWHXJXMWOVPTQLQ", "G]Z]X\\VZSWQVOV RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG", "JZLFXF RR[RF", "G]LFLWMYNZP[T[VZWYXWXF", "I[KFR[YF", "F^IFN[RLV[[F", "H\\KFY[ RYFK[", "I[RQR[ RKFRQYF", "H\\KFYFK[Y[", "KYVbQbQDVD", "KYID[_", "KYNbSbSDND", "LXNHREVH", "JZJ]Z]", "NVPESH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR", "H[M[MF RMNOMSMUNVOWQWWVYUZS[O[MZ", "HZVZT[P[NZMYLWLQMONNPMTMVN", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT", "MYOMWM RR[RISGUFWF", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN", "H[M[MF RV[VPUNSMPMNNMO", "MWR[RM RRFQGRHSGRFRH", "MWRMR_QaObNb RRFQGRHSGRFRH", "IZN[NF RPSV[ RVMNU", "MXU[SZRXRF", "D`I[IM RIOJNLMOMQNRPR[ RRPSNUMXMZN[P[[", "I\\NMN[ RNOONQMTMVNWPW[", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "H[MMMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "I\\WMWb RWZU[Q[OZNYMWMQNOONQMUMWN", "KXP[PM RPQQORNTMVM", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN", "MYOMWM RRFRXSZU[W[", "H[VMV[ RMMMXNZP[S[UZVY", "JZMMR[WM", "G]JMN[RQV[ZM", "IZL[WM RLMW[", "JZMMR[ RWMR[P`OaMb", "IZLMWML[W[", "KYVcUcSbR`RVQTOSQRRPRFSDUCVC", "H\\RbRD", "KYNcOcQbR`RVSTUSSRRPRFQDOCNC", "KZMSNRPQTSVRWQ", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "JZ", "MWROQNRMSNRORM RRUSaRbQaRURb", "HZVZT[P[NZMYLWLQMONNPMTMVN RRJR^", "H[LMTM RL[W[ RO[OIPGRFUFWG", "H]LYOV RLLOO RVVYY RVOYL RVVTWQWOVNTNQOOQNTNVOWQWTVV", "F^JTZT RJMZM RRQR[ RKFRQYF", "MWRbRW RRFRQ", "I[N]P^S^U]V[UYOSNQNPONQM RVGTFQFOGNIOKUQVSVTUVSW", "LXNFOGNHMGNFNH RVFWGVHUGVFVH", "@dVKTJPJNKLMKOKSLUNWPXTXVW RRCMDHGELDQEVH[M^R_W^\\[_V`Q_L\\GWDRC", "KZOEQDSDUEVGVN RVMTNQNOMNKOIQHVH", "H\\RMLSRY RXWTSXO", "E_JQZQZV", "RR", "@dWXRR RNXNJTJVKWMWOVQTRNR RRCMDHGELDQEVH[M^R_W^\\[_V`Q_L\\GWDRC", "LXMGWG", "JZRFPGOIPKRLTKUITGRF", "E_JOZO RRWRG RZ[J[", "JZNAP@S@UAVCVEUGNNVN", "JZN@V@RESEUFVHVKUMSNPNNM", "NVTEQH", "H^MMMb RWXXZZ[ RMXNZP[T[VZWXWM", "F]VMV[ ROMOXNZL[ RZMMMKNJP", "JZRRQSRTSSRRRT", "MWR\\T]U_TaRbOb", "JZVNNN RNCPBR@RN", "KYQNOMNKNGOEQDSDUEVGVKUMSNQN", "H\\RMXSRY RLWPSLO", "G]KQYQ RVNNN RNCPBR@RN RUYUa RQSN]W]", "G]KQYQ RVNNN RNCPBR@RN RNTPSSSUTVVVXUZNaVa", "G]KQYQ RN@V@RESEUFVHVKUMSNPNNM RUYUa RQSN]W]", "I[SORNSMTNSOSM RWaUbPbNaM_M]N[OZQYRXSVSU", "I[MUWU RK[RFY[ RP>SA", "I[MUWU RK[RFY[ RT>QA", "I[MUWU RK[RFY[ RNAR>VA", "I[MUWU RK[RFY[ RMAN@P?TAV@W?", "I[MUWU RK[RFY[ RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[MUWU RK[RFY[ RRFPEOCPAR@TAUCTERF", "F`JURU RRPYP RH[OF\\F RRFR[\\[", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RR\\T]U_TaRbOb", "H[MPTP RW[M[MFWF RP>SA", "H[MPTP RW[M[MFWF RT>QA", "H[MPTP RW[M[MFWF RNAR>VA", "H[MPTP RW[M[MFWF RN?O@NAM@N?NA RV?W@VAU@V?VA", "MWR[RF RP>SA", "MWR[RF RT>QA", "MWR[RF RNAR>VA", "MWR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "G]L[LFX[XF RMAN@P?TAV@W?", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RP>SA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RT>QA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RNAR>VA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RMAN@P?TAV@W?", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN?O@NAM@N?NA RV?W@VAU@V?VA", "E_LMXY RXMLY", "G]ZFJ[ RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[", "G]LFLWMYNZP[T[VZWYXWXF RP>SA", "G]LFLWMYNZP[T[VZWYXWXF RT>QA", "G]LFLWMYNZP[T[VZWYXWXF RNAR>VA", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[RQR[ RKFRQYF RT>QA", "G\\LFL[ RLKTKVLWMXOXRWTVUTVLV", "F]K[KJLHMGOFRFTGUHVJVMSMQNPPPQQSSTVTXUYWYXXZV[R[PZ", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RPESH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RTEQH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNHREVH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RMHNGPFTHVGWF", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNFOGNHMGNFNH RVFWGVHUGVFVH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRHPGOEPCRBTCUETGRH", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX", "HZVZT[P[NZMYLWLQMONNPMTMVN RR\\T]U_TaRbOb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RPESH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RTEQH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNHREVH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNFOGNHMGNFNH RVFWGVHUGVFVH", "MWR[RM RPESH", "MWR[RM RTEQH", "LXNHREVH RR[RM", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RR[RM", "I\\SCQI RWNUMQMONNOMQMXNZP[T[VZWXWLVITGRFNE", "I\\NMN[ RNOONQMTMVNWPW[ RMHNGPFTHVGWF", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RPESH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNHREVH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMHNGPFTHVGWF", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNFOGNHMGNFNH RVFWGVHUGVFVH", "E_ZSJS RRXSYRZQYRXRZ RRLSMRNQMRLRN", "H[XMK[ RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "H[VMV[ RMMMXNZP[S[UZVY RPESH", "H[VMV[ RMMMXNZP[S[UZVY RTEQH", "H[VMV[ RMMMXNZP[S[UZVY RNHREVH", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH", "JZMMR[ RWMR[P`OaMb RTEQH", "H[MFMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "JZMMR[ RWMR[P`OaMb RNFOGNHMGNFNH RVFWGVHUGVFVH", "I[MUWU RK[RFY[ RM@W@", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RMGWG", "I[MUWU RK[RFY[ RN>O@QASAU@V>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNEOGQHSHUGVE", "I[MUWU RK[RFY[W]V_WaYb[b", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RW[U]T_UaWbYb", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RT>QA", "HZVZT[P[NZMYLWLQMONNPMTMVN RTEQH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RNAR>VA", "HZVZT[P[NZMYLWLQMONNPMTMVN RNHREVH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RR?Q@RAS@R?RA", "HZVZT[P[NZMYLWLQMONNPMTMVN RRFQGRHSGRFRH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RN>RAV>", "HZVZT[P[NZMYLWLQMONNPMTMVN RNERHVE", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RN>RAV>", "IfW[WF RWZU[Q[OZNYMWMQNOONQMUMWN RbF`J", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN RRHZH", "H[MPTP RW[M[MFWF RM@W@", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RMGWG", "H[MPTP RW[M[MFWF RN>O@QASAU@V>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNEOGQHSHUGVE", "H[MPTP RW[M[MFWF RR?Q@RAS@R?RA", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RRFQGRHSGRFRH", "H[MPTP RW[M[MFWF RR[P]O_PaRbTb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RR[P]O_PaRbTb", "H[MPTP RW[M[MFWF RN>RAV>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNERHVE", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RNAR>VA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNHREVH", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RN>O@QASAU@V>", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNEOGQHSHUGVE", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RR?Q@RAS@R?RA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RRFQGRHSGRFRH", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RR\\T]U_TaRbOb", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RRGPFODPBRAUA", "G]L[LF RLPXP RX[XF RNAR>VA", "H[M[MF RV[VPUNSMPMNNMO RIAM>QA", "G]IJ[J RL[LF RLPXP RX[XF", "H[M[MF RV[VPUNSMPMNNMO RJHRH", "MWR[RF RMAN@P?TAV@W?", "MWR[RM RMHNGPFTHVGWF", "MWR[RF RM@W@", "MWR[RM RMGWG", "MWR[RF RN>O@QASAU@V>", "MWR[RM RNEOGQHSHUGVE", "MWR[RF RR[P]O_PaRbTb", "MWR[RM RR[P]O_PaRbTb", "MWR[RF RR?Q@RAS@R?RA", "MWR[RM", "MgR[RF RbFbUaX_Z\\[Z[", "MaR[RM RRFQGRHSGRFRH R\\M\\_[aYbXb R\\F[G\\H]G\\F\\H", "JZUFUUTXRZO[M[ RQAU>YA", "MWRMR_QaObNb RNHREVH", "G\\L[LF RX[OO RXFLR RR\\T]U_TaRbOb", "IZN[NF RPSV[ RVMNU RR\\T]U_TaRbOb", "IZNMN[ RPSV[ RVMNU", "HYW[M[MF RO>LA", "MXU[SZRXRF RTEQH", "HYW[M[MF RR\\T]U_TaRbOb", "MXU[SZRXRF RR\\T]U_TaRbOb", "HYW[M[MF RVHSK", "M^U[SZRXRF RZFXJ", "HYW[M[MF RUNTOUPVOUNUP", "M\\U[SZRXRF RYOZPYQXPYOYQ", "HYW[M[MF RJQPM", "MXU[SZRXRF ROQUM", "G]L[LFX[XF RT>QA", "I\\NMN[ RNOONQMTMVNWPW[ RTEQH", "G]L[LFX[XF RR\\T]U_TaRbOb", "I\\NMN[ RNOONQMTMVNWPW[ RR\\T]U_TaRbOb", "G]L[LFX[XF RN>RAV>", "I\\NMN[ RNOONQMTMVNWPW[ RNERHVE", "MjSFQJ R\\M\\[ R\\O]N_MbMdNePe[", "G]LFL[ RLINGPFTFVGWHXJX^W`VaTbQb", "I\\NMN[ RNOONQMTMVNWPW_VaTbRb", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RM@W@", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMGWG", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN>O@QASAU@V>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNEOGQHSHUGVE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RQ>NA RX>UA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RQENH RXEUH", "E`RPYP RRFR[ R\\FNFLGJIIMITJXLZN[\\[", "C`[ZY[U[SZRXRPSNUMYM[N\\P\\RRT RRQQOPNNMKMINHOGQGWHYIZK[N[PZQYRW", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RT>QA", "KXP[PM RPQQORNTMVM RTEQH", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RR\\T]U_TaRbOb", "KXP[PM RPQQORNTMVM RR\\T]U_TaRbOb", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RN>RAV>", "KXP[PM RPQQORNTMVM RNERHVE", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RT>QA", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RTEQH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RNAR>VA", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RNHREVH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RR\\T]U_TaRbOb", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RR\\T]U_TaRbOb", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RN>RAV>", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RNERHVE", "JZLFXF RR[RF RR\\T]U_TaRbOb", "MYOMWM RRFRXSZU[W[ RR\\T]U_TaRbOb", "JZLFXF RR[RF RN>RAV>", "M[OMWM RYFXI RRFRXSZU[W[", "JZLFXF RR[RF RNQVQ", "MYOMWM RRFRXSZU[W[ ROSUS", "G]LFLWMYNZP[T[VZWYXWXF RMAN@P?TAV@W?", "H[VMV[ RMMMXNZP[S[UZVY RMHNGPFTHVGWF", "G]LFLWMYNZP[T[VZWYXWXF RM@W@", "H[VMV[ RMMMXNZP[S[UZVY RMGWG", "G]LFLWMYNZP[T[VZWYXWXF RN>O@QASAU@V>", "H[VMV[ RMMMXNZP[S[UZVY RNEOGQHSHUGVE", "G]LFLWMYNZP[T[VZWYXWXF RRAP@O>P<R;T<U>T@RA", "H[VMV[ RMMMXNZP[S[UZVY RRHPGOEPCRBTCUETGRH", "G]LFLWMYNZP[T[VZWYXWXF RQ>NA RX>UA", "H[VMV[ RMMMXNZP[S[UZVY RQENH RXEUH", "G]LFLWMYNZP[T[VZWYXWXF RR[P]O_PaRbTb", "H[VMV[ RMMMXNZP[S[UZVY RV[T]S_TaVbXb", "F^IFN[RLV[[F RNAR>VA", "G]JMN[RQV[ZM RNHREVH", "I[RQR[ RKFRQYF RNAR>VA", "JZMMR[ RWMR[P`OaMb RNHREVH", "JZLFXF RR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "H\\KFYFK[Y[ RT>QA", "IZLMWML[W[ RTEQH", "H\\KFYFK[Y[ RR?Q@RAS@R?RA", "IZLMWML[W[ RRFQGRHSGRFRH", "H\\KFYFK[Y[ RN>RAV>", "IZLMWML[W[ RNERHVE", "MYR[RISGUFWF", "H[M[MF RMNOMSMUNVOWQWWVYUZS[O[MZ RJHRH", "C\\LFL[T[VZWYXWXTWRVQSPLP RFKFIGGIFSFUGVHWJWLVNUOSP", "G\\VFLFL[R[UZWXXVXSWQUORNLN", "H[WFMFM[ RMNOMSMUNVOWQWWVYUZS[O[MZ", "H]MFM[S[VZXXYVYSXQVOSNMN", "IZNMN[S[UZVXVUUSSRNR", "I^MHNGQFSFVGXIYKZOZRYVXXVZS[Q[NZMY", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RMHKGJEKCLB", "HZVZT[P[NZMYLWLQMONNPMTMVN RTMTIUGWFYF", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "C\\FKFIGGIFQFTGVIWKXOXRWVVXTZQ[L[LF", "H]NFXFX[R[OZMXLVLSMQOORNXN", "I\\MFWFW[ RWNUMQMONNOMQMWNYOZQ[U[WZ", "I\\Q[T[VZWYXWXQWOVNTMQMONNOMQMWNYOZQ[T\\V]W_VaTbPbNa", "I\\WPPP RM[W[WFMF", "F^MHNGQFSFVGXIYKZOZRYVXXVZS[Q[NZLXKVJRZP", "G[PPTP RWGUFPFNGMHLJLLMNNOPPMQLRKTKWLYMZO[U[WZ", "HZTPMP RM[MFWF RM[M_LaJbHb", "MYOMWM RR[RISGUFWF RR[R_QaObMb", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RMHKGJEKCLB", "I[KFU[U_TaRbPaO_O[YF", "D`I[IF RIOJNLMOMQNRPRXSZU[X[ZZ[Y\\W\\P[NZM", "MZRFRWSYTZV[X[", "MWR[RF RNPVP", "G_L[LF RX[OO RLRWGYF[G\\I\\K", "IZNMN[ RPSV[ RVMNU RNMNIOGQFSF", "MXU[SZRXRF RNOVO", "JZRMM[ RMFOFPGRMW[ RNLTH", "Ca\\F\\[ R\\XZZX[V[TZSYRWRF RRWQYPZN[L[JZIYHWHF", "G]L[LFX[XF RL[L_KaIbGb", "I\\NMN[ RNOONQMTMVNWPWb", "G]KPYP RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RVGXFYDXBWA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RUNWMXKWIVH", "DaSGQFMFKGIIHMHTIXKZM[Q[SZUXVTVMUISGUFYF[G\\I\\b", "E^RNPMMMKNJOIQIWJYKZM[P[RZSYTWTQSORNTMVMXNYPYb", "C\\LFL[ RFKFIGGIFTFVGWHXJXMWOVPTQLQ", "H[MMMb RMNOMSMUNVOWQWWVYUZS[O[MZ RRMRISGUFWF", "G\\LFL[ RQVXb RLKTKVLWMXOXRWTVUTVLV", "H\\XZU[P[NZMYLWLUMSNRPQTPVOWNXLXJWHVGTFOFLG", "IZVZT[P[NZMXMWNUPTSTUSVQVPUNSMPMNN", "H[W[L[SPLFWF", "JYWbUbSaR_RIQGOFMGLIMKOLQKRI", "MYOMWM RRFRXSZU[W[W_VaTbRb", "HZR[RF RKKKILGNFXF", "MYOMWM RWFUFSGRIRXSZU[W[", "JZLFXF RR[RF RR[R_SaUbWb", "G]LFLWMYNZP[T[VZWYXWXFZE[CZAY@", "H[VMV[ RMMMXNZP[S[UZVY RVMXLYJXHWG", "F^ZFUFUJWKYMZPZUYXWZT[P[MZKXJUJPKMMKOJOFJF", "G]LFLWMYNZP[T[VZXXYVYIXGWF", "I`RQR[ RKFRQXGZF\\G]I]K", "J^MMR[ RMbOaP`R[VNXMZN[P[R", "H\\KFYFK[Y[ RNPVP", "IZLMWML[W[ RNTVT", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY", "H\\YFLFSNPNNOMPLRLWMYNZP[V[XZYY", "JZWMNMUVRVPWOXNZN^O`PaRbUbWa", "JZMMVMOTSTUUVWVXUZS[Q[O\\N^N_OaQbVb", "H\\LHMGOFTFVGWHXJXLWOK[X[ RNSVS", "H\\WFMFLPMOONTNVOWPXRXWWYVZT[O[MZLY", "JZVMOMNSPRSRUSVUVXUZS[P[NZ", "J^MZP[T[WZYXZVZSYQWOTNPNPF RLITI", "H[MMMb RMONNPMTMVNWPWSVUM^", "MWRFRb", "JZOFOb RUFUb", "MWRFRb ROWUW ROQUQ", "MWRYSZR[QZRYR[ RRSQGRFSGRSRF", "GpL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_FmF_[m[ Rb>fAj>", "GmL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_MjM_[j[ RaEeHiE", "ImW[WF RWZU[Q[OZNYMWMQNOONQMUMWN R_MjM_[j[ RaEeHiE", "HiW[M[MF RdFdUcXaZ^[\\[", "HcW[M[MF R^M^_]a[bZb R^F]G^H_G^F^H", "MbU[SZRXRF R]M]_\\aZbYb R]F\\G]H^G]F]H", "GmL[LFX[XF RhFhUgXeZb[`[", "GgL[LFX[XF RbMb_aa_b^b RbFaGbHcGbFbH", "IfNMN[ RNOONQMTMVNWPW[ RaMa_`a^b]b RaF`GaHbGaFaH", "I[MUWU RK[RFY[ RN>RAV>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNERHVE", "MWR[RF RN>RAV>", "MWR[RM RNERHVE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN>RAV>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNERHVE", "G]LFLWMYNZP[T[VZWYXWXF RN>RAV>", "H[VMV[ RMMMXNZP[S[UZVY RNERHVE", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RT9Q<", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RN9R<V9", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RN>RAV>", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RP9S<", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RP>SA", "I[NNPMTMVNWPWXVZT[P[NZMXMVWT", "I[MUWU RK[RFY[ RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "I[MUWU RK[RFY[ RR?Q@RAS@R?RA RM;W;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRFQGRHSGRFRH RM@W@", "F`JURU RRPYP RH[OF\\F RRFR[\\[ RO@Y@", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX RMGWG", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RSV[V", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RS^[^", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RN>RAV>", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNERHVE", "G\\L[LF RX[OO RXFLR RN>RAV>", "IZN[NF RPSV[ RVMNU RJANDRA", "G]R[P]O_PaRbTb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "H[R[P]O_PaRbTb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "G]R[P]O_PaRbTb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RM@W@", "H[R[P]O_PaRbTb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMGWG", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY RN>RAV>", "JZMMVMOVRVTWUXVZV^U`TaRbObMa RNERHVE", "MWRMR_QaObNb RNERHVE", "GpL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_FmF_[m[", "GmL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_MjM_[j[", "ImW[WF RWZU[Q[OZNYMWMQNOONQMUMWN R_MjM_[j[", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RT>QA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RTEQH", "CaH[HF RHPTP RTFTXUZW[Z[\\Z]X]M", "G\\LFLb RLINGPFTFVGWHXJXOWRUUL^", "G]L[LFX[XF RP>SA", "I\\NMN[ RNOONQMTMVNWPW[ RPESH", "I[MUWU RK[RFY[ RZ9X< RR;P<O>P@RAT@U>T<R;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RZ@XC RRBPCOEPGRHTGUETCRB", "F`JURU RRPYP RH[OF\\F RRFR[\\[ RV>SA", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX RTEQH", "G]ZFJ[ RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[ RT>QA", "H[XMK[ RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "I[MUWU RK[RFY[ ROAL> RVAS>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR ROHLE RVHSE", "I[MUWU RK[RFY[ RNAO?Q>S>U?VA", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNHOFQESEUFVH", "H[MPTP RW[M[MFWF ROAL> RVAS>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT ROHLE RVHSE", "H[MPTP RW[M[MFWF RNAO?Q>S>U?VA", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNHOFQESEUFVH", "MWR[RF ROAL> RVAS>", "MWR[RM ROHLE RVHSE", "MWR[RF RNAO?Q>S>U?VA", "MWR[RM RNHOFQESEUFVH", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF ROAL> RVAS>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ ROHLE RVHSE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RNAO?Q>S>U?VA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNHOFQESEUFVH", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ ROAL> RVAS>", "KXP[PM RPQQORNTMVM RPHME RWHTE", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RNAO?Q>S>U?VA", "KXP[PM RPQQORNTMVM ROHPFRETEVFWH", "G]LFLWMYNZP[T[VZWYXWXF ROAL> RVAS>", "H[VMV[ RMMMXNZP[S[UZVY ROHLE RVHSE", "G]LFLWMYNZP[T[VZWYXWXF RNAO?Q>S>U?VA", "H[VMV[ RMMMXNZP[S[UZVY RNHOFQESEUFVH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RS`SaRcQd", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RS`SaRcQd", "JZLFXF RR[RF RS`SaRcQd", "MYOMWM RRFRXSZU[W[ RU`UaTcSd", "I]VRXTYVY[X]V_T`Lb RLHMGOFUFWGXHYJYNXPVRTSNU", "J[UWVXWZW]V_U`SaMb RMNOMSMUNVOWQWTVVUWSXOY", "G]L[LF RLPXP RX[XF RN>RAV>", "H[M[MF RV[VPUNSMPMNNMO RI>MAQ>", "G]L[LFX[XF RX[Xb", "IbWFWXXZZ[\\[^Z_X^V\\UZVV^ RWNUMQMONNOMQMWNYOZQ[T[VZWX", "G]NFLGKIKKLMMNOO RVFXGYIYKXMWNUO ROOUOWPXQYSYWXYWZU[O[MZLYKWKSLQMPOO", "J[MJMMNORQVOWMWJ RPQTQVRWTWXVZT[P[NZMXMTNRPQ", "H\\KFYFK[Y[Y_XaVbTb", "IZLMWML[W[W_VaTbRb", "I[MUWU RK[RFY[ RR?Q@RAS@R?RA", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRFQGRHSGRFRH", "H[MPTP RW[M[MFWF RR\\T]U_TaRbOb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RR\\T]U_TaRbOb", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RMAN@P?TAV@W? RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMHNGPFTHVGWF RM@W@", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RR?Q@RAS@R?RA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RRFQGRHSGRFRH", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RR?Q@RAS@R?RA RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RRFQGRHSGRFRH RM@W@", "I[RQR[ RKFRQYF RM@W@", "JZMMR[ RWMR[P`OaMb RMGWG", "M]RFRXSZU[W[YZZXYVWUUVQ^", "IbNMN[ RNOONQMTMVNWPWXXZZ[\\[^Z_X^V\\UZVV^", "M]OMWM RRFRXSZU[W[YZZXYVWUUVQ^", "MWRMR_QaObNb", "D`R[RF RRZP[L[JZIYHWHQIOJNLMPMRNTMXMZN[O\\Q\\W[YZZX[T[RZ", "D`RMRb RRZP[L[JZIYHWHQIOJNLMPMRNTMXMZN[O\\Q\\W[YZZX[T[RZ", "I[MUWU RK[RFY[ RXCL`", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RXCL`", "HZVZT[P[NZMYLWLQMONNPMTMVN RWHM`", "HYW[M[MF RIOQO", "JZLFXF RR[RF RXCL`", "J[P[R^T_W_ RNZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN", "IZLMWML[N[P\\R^T_W_", "J^MGPFTFWGYIZKZNYPWRTSPSP[", "J^NNPMTMVNWOXQXSWUVVTWPWP[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP RIUOU", "G]IM[M RLFLWMYNZP[T[VZWYXWXF", "I[Y[RFK[", "H[MPTP RW[M[MFWF RXCL`", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RWHM`", "JZUFUUTXRZO[M[ RQPYP", "MWRMR_QaObNb ROTUT RRFQGRHSGRFRH", "G]XFX^Y`Za\\b^b RXIVGTFPFNGLIKMKTLXNZP[T[VZXX", "I\\WMW^X`Ya[b]b RWZU[Q[OZNYMWMQNOONQMUMWN", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RIQOQ", "KXP[PM RPQQORNTMVM RMTUT", "I[KIYI RRQR[ RKFRQYF", "JZLQXQ RMMR[ RWMR[P`OaMb", "H[MMMXNZP[T[VZ RMNOMTMVNWPWRVTTUOUMV", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[", "G\\K[NQOOPNRMTMVNWOXRXVWYVZT[R[PZOYNWMPLNJM", "H[RFPFNGMIM[ RMNOMSMUNVOWQWWVYUZS[O[MZ", "J\\NNPMTMVNWOXQXWWYVZT[P[NZ", "HZVNTMPMNNMOLQLWMYNZP[S[UZVXUVSUQVM^", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN RW[W_XaZb\\b", "I\\\\FZFXGWIW[ RWZU[Q[OZNYMWMQNOONQMUMWN", "I[NZP[T[VZWXWPVNTMPMNNMPMRWT", "I[NNPMTMVNWPWXVZT[P[NZMXMVWT", "IbNNPMTMVNWPWXVZT[P[NZMXMV\\S\\U]W_X`X", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN", "J[TTVSWQWPVNTMPMNN RRTTTVUWWWXVZT[P[NZ", "JaRTTTVUWWWXVZT[P[NZ RNNPMTMVNWPWQVSTT[S[U\\W^X_X", "H[TTVSWQWPVNTMPMNNMOLRLVMYNZP[T[VZWXWWVUTTRT", "MWRMR_QaObNb ROTUT", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RWMWIXGZF\\F", "I\\WYVZT[P[NZMXMQNOONQMWMW^V`UaSbMb", "HZUNSMPMNNMOLQLWMYNZP[T[VZVUSU", "JZMMU[U_TaRbPaO_O[WM", "JZMMTVUXTZR[PZOXPVWM", "I\\WMWb RNMNXOZQ[T[VZWY", "H[RFPFNGMIM[ RV[VPUNSMPMNNMO", "H[RFPFNGMIM[ RV[VPUNSMPMNNMO RV[V_UaSbQb", "MWR[RM ROTUT RRFQGRHSGRFRH", "MXRMRXSZU[", "MWR[RM RU[O[ RUMOM", "MXU[SZRXRF RMONNPMTOVNWM", "IYU[SZRXRF RRQQOONMOLQMSOTWT", "MXRFR_SaUbWb", "GZLFLXMZO[ RLMVMOVRVTWUXVZV^U`TaRbObMa", "D`[M[[ R[YZZX[U[SZRXRM RRXQZO[L[JZIXIM", "D`[M[[ R[YZZX[U[SZRXRM RRXQZO[L[JZIXIM R[[[b", "D`I[IM RIOJNLMOMQNRPR[ RRPSNUMXMZN[P[[[_ZaXbVb", "I\\NMN[ RNOONQMTMVNWPW[ RN[N_MaKbIb", "I\\NMN[ RNOONQMTMVNWPW[W_XaZb\\b", "H[M[MMV[VM", "H[LTWT RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "E]RTXT RRMR[ RZMMMKNJOIQIWJYKZM[Z[", "G]RTRXSZU[V[XZYXYQXOWNUMOMMNLOKQKXLZN[O[QZRX", "G]RFRb RPMTMVNXPYRYVXXVZT[P[NZLXKVKRLPNNPM", "LYTMT[ RTWSYRZP[N[", "LYTMT[ RTWSYRZP[N[ RTMTF", "LYTMT[ RTWSYRZP[N[ RT[T_UaWbYb", "KXP[PM RPQQORNTMVM RP[Pb", "KXP[PM RPQQORNTMVM RP[P_QaSbUb", "KXM[S[ RVMTMRNQOPRP[", "LYW[Q[ RNMPMRNSOTRT[", "I[RUW[ RN[NMTMVNWPWRVTTUNU", "I[RSWM RNMN[T[VZWXWVVTTSNS", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RN[N_OaQbSb", "KYWFUFSGRIR_QaObMb", "MWRMR_QaObNb ROTUT RRMRISGUFWF", "KYMFOFQGRIRXSZU[W[", "KYWFUFSGRIR_QaObMaL_M]O\\V\\", "KWU[M[ RRbRPQNOMMM", "MYOMWM RRFR_SaUbWb", "H[JRYR RVMV[ RMMMXNZP[S[UZVY", "I\\XMUMUPWRXTXWWYVZT[Q[OZNYMWMTNRPPPMMM", "H[MMMXNZP[S[UZVYWWWPVNUM", "JZW[RMM[", "G]Z[VMRWNMJ[", "JZW[RM RM[RMTHUGWF", "KYRTR[ RMMRTWM", "IZLMWML[W[W_XaZb\\b", "IZLMWML[T[VZWXVVTURVN^", "JZMMVMOVRVTWUXVZV^U`TaRbObMa", "JZMMVMOVRVTWUXVZV^U`TaRbPbNaM_N]P\\R]Uc", "J^MGPFTFWGYIZKZNYPWRTSPSP[", "FZWGTFPFMGKIJKJNKPMRPSTST[", "J^MZP[T[WZYXZVZSYQWOTNPNPF", "F[WHVGSFQFNGLIKKJOJYK]L_NaQbSbVaW`", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RROQPRQSPRORQ", "I[STVUWWWXVZT[N[NMSMUNVPVQUSSTNT", "I\\PTNUMWMXNZP[T[VZWYXVXRWOVNTMPMNNMPMQNSPTRT", "HZUNSMPMNNMOLQLWMYNZP[T[VZVUSU RUMUIVGXFZF", "H[MTVT RMMM[ RVMV[", "LXRMR_QaObMaL_M]O\\V\\ RRFQGRHSGRFRH", "J[VMVb RTUNM RN[VS", "JYOMO[V[", "I\\WMWb RWZU[Q[OZNYMWMQNOONQMUMWN RWMWIXGZF\\F", "J^MGPFTFWGYIZKZNYPWRTSPSP[ RLXTX", "FZWGTFPFMGKIJKJNKPMRPSTST[ RPXXX", "D`R[RF RRM]MR[][ RRZP[L[JZIYHWHQIOJNLMPMRN", "E`RFR[ RRNPMMMKNJOIQIWJYKZM[P[RZ RRM\\MUVXVZW[X\\Z\\^[`ZaXbUbSa", "D`R[RF RRM]MR[Z[\\Z]X\\VZUXVT^ RRZP[L[JZIYHWHQIOJNLMPMRN", "G^IMQM RLFLXMZO[QZS[W[YZZXZWYUWTTTRSQQQPRNTMWMYN", "I[KMTM RNFNXOZQ[T[ RYFWFUGTIT_SaQbOb", "F^HMPM RKFKXLZN[P[RZ RZNXMTMRNQOPQPWQYRZT[W[YZZXYVWUUVQ^", "F]HMPMP[ RK[KILGNFPF RPOQNSMVMXNYPY_XaVbTb", "G^LFLXMZO[QZS[W[YZZXZWYUWTTTRSQQQPRNTMWMYN", "H^MM[MP[ RMFMXNZP[[[", "G]JSN[RUV[ZS RJFNNRHVNZF", "G]XXXSLSLX RXKXFLFLK", "I\\WMWb RNMNXOZQ[T[VZWY RNMNIMGKFIF", "I\\\\bZbXaW_WM RNMNXOZQ[T[VZWY RNMNIMGKFIF", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "H[MFM[ RXPMP", "IZNTVT RNMN[", "G]R[RF RKOKFYFYO", "I[R[RF RMOMFWFWO", "MWSFQJ", "MWS[Q_", "G]LFL[XFX[", "H\\MMM[WMW[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "NVR`RcSdTd", "J\\NZP[T[VZWYXWXQWOVNTMPMNN", "HZVZT[P[NZMYLWLQMONNPMTMVN RRSQTRUSTRSRU", "J\\NZP[T[VZWYXWXQWOVNTMPMNN RRSQTRUSTRSRU", "MWSZS[R]Q^ RRNSORPQORNRP", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "NVTEQH", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "G[MUWU RK[RFY[ RMEJH", "JZRRQSRTSSRRRT", "B[MPTP RW[M[MFWF RHEEH", "A]L[LF RLPXP RX[XF RGEDH", "GWR[RF RMEJH", "RR", "B]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RHEEH", "RR", "@[RQR[ RKFRQYF RFECH", "@^J[O[OWMVKTJQJLKIMGPFTFWGYIZLZQYTWVUWU[Z[ RFECH", "MXRMRXSZU[ RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "I[MUWU RK[RFY[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP", "HZM[MFXF", "I[K[RFY[K[", "H[MPTP RW[M[MFWF", "H\\KFYFK[Y[", "G]L[LF RLPXP RX[XF", "F^OPUP RPFTFVGXIYKZNZSYVXXVZT[P[NZLXKVJSJNKKLINGPF", "MWR[RF", "G\\L[LF RX[OO RXFLR", "I[K[RFY[", "F^K[KFRUYFY[", "G]L[LFX[XF", "H[L[W[ RLFWF RUPNP", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G]L[LFXFX[", "G\\L[LFTFVGWHXJXMWOVPTQLQ", "RR", "H[W[L[SPLFWF", "JZLFXF RR[RF", "I[RQR[ RKFRQYF", "G]R[RF RPITIWJYLZNZRYTWVTWPWMVKTJRJNKLMJPI", "H\\KFY[ RYFK[", "G]R[RF RHFJGKIKNLQMROSUSWRXQYNYIZG\\F", "F^J[O[OWMVKTJQJLKIMGPFTFWGYIZLZQYTWVUWU[Z[", "MWR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[RQR[ RKFRQYF RN?O@NAM@N?NA RV?W@VAU@V?VA", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[ RTEQH", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN RTEQH", "I\\NMN[ RNOONQMTMVNWPWb RTEQH", "MXRMRXSZU[ RTEQH", "H[MMMXNZP[S[UZVYWWWPVNUM RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[", "H[SOUPVQWSWWVYUZS[P[NZMY RKbLaM_MINGPFSFUGVIVLUNSOQO", "JZRYRb RLMMMNNRYWM", "H[SMPMNNMOLQLWMYNZP[S[UZVYWWWQVOUNSMPLNKMINGPFTFVG", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN", "HZMFWFPMNPMSMWNYOZQ[S[U\\V^V_UaSbRb", "I\\NMN[ RNOONQMTMVNWPWb", "H[LPWP RPFSFUGVHWKWVVYUZS[P[NZMYLVLKMHNGPF", "MXRMRXSZU[", "IZNMN[ RPSV[ RVMNU", "JZRMM[ RMFOFPGRMW[", "H^MMMb RWXXZZ[ RMXNZP[T[VZWXWM", "J[MMR[WPWOVM", "HZMFWF RQFOGNINLONQOUO RQOOPNQMSMWNYOZQ[S[U\\V^V_UaSbRb", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "F]VMV[ ROMOXNZL[ RZMMMKNJP", "H\\MbMQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "HZVNTMPMNNMOLQLWMYNZP[S[U\\V^V_UaSb", "H\\YMPMNNMOLQLWMYNZP[S[UZVYWWWQVOUNSM", "H\\LPMNOMXM RRMRXSZU[", "H[MMMXNZP[S[UZVYWWWPVNUM", "G]MMLNKPKVLXNZP[T[VZXXYVYPXNVMUMSNRPRb", "IZWMLb RLMNNOPT_UaWb", "G]RMRb RKMKVLXNZP[T[VZXXYVYM", "G]RTRX RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RRMRXSZU[", "H[MMMXNZP[S[UZVYWWWPVNUM RNFOGNHMGNFNH RVFWGVHUGVFVH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "H[MMMXNZP[S[UZVYWWWPVNUM RTEQH", "G]RTRX RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM RTEQH", "G\\L[LF RXFLR ROOX[Qb", "H[SOUPVQWSWWVYUZS[P[NZMXMINGPFSFUGVIVLUNSOQO", "H[JPKQLSLVMYNZP[S[UZVYWVWKVHUGSFPFNGMHLJLLMNNOPPWP", "I\\KFMFOGQIRKR[ RRKSHTGVFWFYGZI", "NiTEQH RXFZF\\G^I_K_[ R_K`HaGcFdFfGgI", "I\\KFMFOGQIRKR[ RRKSHTGVFWFYGZI RN?O@NAM@N?NA RV?W@VAU@V?VA", "G]RFRb RPMTMVNXPYRYVXXVZT[P[NZLXKVKRLPNNPM", "F^RTRX R[MIM RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "IZLMNNOPOXNZM[LZLXMVVRWPWNVMUNTPTXUZW[V^U`TaRb", "G]R[Rb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "H[R[Rb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "FZWFQFNGLIKKJOJRKVLXNZQ[R[T\\U^U_TaSbQb", "HZVMPMNNMOLQLWMYNZP[R[T\\U^U_TaRbPb", "HZTPMP RM[MFWF", "MZVPRP RWFUFSGRIR_QaOb", "H\\MFOGPILSXNTXUZW[", "I[RFMPWPR[", "H\\NGNL RXIULTNTW RKIMGPFTFVGXIYKZOZUYYX[", "H\\L[UR RR[WV RLMPNSPURWVXZXb", "CaRWRR R\\XY]V`SaMa RLFJGHIGLGUHXJZL[N[PZQYRWSYTZV[X[ZZ\\X]U]L\\IZGXF", "G]RTRX RXZW\\S`PaOa RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "G]XFXb RPFNGLIKMKTLXNZP[T[VZXX", "I\\WMWb RQMONNOMQMWNYOZQ[T[VZWY", "F]KFK[ RKQMOPNTNVOXQYTYWXZW\\U^R`Nb", "I[WLWMVPTRRSPSNRMPMONMPLRLTMVPWSWWVYUZS[M[", "F]KHLGOFTFWGXHYJYLXOVQJ[N^Q_V_Y^", "J[NNPMTMVNWPWRVTTVN[P]R^U^W]", "G]I[[[ RIFJFLGXZZ[ R[FZFXGLZJ[", "H[KMMNVZX[K[MZVNXM", "G\\XEVFOFMGLHKJKWLYMZO[T[VZWYXWXPWNVMTLNLLMKN", "H[WEVFTGPGNHMILKLWMYNZP[S[UZVYWWWQVOUNSMOMMNLO", "G]RFRb RKQKMYMYQ", "I[MMWM RRFRb", "IZLMNNOPOXNZM[LZLXMVVRWPWNVMUNTPTXUZW[", "H\\WbQbOaN`M^MQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "HZVZT[P[NZMYLWLQMONNPMTMVN", "MWRMR_QaObNb RRFQGRHSGRFRH", "G]KPYP RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "HZLTST RVZT[P[NZMYLWLQMONNPMTMVN", "J\\XTQT RNZP[T[VZWYXWXQWOVNTMPMNN", "G\\LFL[ RLKTKVLWMXOXRWTVUTVLV", "H[MFMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH", "F^K[KFRMYFY[", "G]LbLMRSXMX[", "G\\J`S` RMbMQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "I^MYNZQ[S[VZXXYVZRZOYKXIVGSFQFNGMH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RROQPRQSPRORQ", "I^MYNZQ[S[VZXXYVZRZOYKXIVGSFQFNGMH RROQPRQSPRORQ"];
 
 // lib/pcb-stroke-text.ts
-function pcbStrokeText(text, origin) {
-  if (/\$\{|[~^_]\{/.test(text.value)) return { unsupported: "unresolved or formatted text" };
+function pcbStrokeText(text2, origin) {
+  if (/\$\{|[~^_]\{/.test(text2.value)) return { unsupported: "unresolved or formatted text" };
   const lines = [];
-  for (const line of text.value.split("\n")) {
+  for (const line of text2.value.split("\n")) {
     const encoded = [];
     for (const char of line) {
       const code = char.codePointAt(0);
@@ -10209,38 +10770,38 @@ function pcbStrokeText(text, origin) {
     }
     lines.push(encoded);
   }
-  const angle3 = -text.rotation * Math.PI / 180;
+  const angle3 = -text2.rotation * Math.PI / 180;
   const cos = Math.cos(angle3);
   const sin = Math.sin(angle3);
-  const mirror = text.justify?.includes("mirror") ? -1 : 1;
-  const spacing = 1.25 * text.size.y;
-  const top = text.justify?.includes("top") ? text.size.y : text.justify?.includes("bottom") ? -(lines.length - 1) * spacing : text.size.y / 2 - (lines.length - 1) * spacing / 2;
-  const advance = (glyph) => (glyph.charCodeAt(1) - glyph.charCodeAt(0)) * text.size.x / 21;
-  const paths = [];
+  const mirror = text2.justify?.includes("mirror") ? -1 : 1;
+  const spacing = 1.25 * text2.size.y;
+  const top = text2.justify?.includes("top") ? text2.size.y : text2.justify?.includes("bottom") ? -(lines.length - 1) * spacing : text2.size.y / 2 - (lines.length - 1) * spacing / 2;
+  const advance = (glyph) => (glyph.charCodeAt(1) - glyph.charCodeAt(0)) * text2.size.x / 21;
+  const paths2 = [];
   for (const [index, line] of lines.entries()) {
     const lineWidth = line.reduce((width, glyph) => width + advance(glyph), 0);
-    let cursor = text.justify?.includes("left") ? 0 : text.justify?.includes("right") ? -lineWidth : -lineWidth / 2;
+    let cursor = text2.justify?.includes("left") ? 0 : text2.justify?.includes("right") ? -lineWidth : -lineWidth / 2;
     for (const glyph of line) {
       let path = [];
       const left = glyph.charCodeAt(0);
       for (let i = 2; i < glyph.length; i += 2) {
         if (glyph.slice(i, i + 2) === " R") {
-          if (path.length > 1) paths.push(path);
+          if (path.length > 1) paths2.push(path);
           path = [];
           continue;
         }
-        const y = (glyph.charCodeAt(i + 1) - 82 - 8) * text.size.y / 21;
-        const x = (cursor + (glyph.charCodeAt(i) - left) * text.size.x / 21 - (text.italic ? y / 8 : 0)) * mirror;
+        const y = (glyph.charCodeAt(i + 1) - 82 - 8) * text2.size.y / 21;
+        const x = (cursor + (glyph.charCodeAt(i) - left) * text2.size.x / 21 - (text2.italic ? y / 8 : 0)) * mirror;
         const yy = y + top + index * spacing;
         path.push({ x: origin.x + x * cos - yy * sin, y: origin.y + x * sin + yy * cos });
       }
-      if (path.length > 1) paths.push(path);
+      if (path.length > 1) paths2.push(path);
       cursor += advance(glyph);
     }
   }
   return {
-    paths,
-    width: text.thickness || Math.min(text.size.x, text.size.y) / (text.bold ? 5 : 8)
+    paths: paths2,
+    width: text2.thickness || Math.min(text2.size.x, text2.size.y) / (text2.bold ? 5 : 8)
   };
 }
 
@@ -10302,6 +10863,13 @@ G01*`
     this.add("G37*");
   }
   pad(footprint, pad, marginX = 0, marginY = marginX) {
+    if (pad.outline) {
+      if (marginX !== marginY)
+        throw new Error("Gerber export requires uniform custom pad margins.");
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const w = pad.size.x + 2 * marginX, h = pad.size.y + 2 * marginY;
     if (w <= 0 || h <= 0) return;
     if (pad.shape === "circle" && Math.abs(w - h) < 1e-9) {
@@ -10324,8 +10892,13 @@ G01*`
       );
       return;
     }
-    if (pad.chamfer?.length && (marginX || marginY))
-      throw new Error("Gerber export does not support margins on chamfered pads.");
+    if (pad.chamfer?.length && (marginX || marginY)) {
+      if (marginX !== marginY || pad.roundrectRatio)
+        throw new Error("Gerber export supports only uniform margins on straight-chamfered pads.");
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const r = pad.shape === "roundrect" ? Math.min(w, h) * (pad.roundrectRatio ?? 0) : 0;
     const c = Math.min(w, h) * (pad.chamferRatio ?? 0);
     const corners = [
@@ -10588,7 +11161,7 @@ var spaces = [modelSpace, paperSpace];
 function writeDxfTables(pairs) {
   const table = (name, handle, count) => pairs.push(0, "TABLE", 2, name, 5, handle, 330, "0", 100, "AcDbSymbolTable", 70, count);
   const endTable = () => pairs.push(0, "ENDTAB");
-  const record = (name, handle, owner, subclass) => {
+  const record2 = (name, handle, owner, subclass) => {
     pairs.push(0, name, name === "DIMSTYLE" ? 105 : 5, handle, 330, owner);
     pairs.push(100, "AcDbSymbolTableRecord", 100, subclass);
   };
@@ -10601,7 +11174,7 @@ function writeDxfTables(pairs) {
     ["C", "ByLayer"],
     ["D", "Continuous"]
   ]) {
-    record("LTYPE", handle, "2", "AcDbLinetypeTableRecord");
+    record2("LTYPE", handle, "2", "AcDbLinetypeTableRecord");
     pairs.push(2, name, 70, 0, 3, "", 72, 65, 73, 0, 40, 0);
   }
   endTable();
@@ -10610,12 +11183,12 @@ function writeDxfTables(pairs) {
     ["E", "0"],
     ["F", outlineLayer]
   ]) {
-    record("LAYER", handle, "3", "AcDbLayerTableRecord");
+    record2("LAYER", handle, "3", "AcDbLayerTableRecord");
     pairs.push(2, name, 70, 0, 62, 7, 6, "Continuous", 370, -3);
   }
   endTable();
   table("STYLE", "4", 1);
-  record("STYLE", "10", "4", "AcDbTextStyleTableRecord");
+  record2("STYLE", "10", "4", "AcDbTextStyleTableRecord");
   pairs.push(2, "Standard", 70, 0, 40, 0, 41, 1, 50, 0, 71, 0, 42, 2.5, 3, "txt", 4, "");
   endTable();
   table("VIEW", "5", 0);
@@ -10623,17 +11196,17 @@ function writeDxfTables(pairs) {
   table("UCS", "6", 0);
   endTable();
   table("APPID", "7", 1);
-  record("APPID", "11", "7", "AcDbRegAppTableRecord");
+  record2("APPID", "11", "7", "AcDbRegAppTableRecord");
   pairs.push(2, "ACAD", 70, 0);
   endTable();
   table("DIMSTYLE", "8", 1);
   pairs.push(100, "AcDbDimStyleTable", 71, 1, 340, "12");
-  record("DIMSTYLE", "12", "8", "AcDbDimStyleTableRecord");
+  record2("DIMSTYLE", "12", "8", "AcDbDimStyleTableRecord");
   pairs.push(2, "Standard", 70, 0, 340, "10");
   endTable();
   table("BLOCK_RECORD", "9", spaces.length);
   for (const space of spaces) {
-    record("BLOCK_RECORD", space.record, "9", "AcDbBlockTableRecord");
+    record2("BLOCK_RECORD", space.record, "9", "AcDbBlockTableRecord");
     pairs.push(2, space.block, 340, space.layout);
   }
   endTable();
@@ -10695,8 +11268,8 @@ function exportBoardOutlineDxf(board) {
     pairs.push(0, name, 5, (handle++).toString(16).toUpperCase(), 330, modelSpace.record);
     pairs.push(100, "AcDbEntity", 8, outlineLayer, 100, subclass);
   };
-  const point2 = ({ x, y }, offset = 0) => {
-    pairs.push(10 + offset, x, 20 + offset, -y, 30 + offset, 0);
+  const point2 = ({ x, y }, offset2 = 0) => {
+    pairs.push(10 + offset2, x, 20 + offset2, -y, 30 + offset2, 0);
   };
   const endpointCounts = /* @__PURE__ */ new Map();
   for (const edge of edges) {
@@ -10757,6 +11330,4739 @@ function exportBoardOutlineDxf(board) {
   return pairs.join("\r\n");
 }
 
+// lib/reference-simulation.json
+var reference_simulation_default = {
+  profiles: [
+    {
+      id: "reference-lm2596-to220-5-buck",
+      title: "LM2596 Buck",
+      stop: 0.01,
+      input: {
+        pin: "1",
+        minimum: 4.5,
+        maximum: 40,
+        initialLimit: 40
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C2",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330uF"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3.09k"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2596_to220_5_buck",
+          signature: '["1",["-10.16","5.08","0"],["2.54"],"power_in"]|["2",["10.16","5.08","180"],["2.54"],"power_out"]|["3",["2.54","-8.89","90"],["2.54"],"power_in"]|["4",["10.16","0","180"],["2.54"],"input"]|["5",["-10.16","0","0"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "4",
+            "2",
+            "3",
+            "5"
+          ],
+          pinOrder: [
+            "1",
+            "4",
+            "2",
+            "3",
+            "5"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "OPENPE_DERIVED_LM2596_ADJ_TRANS",
+            "Sim.Library": "OpenPE:lm2596-adj-derived",
+            "Sim.Pins": "1=1 4=2 2=3 3=4 5=5"
+          },
+          modelId: "lm2596-5",
+          modelName: "OPENPE_DERIVED_LM2596_ADJ_TRANS",
+          value: "LM2596T-ADJ"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uF"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1.01k"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=12"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-tps61046-bga6-boost",
+      title: "TPS61046 Boost",
+      stop: 2e-3,
+      input: {
+        pin: "A1",
+        minimum: 1.8,
+        maximum: 5.5,
+        initialLimit: 28
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10.2k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "TP1",
+          libId: "Connector:TestPoint",
+          signature: '["1",["0","0","90"],["2.54"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "TestPoint"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uH"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_tps61046_bga6_boost",
+          signature: '["A1",["-7.62","2.54","0"],["2.54"],"power_in"]|["A2",["0","-11.43","90"],["2.54"],"power_in"]|["B1",["7.62","-2.54","180"],["2.54"],"input"]|["B2",["7.62","2.54","180"],["2.54"],"power_out"]|["C1",["-7.62","-2.54","0"],["2.54"],"input"]|["C2",["7.62","0","180"],["2.54"],"power_out"]',
+          kind: "X",
+          terminals: [
+            "A1",
+            "C1",
+            "A2",
+            "B1",
+            "C2",
+            "B2"
+          ],
+          pinOrder: [
+            "A1",
+            "C1",
+            "A2",
+            "B1",
+            "C2",
+            "B2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "TPS61046_TRANS",
+            "Sim.Library": "TI:reference-tps61046",
+            "Sim.Pins": "A1=1 C1=2 A2=3 B1=4 C2=5 B2=6",
+            "Sim.Params": "STEADY=1"
+          },
+          modelId: "reference-tps61046",
+          modelName: "TPS61046_TRANS",
+          value: "TPS61046"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "232k"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=3.3"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1000"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: false
+    },
+    {
+      id: "reference-lm2735-msop8-sepic",
+      title: "LM2735 SEPIC",
+      stop: 0.01,
+      input: {
+        pin: "3",
+        minimum: 2.7,
+        maximum: 5.5,
+        initialLimit: 24
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "649k"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "60.4k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330pF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L2",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uH"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2735_msop8_sepic",
+          signature: '["1",["-6.35","-2.54","0"],["1.27"],"no_connect"]|["2",["0","-8.89","90"],["2.54"],"power_in"]|["3",["-7.62","2.54","0"],["2.54"],"power_in"]|["4",["-7.62","0","0"],["2.54"],"input"]|["5",["7.62","0","180"],["2.54"],"input"]|["6",["2.54","-8.89","90"],["2.54"],"power_in"]|["7",["7.62","2.54","180"],["2.54"],"power_out"]|["8",["-6.35","-5.08","0"],["1.27"],"no_connect"]|["9",["0","-8.89","90"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "3",
+            "4",
+            "7",
+            "5",
+            "2"
+          ],
+          pinOrder: [
+            "3",
+            "4",
+            "7",
+            "5",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM2735Y_TRANS",
+            "Sim.Library": "TI:reference-lm2735y",
+            "Sim.Pins": "3=1 4=2 7=3 5=4 2=5"
+          },
+          modelId: "reference-lm2735y",
+          modelName: "LM2735Y_TRANS",
+          value: "LM2735Y"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "180k"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=5 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm25017-wson8-flybuck",
+      title: "LM25017 Fly-Buck",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 4.5,
+        maximum: 48,
+        initialLimit: 48
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C8",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND2"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.01uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "124k"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "R4",
+          libId: "R_1",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "46.4k"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.47uF"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100k"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm25017_wson8_flybuck",
+          signature: '["1",["1.27","-13.97","90"],["2.54"],"power_in"]|["2",["-8.89","1.27","0"],["2.54"],"power_in"]|["3",["-8.89","-6.35","0"],["2.54"],"input"]|["4",["-8.89","-2.54","0"],["2.54"],"input"]|["5",["11.43","-6.35","180"],["2.54"],"input"]|["6",["11.43","-2.54","180"],["2.54"],"power_out"]|["7",["11.43","6.35","180"],["2.54"],"input"]|["8",["11.43","2.54","180"],["2.54"],"power_out"]|["9",["-1.27","-13.97","90"],["2.54"],"passive"]',
+          kind: "X",
+          terminals: [
+            "4",
+            "1",
+            "9",
+            "5",
+            "8",
+            "7",
+            "6",
+            "2",
+            "3"
+          ],
+          pinOrder: [
+            "4",
+            "1",
+            "9",
+            "5",
+            "8",
+            "7",
+            "6",
+            "2",
+            "3"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM25017",
+            "Sim.Library": "TI:reference-lm25017",
+            "Sim.Pins": "4=1 1=2 9=3 5=4 8=5 7=6 6=7 2=8 3=9"
+          },
+          modelId: "reference-lm25017",
+          modelName: "LM25017",
+          value: "LM25017"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR010",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND2"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Inductor_Wurth_WE-DD:7345straight_744877101",
+          signature: '["1",["-5.08","2.54","0"],["2.54"],"passive"]|["2",["5.08","2.54","180"],["2.54"],"passive"]|["3",["5.08","-2.54","180"],["2.54"],"passive"]|["4",["-5.08","-2.54","0"],["2.54"],"passive"]',
+          kind: "T",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uH"
+        },
+        {
+          ref: "R6",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "24.9k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "127k"
+        },
+        {
+          ref: "C7",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10nF"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C6",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1nF"
+        },
+        {
+          ref: "D2",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "11.8k"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=24 td=0 tr=100u tf=100u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R7",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "R8",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR3",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG3",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true,
+      magnetic: {
+        ref: "L1"
+      }
+    },
+    {
+      id: "reference-lm5001-soic8-boost",
+      title: "LM5001 Boost",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 3.1,
+        maximum: 75,
+        initialLimit: 75
+      },
+      step: 1e-8,
+      parts: [
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "54.9k"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "60.4k"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uF"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "52.3k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm5001_soic8_boost",
+          signature: '["1",["10.16","7.62","180"],["2.54"],"open_collector"]|["2",["0","12.7","270"],["2.54"],"power_in"]|["3",["10.16","-7.62","180"],["2.54"],"passive"]|["4",["0","-12.7","90"],["2.54"],"power_in"]|["5",["-10.16","-2.54","0"],["2.54"],"passive"]|["6",["10.16","-2.54","180"],["2.54"],"input"]|["7",["10.16","2.54","180"],["2.54"],"open_collector"]|["8",["-10.16","2.54","0"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM5001_TRANS",
+            "Sim.Library": "TI:reference-lm5001",
+            "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8"
+          },
+          modelId: "reference-lm5001",
+          modelName: "LM5001_TRANS",
+          value: "LM5001"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "73.2k"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R6",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1.47k"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "6.04k"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Diode:1N4149",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "1N4149"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uH"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=24 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R7",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm27761-wson8-pump",
+      title: "LM27761 Charge Pump",
+      stop: 2e-3,
+      input: {
+        pin: "1",
+        minimum: 2.7,
+        maximum: 5.5,
+        initialLimit: 5.5
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "17.4k"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10.2k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_02x02_Top_Bottom",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]|["3",["7.62","0","180"],["3.81"],"passive"]|["4",["7.62","-2.54","180"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_02x02_Top_Bottom"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_02x02_Top_Bottom",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]|["3",["7.62","0","180"],["3.81"],"passive"]|["4",["7.62","-2.54","180"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_02x02_Top_Bottom"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uF"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm27761_wson8_pump",
+          signature: '["1",["-10.16","7.62","0"],["2.54"],"power_in"]|["2",["0","-12.7","90"],["2.54"],"power_in"]|["3",["10.16","-2.54","180"],["2.54"],"power_out"]|["4",["10.16","7.62","180"],["2.54"],"power_out"]|["5",["10.16","2.54","180"],["2.54"],"input"]|["6",["-10.16","5.08","0"],["2.54"],"input"]|["7",["-10.16","-7.62","0"],["2.54"],"passive"]|["8",["-10.16","0","0"],["2.54"],"passive"]|["9",["2.54","-12.7","90"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "7",
+            "8",
+            "6",
+            "5",
+            "3",
+            "1",
+            "4",
+            "9",
+            "2"
+          ],
+          pinOrder: [
+            "7",
+            "8",
+            "6",
+            "5",
+            "3",
+            "1",
+            "4",
+            "9",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM27761_TRANS",
+            "Sim.Library": "TI:reference-lm27761",
+            "Sim.Pins": "7=1 8=2 6=3 5=4 3=5 1=6 4=7 9=8 2=9"
+          },
+          modelId: "reference-lm27761",
+          modelName: "LM27761_TRANS",
+          value: "LM27761"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=5"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lmr12010-sot236-buck",
+      title: "LMR12010 Buck",
+      stop: 0.01,
+      input: {
+        pin: "5",
+        minimum: 3,
+        maximum: 20,
+        initialLimit: 20
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J4",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22.1k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "J5",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J2",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Filled",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Filled"
+        },
+        {
+          ref: "J3",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "118k"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "D2",
+          libId: "Device:D_Filled",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Filled"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lmr12010_sot236_buck",
+          signature: '["1",["12.7","5.08","180"],["2.54"],"input"]|["2",["0","-10.16","90"],["2.54"],"power_in"]|["3",["12.7","-5.08","180"],["2.54"],"input"]|["4",["-12.7","0","0"],["2.54"],"input"]|["5",["-12.7","5.08","0"],["2.54"],"power_in"]|["6",["12.7","0","180"],["2.54"],"output"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LMR12010X_TRANS",
+            "Sim.Library": "TI:reference-lmr12010x",
+            "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6"
+          },
+          modelId: "reference-lmr12010x",
+          modelName: "LMR12010X_TRANS",
+          value: "LMR12010X"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100k"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "15uF"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "82uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=12 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lmr70503-bga8-buckboost",
+      title: "LMR70503 Buck-Boost",
+      stop: 0.01,
+      input: {
+        pin: "D2",
+        minimum: 2.8,
+        maximum: 5.5,
+        initialLimit: 5.5
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "511k"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lmr70503_bga8_buckboost",
+          signature: '["A1",["8.89","-7.62","180"],["2.54"],"output"]|["A2",["8.89","-3.81","180"],["2.54"],"input"]|["B1",["-8.89","1.27","0"],["2.54"],"input"]|["B2",["8.89","1.27","180"],["2.54"],"output"]|["C1",["-3.81","-12.7","90"],["2.54"],"power_in"]|["C2",["0","-12.7","90"],["2.54"],"power_in"]|["D1",["8.89","6.35","180"],["2.54"],"power_out"]|["D2",["-8.89","6.35","0"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "D2",
+            "B1",
+            "C1",
+            "A1",
+            "A2",
+            "B2",
+            "D1"
+          ],
+          pinOrder: [
+            "D2",
+            "B1",
+            "C1",
+            "A1",
+            "A2",
+            "B2",
+            "D1"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LMR70503_TRANS",
+            "Sim.Library": "TI:reference-lmr70503",
+            "Sim.Pins": "D2=1 B1=2 C1=3 A1=4 A2=5 B2=6 D1=7"
+          },
+          modelId: "reference-lmr70503",
+          modelName: "LMR70503_TRANS",
+          value: "LMR70503"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "300k"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "91k"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "511k"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "47pF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=5"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm2598-to220-7-buck",
+      title: "LM2598 Buck",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 4.5,
+        maximum: 40,
+        initialLimit: 40
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C6",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "220uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1k"
+        },
+        {
+          ref: "#PWR010",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uF"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7k"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2598_to220_7_buck",
+          signature: '["1",["10.16","5.08","180"],["2.54"],"power_out"]|["2",["-10.16","5.08","0"],["2.54"],"power_in"]|["3",["-10.16","0","0"],["2.54"],"open_collector"]|["4",["3.81","-8.89","90"],["2.54"],"power_in"]|["5",["0","-8.89","90"],["2.54"],"output"]|["6",["10.16","0","180"],["2.54"],"input"]|["7",["-3.81","-8.89","90"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "2",
+            "6",
+            "1",
+            "4",
+            "5",
+            "7",
+            "3"
+          ],
+          pinOrder: [
+            "2",
+            "6",
+            "1",
+            "4",
+            "5",
+            "7",
+            "3"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM2598_ADJ_TRANS",
+            "Sim.Library": "TI:reference-lm2598-adj",
+            "Sim.Pins": "2=1 6=2 1=3 4=4 5=5 7=6 3=7"
+          },
+          modelId: "reference-lm2598-adj",
+          modelName: "LM2598_ADJ_TRANS",
+          value: "LM2598_ADJ"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "7.1k"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3.3nF"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "33uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=24"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    }
+  ]
+};
+
+// lib/simulation-model-source.ts
+var definitions = reference_simulation_default.profiles.flatMap((profile) => profile.parts);
+
 // lib/pcb-sync.ts
 var pcbPinKey = (ref, number5) => JSON.stringify([ref, number5]);
 function fail5(message) {
@@ -10776,7 +16082,7 @@ function schematicPCBNets(circuit) {
   }
   return nets;
 }
-function computeSchematicPCBNets(circuit) {
+function computeSchematicPCBNets(circuit, conductorModels = []) {
   if (circuit.parts.length > 2e3 || circuit.wires.length > 1e4)
     fail5("PCB update supports at most 2,000 symbols and 10,000 wires.");
   const points2 = [], parents = [];
@@ -10797,6 +16103,10 @@ function computeSchematicPCBNets(circuit) {
     parents[root(a)] = root(b);
   };
   const names = [];
+  const conductorParts = new Set(conductorModels.flatMap((model) => model.parts.map((p) => p.id)));
+  const conductorAliases = new Set(
+    conductorModels.flatMap((model) => [model.startLabel, model.endLabel])
+  );
   const wires = circuit.wires.map((w) => {
     const a = add(w.a), b = add(w.b);
     join(a, b);
@@ -10806,21 +16116,24 @@ function computeSchematicPCBNets(circuit) {
   const physical = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const library = circuit.libraries[part.libId];
-    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const definitions2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
     const positions = pinPositions(part, library);
     const power = Boolean(child(library, "power"));
-    definitions.forEach((pin, i) => {
+    const modelPins = [];
+    definitions2.forEach((pin, i) => {
       const index = add(positions[i]), number5 = val(child(pin, "number"));
       const pinKey = pcbPinKey(part.ref, number5);
       const previous = physical.get(pinKey);
       if (previous !== void 0) join(index, previous);
       physical.set(pinKey, index);
-      pins.push({ key: pinKey, ref: part.ref, number: number5, index });
-      if (power && definitions.length === 1 && val(pin) === "power_in")
+      if (conductorParts.has(part.id)) modelPins.push(index);
+      else pins.push({ key: pinKey, ref: part.ref, number: number5, index });
+      if (power && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
       else if (!power && val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
         names.push({ name: val(child(pin, "name")), index });
     });
+    if (modelPins.length === 2) join(modelPins[0], modelPins[1]);
   }
   circuit.labels.forEach((l) => names.push({ name: l.text, index: add(l) }));
   circuit.junctions.forEach(add);
@@ -10885,6 +16198,7 @@ function computeSchematicPCBNets(circuit) {
   });
   const groupNames = /* @__PURE__ */ new Map();
   names.forEach((n) => {
+    if (conductorAliases.has(n.name)) return;
     const r = root(n.index);
     if (!groupNames.has(r)) groupNames.set(r, /* @__PURE__ */ new Set());
     groupNames.get(r).add(n.name);
@@ -10978,7 +16292,7 @@ function exportSchematicNetlist(project) {
   const circuit = project.schematic;
   const components = /* @__PURE__ */ new Map();
   const references = /* @__PURE__ */ new Map();
-  const libraries = /* @__PURE__ */ new Map();
+  const libraries2 = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const definition = circuit.libraries[part.libId];
     if (child(definition, "jumper_pin_groups") || val(child(definition, "duplicate_pin_numbers_are_jumpers")) === "yes" || child(definition, "pin_maps") || child(part.raw ?? [], "pin_map_override"))
@@ -10991,8 +16305,8 @@ function exportSchematicNetlist(project) {
     if (!components.has(part.ref)) components.set(part.ref, []);
     components.get(part.ref).push(part);
     const separator = part.libId.indexOf(":");
-    if (!libraries.has(part.libId))
-      libraries.set(part.libId, {
+    if (!libraries2.has(part.libId))
+      libraries2.set(part.libId, {
         lib: separator === -1 ? "" : part.libId.slice(0, separator),
         name: part.libId.slice(separator + 1),
         definition
@@ -11033,7 +16347,7 @@ function exportSchematicNetlist(project) {
   )) {
     units.sort((a, b) => (a.unit ?? 1) - (b.unit ?? 1));
     const first = units[0];
-    const { lib, name, definition } = libraries.get(first.libId);
+    const { lib, name, definition } = libraries2.get(first.libId);
     const { fields, flags } = componentData(first);
     const metadata = JSON.stringify({ fields, flags });
     if (new Set(units.map((part) => part.unit ?? 1)).size !== units.length || units.slice(1).some(
@@ -11088,7 +16402,7 @@ function exportSchematicNetlist(project) {
   write("  </components>");
   write("  <libparts>");
   for (const id of usedLibraries) {
-    const { lib, name, definition } = libraries.get(id);
+    const { lib, name, definition } = libraries2.get(id);
     write(`    <libpart lib="${xml(lib)}" part="${xml(name)}">`);
     const description = propertyValue(definition, "Description");
     const docs = propertyValue(definition, "Datasheet");
@@ -11307,6 +16621,8 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
       for (const via of board.vias) plot.circle(via, via.diameter);
     for (const f of board.footprints) {
       for (const p of f.pads) {
+        if (layer.endsWith(".Cu") && p.type === "np_thru_hole" && p.shape === "circle" && p.drill === p.size.x && !p.drillOffset && !p.drillSlot)
+          continue;
         const padLayers = p.layers ?? (p.type === "smd" ? [
           f.side === "front" ? "F.Cu" : "B.Cu",
           f.side === "front" ? "F.Mask" : "B.Mask",
@@ -11316,7 +16632,9 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
           (l) => l === layer || l === "*.Cu" && layer.endsWith(".Cu") || l === "*.Mask" && layer.endsWith(".Mask")
         ))
           continue;
-        if (layer.endsWith(".Mask")) {
+        if (padApertureLayers(p)) {
+          plot.pad(f, p);
+        } else if (layer.endsWith(".Mask")) {
           const margin = p.solderMaskMargin ?? f.solderMaskMargin ?? setting("pad_to_mask_clearance");
           plot.pad(f, p, margin);
         } else if (layer.endsWith(".Paste")) {
@@ -11345,10 +16663,13 @@ var assemblyNotes = "\nAssembly CSV uses footprint origins, CCW degrees and Top/
 function drillFiles(board, stem2) {
   const files2 = [];
   for (const plated of [true, false]) {
+    const coordinate2 = (point2) => `X${point2.x.toFixed(6)}Y${(-point2.y).toFixed(6)}`;
     const holes = board.footprints.flatMap(
-      (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ ...padDrillPosition(f, p), diameter: p.drill }))
+      (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ line: padDrillLine(f, p), diameter: p.drill, slot: !!p.drillSlot }))
     );
-    if (plated) holes.push(...board.vias.map((v) => ({ ...v, diameter: v.drill })));
+    if (plated)
+      for (const via of board.vias)
+        holes.push({ line: [via, via], diameter: via.drill, slot: false });
     const diameters = [...new Set(holes.map((h) => number4(h.diameter)))].sort(
       (a, b) => Number(a) - Number(b)
     );
@@ -11364,8 +16685,12 @@ function drillFiles(board, stem2) {
     ];
     for (const [i, d] of diameters.entries()) {
       commands.push(`T${i + 1}`);
-      for (const h of holes.filter((h2) => number4(h2.diameter) === d))
-        commands.push(`X${h.x.toFixed(6)}Y${(-h.y).toFixed(6)}`);
+      for (const {
+        line: [start, end],
+        slot
+      } of holes.filter((h) => number4(h.diameter) === d))
+        if (slot) commands.push(`${coordinate2(start)}G85${coordinate2(end)}`, "G05");
+        else commands.push(coordinate2(start));
     }
     files2.push({
       name: `${stem2}-${plated ? "PTH" : "NPTH"}.drl`,

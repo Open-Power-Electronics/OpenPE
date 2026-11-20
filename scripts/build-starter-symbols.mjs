@@ -15,9 +15,6 @@ const ids = [
   'Simulation_SPICE:VPULSE',
   'Simulation_SPICE:VDC',
   'Simulation_SPICE:IPULSE',
-  ...['3.3', '5', '12'].flatMap((v) =>
-    ['S', 'T'].map((p) => `Regulator_Switching:LM2596${p}-${v}`),
-  ),
 ];
 const service = createLibraryService({ dataDir: '.openpe/library-build' });
 try {

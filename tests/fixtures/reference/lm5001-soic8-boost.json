@@ -6662,7 +6662,7 @@
     "files": [
       {
         "name": "lm5001-soic8-boost.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm5001-soic8-boost.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM5001 Boost\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM5001.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm5001-soic8-boost.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM5001 Boost\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LM5001.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lm5001-soic8-boost.kicad_sym",
@@ -6686,7 +6686,7 @@
     {
       "id": "reference-lm5001",
       "sha256": "a177e2183d1f94b3dce2f35cddb3fe96899dde5ad812eba45f7a143b9dca66be",
-      "file": "circuits/LM5001.lib"
+      "file": "models/LM5001.lib"
     }
   ]
 }

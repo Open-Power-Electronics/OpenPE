@@ -16,6 +16,7 @@ export type WorkbenchCapabilityPorts = {
     signal?: AbortSignal,
   ) => boolean | Promise<boolean>;
   sheet: (id: string, signal?: AbortSignal) => void | Promise<void>;
+  schematicSection?: (section: 'hardware' | 'simulation' | 'all', signal: AbortSignal) => boolean;
   selection: (ids: string[]) => void;
   panel: (
     panel: 'parts' | 'layers' | 'history' | 'settings' | null,
@@ -152,6 +153,18 @@ export function registerWorkbenchCapabilities(
     false,
     true,
   );
+  if (ports().schematicSection) {
+    command(
+      'workbench.schematicSection',
+      'Show Real (hardware), Virtual (simulation) or All in the active schematic. Changes presentation only; complete pending edits first.',
+      object({ section: { enum: ['hardware', 'simulation', 'all'] } }),
+      ({ section }, signal) => {
+        if (!ports().schematicSection!(section, signal))
+          throw new Error('Open the schematic and finish pending edits before switching section.');
+        return { section };
+      },
+    );
+  }
   command(
     'workbench.sheet',
     'Open and select a schematic file in this project.',

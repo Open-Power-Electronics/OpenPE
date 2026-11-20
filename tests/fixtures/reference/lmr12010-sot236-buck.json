@@ -8651,7 +8651,7 @@
     "files": [
       {
         "name": "lmr12010-sot236-buck.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lmr12010-sot236-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LMR12010 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LMR12010X.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lmr12010-sot236-buck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LMR12010 Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LMR12010X.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lmr12010-sot236-buck.kicad_sym",
@@ -8675,7 +8675,7 @@
     {
       "id": "reference-lmr12010x",
       "sha256": "d9b77693957d93a8f727809f665204581937b493577c86ce1470f493fd01f97b",
-      "file": "circuits/LMR12010X.lib"
+      "file": "models/LMR12010X.lib"
     }
   ]
 }

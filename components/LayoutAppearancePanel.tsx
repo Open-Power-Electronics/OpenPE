@@ -416,7 +416,7 @@ export default function LayoutAppearancePanel({
                       : key === 'via'
                         ? 'Board through vias connecting copper layers; independent of footprint pads.'
                         : key === 'locked'
-                          ? 'Select locked tracks'
+                          ? 'Select locked objects in the enabled categories without unlocking them.'
                           : label
                 }
               >

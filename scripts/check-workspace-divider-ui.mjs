@@ -105,9 +105,9 @@ try {
   assert.equal(await chatWidth(), originalWidth);
 
   const available = (viewportWidth) => viewportWidth - 20 - 52 - 8 - 12;
-  await expectChatWidth(available(1400) * 0.35);
+  await expectChatWidth(available(1400) * 0.3);
   await resize(1220);
-  await expectChatWidth(available(1220) * 0.35);
+  await expectChatWidth(available(1220) * 0.3);
   await resize(1020);
   await expectChatWidth(328);
   await resize(1400);
@@ -127,15 +127,15 @@ try {
   await resize(1300);
   await expectChatWidth((draggedWidth / available(1400)) * available(1300));
   await divider.dblclick();
-  await expectChatWidth(available(1300) * 0.35);
+  await expectChatWidth(available(1300) * 0.3);
   await resize(1220);
-  await expectChatWidth(available(1220) * 0.35);
+  await expectChatWidth(available(1220) * 0.3);
 
   await divider.dispatchEvent('keydown', { key: 'ArrowRight', isComposing: true });
   await divider.dispatchEvent('keydown', { key: 'ArrowRight', keyCode: 229 });
-  await expectChatWidth(available(1220) * 0.35);
+  await expectChatWidth(available(1220) * 0.3);
   await divider.press('ArrowRight');
-  await expectChatWidth(Math.round(available(1220) * 0.35) + 16);
+  await expectChatWidth(Math.round(available(1220) * 0.3) + 16);
   await divider.dblclick();
   await resize(1400);
 

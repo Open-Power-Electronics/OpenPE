@@ -1,15 +1,17 @@
-import profiles from './example-simulation.json';
 import { simulationModelDefinitions } from './simulation-models';
-import { lm2596AdjustableDerivedModel, referenceModels, tiModels } from './ti-dcdc';
+import { lm2596AdjustableDerivedModel, controllerModelSources } from './reference-models';
 import type { Circuit, Part } from './circuit';
 import { partFields } from './library';
 import { storagePrimitive, initialConditionField } from './simulation-initial-conditions';
-import { exampleSimulationProfile } from './spice-examples';
-import { isEmcFlyback, emcFlybackCapacitors, emcFlybackResistors } from './spice-emc-flyback';
+import { exampleSimulationProfile } from '../plugins/spice-simulation/domain/spice-examples';
+import {
+  isEmcFlyback,
+  emcFlybackCapacitors,
+  emcFlybackResistors,
+} from '../plugins/spice-simulation/domain/spice-emc-flyback';
 import { emcFlybackCapacitorEsr, emcFlybackInitialNodeGroups } from './emc-flyback-initial-state';
-import { spiceNets } from './spice';
+import { spiceNets } from '../plugins/spice-simulation/domain/spice';
 import { participatesInSimulation } from './simulation-participation';
-import { isModelBuck } from './spice-buck';
 import {
   basicSimulationAvailable,
   basicSimulationKind,
@@ -21,18 +23,12 @@ import {
 // colocated files without rewriting a model assignment just by viewing it.
 const filesById = new Map(simulationModelDefinitions.map((model) => [model.id, model.file]));
 const libraryFiles = new Map<string, string>();
-for (const model of [...tiModels, ...referenceModels])
+for (const model of controllerModelSources)
   libraryFiles.set(`TI:${model.id}`, filesById.get(model.id)!);
 libraryFiles.set(
   lm2596AdjustableDerivedModel.library,
   filesById.get(lm2596AdjustableDerivedModel.sourceModelId)!,
 );
-for (const profile of profiles.profiles)
-  for (const part of profile.parts) {
-    const library = (part.sim as Record<string, string>)['Sim.Library'];
-    const file = filesById.get(part.modelId);
-    if (library && file) libraryFiles.set(library, file);
-  }
 
 export function simulationLibraryPath(library: string): string {
   return libraryFiles.get(library) ?? library;
@@ -130,9 +126,6 @@ export function simulationComponentPresentation(part: Part, circuit?: Circuit) {
         !['R', 'C', 'L', 'V', 'unsupported', 'excluded', 'T'].includes(definition.kind)
       )
         model = `OPENPE_DEFAULT_${fields['Sim.Device'] || definition.kind}`;
-      else if (part.libId === 'Transistor_FET:IRF540N') model = 'IRF540N';
-      else if (!profile && part.libId === 'Simulation_SPICE:D' && isModelBuck(circuit))
-        model = 'OPENPE_DEMO_D';
       else if (!profile && part.libId === 'Device:D_Schottky') model = 'OPENPE_DIODE';
       const explicit = circuit.parts.some((p) => {
         const kind = storagePrimitive(p);

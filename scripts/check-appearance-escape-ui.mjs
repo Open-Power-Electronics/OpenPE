@@ -13,7 +13,8 @@ const bundle = await build({
       function Fixture(){
         const [open,setOpen]=useState(false),[appearance,setAppearance]=useState(defaultAppearance);
         return <><button onClick={()=>setOpen(true)}>Open settings</button>
-          {open&&<SettingsDialog appearance={{appearance,update:setAppearance,error:'',ready:true,resolvedTheme:'light'}}
+          {open&&<SettingsDialog appearance={{appearance,update:setAppearance,error:'',ready:true,resolvedTheme:'light',
+            layoutPreferences:{enabled:false,busy:false,error:'',update:()=>{}}}}
             agents={[]} detecting={false} error='' onDetect={async()=>{}}
             onClose={()=>{window.settingsClosed++;setOpen(false)}}/>}</>;
       }

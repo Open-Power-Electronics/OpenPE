@@ -21,7 +21,7 @@ async function fixture(t: TestContext) {
     assert.ok(!(await lstat(root)).isSymbolicLink());
     await rm(root, { recursive: true, force: true });
   });
-  const directory = path.join(root, 'spice');
+  const directory = path.join(root, 'spice-simulation');
   await mkdir(directory);
   const staging = await createAnalysisStaging(directory);
   return { root, directory, staging };
@@ -73,7 +73,7 @@ test('flat publication commits the manifest last and retains unknown and other-p
   );
   await assert.rejects(readFile(path.join(directory, 'buck.obsolete.lib')), { code: 'ENOENT' });
   await discardAnalysisStaging(staging, next);
-  assert.deepEqual(await readdir(root), ['spice']);
+  assert.deepEqual(await readdir(root), ['spice-simulation']);
 });
 
 for (const mode of ['rename-failure', 'cancelled', 'revoked'] as const) {
@@ -117,7 +117,7 @@ for (const mode of ['rename-failure', 'cancelled', 'revoked'] as const) {
     for (const name of names)
       assert.equal(await readFile(path.join(directory, name), 'utf8'), `old ${name}`);
     await discardAnalysisStaging(staging, names);
-    assert.deepEqual(await readdir(root), ['spice']);
+    assert.deepEqual(await readdir(root), ['spice-simulation']);
   });
 }
 
@@ -174,7 +174,7 @@ test('previous record identities are retained across preparation before any repl
 
 for (const mode of ['restore-denied', 'external-replacement'] as const) {
   test(`failed rollback preserves previous bytes and reports its backup after ${mode}`, async (t) => {
-    const { root, directory, staging } = await fixture(t);
+    const { directory, staging } = await fixture(t);
     const names = ['buck.waveforms.raw', 'buck.result.json', 'buck.manifest.json'];
     for (const name of names) {
       await writeFile(path.join(directory, name), 'old ' + name);
@@ -190,7 +190,7 @@ for (const mode of ['restore-denied', 'external-replacement'] as const) {
       }
       if (
         mode === 'restore-denied' &&
-        String(args[0]).includes('.spice-previous-') &&
+        String(args[0]).includes('.previous-') &&
         String(args[1]) === path.join(directory, names[0])
       )
         throw Object.assign(new Error('Fixture restore denied.'), { code: 'EACCES' });
@@ -212,11 +212,11 @@ for (const mode of ['restore-denied', 'external-replacement'] as const) {
         signal: new AbortController().signal,
       }),
       (error: unknown) =>
-        error instanceof AggregateError && /Preserve .*spice-previous-/.test(error.message),
+        error instanceof AggregateError && /Preserve .*previous-/.test(error.message),
     );
-    const backup = (await readdir(root)).find((name) => name.startsWith('.spice-previous-'))!;
+    const backup = (await readdir(directory)).find((name) => name.startsWith('.previous-'))!;
     assert.ok(backup);
-    assert.equal(await readFile(path.join(root, backup, names[0]), 'utf8'), 'old ' + names[0]);
+    assert.equal(await readFile(path.join(directory, backup, names[0]), 'utf8'), 'old ' + names[0]);
     assert.equal(await readFile(path.join(directory, names[1]), 'utf8'), 'old ' + names[1]);
     assert.equal(await readFile(path.join(directory, names[2]), 'utf8'), 'old ' + names[2]);
     assert.equal(await readFile(path.join(directory, 'personal.txt'), 'utf8'), 'user sidecar');

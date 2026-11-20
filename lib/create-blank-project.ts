@@ -3,7 +3,7 @@ import { MODEL_CAD_EXTENSION, type ModelCAD } from './model-cad';
 import { createEmptyPCB } from './pcb-layout';
 import { createProject, type Project } from './project';
 
-export const DEFAULT_PROJECT_NAME = 'Untitled project';
+const DEFAULT_PROJECT_NAME = 'Untitled project';
 export const DEFAULT_PROJECT_FILENAME = 'untitled.kicad_pro';
 
 export function createBlankProject(): Project {

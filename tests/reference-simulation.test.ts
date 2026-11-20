@@ -5,13 +5,18 @@ import { parseProject, serializeProject, importDocument, exportKiCad } from '../
 import { readFileSync } from 'node:fs';
 import manifest from '../resources/example-catalog/manifest.json';
 import { symbolRole } from '../lib/symbol-role';
-import { buildSpiceDeck, defaultTransient, simulationSupportError, spiceNets } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  simulationSupportError,
+  spiceNets,
+} from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import { createPart, pinPositions, libraries, type Circuit, type Point } from '../lib/circuit';
 import { onWire, samePoint } from '../lib/wiring';
 import { partFields, partFootprint, unitGraphics } from '../lib/library';
 import lock from '../resources/reference-models-lock.json';
-import { lm2596AdjustableDerivedModel, tiModels } from '../lib/ti-dcdc';
+import { lm2596AdjustableDerivedModel, lm2596SourceModel } from '../lib/reference-models';
 import type { ProjectDocument } from '../lib/project-document';
 
 function connectorRowSeparator(circuit: Circuit) {
@@ -43,7 +48,7 @@ for (const entry of referenceExamples)
       d = project.schematic;
     const source = d.parts.find((p) => p.ref === 'V1')!,
       controller = d.parts.find((p) => p.ref === 'U1')!;
-    const model = [...tiModels, ...lock.models].find((m) => m.id === entry.modelId)!;
+    const model = [lm2596SourceModel, ...lock.models].find((m) => m.id === entry.modelId)!;
     assert.ok(model);
     const derived = entry.modelId === lm2596AdjustableDerivedModel.sourceModelId;
     assert.equal(

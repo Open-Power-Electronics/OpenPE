@@ -10,7 +10,10 @@ const { switchingStageFixture } = await tsImport(
   import.meta.url,
 );
 const { createProject, serializeProject } = await tsImport('../lib/project.ts', import.meta.url);
-const { buildSpiceDeck, defaultTransient } = await tsImport('../lib/spice.ts', import.meta.url);
+const { buildSpiceDeck, defaultTransient } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
 const { simulationModelDefinitions } = await tsImport(
   '../lib/simulation-models.ts',
   import.meta.url,
@@ -51,7 +54,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const bundle = await build({
   stdin: {
     contents: `import React,{useRef,useState} from 'react'; import {createRoot} from 'react-dom/client';
-    import SimulationDialog from './components/SimulationDialog'; import {parseProject} from './lib/project';
+    import SimulationDialog from './plugins/spice-simulation/renderer/SimulationDialog'; import {parseProject} from './lib/project';
     const project=parseProject(${JSON.stringify(source)});
     window.simulationModelStores=0;
     function Fixture(){const settings=useRef(null), waveforms=useRef(null), context=useRef(null); const [probe,setProbe]=useState(null); const [open,setOpen]=useState(false); const [visible,setVisible]=useState(true); const [pending,setPending]=useState(false);

@@ -8,11 +8,15 @@ import { PassThrough } from 'node:stream';
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { SpiceDeck } from '../lib/spice';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
 
 const solverPlatform = `${process.platform}-${process.arch}`;
 const ngspiceExecutable =
-  solverPlatform === 'win32-x64' ? 'ngspice_con.exe' : solverPlatform === 'darwin-arm64' ? 'ngspice' : '';
+  solverPlatform === 'win32-x64'
+    ? 'ngspice_con.exe'
+    : ['darwin-arm64', 'linux-x64'].includes(solverPlatform)
+      ? 'ngspice'
+      : '';
 
 class SolverProcess extends EventEmitter {
   stdout = new PassThrough();
@@ -55,7 +59,7 @@ test(
     syncBuiltinESMExports();
     context.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
     try {
-      const { runSimulation } = await import('../server/spice.mjs');
+      const { runSimulation } = await import('../plugins/spice-simulation/host/spice.mjs');
       for (const outcome of ['complete', 'cancel']) {
         const control = new AbortController();
         let settled = false;

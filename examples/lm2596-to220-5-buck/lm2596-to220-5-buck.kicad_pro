@@ -5,6 +5,6 @@
   },
   "text_variables": {
     "OPENPE_PROJECT_NAME": "LM2596 Buck",
-    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM2596-5.lib\"]"
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM2596-5.lib\"]"
   }
 }

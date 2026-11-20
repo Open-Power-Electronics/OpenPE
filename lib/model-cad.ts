@@ -10,7 +10,7 @@ export type ModelCadVector = { x: number; y: number; z: number };
 export type ModelCadPoint = { x: number; y: number };
 export type ModelCadProfile =
   { kind: 'rectangle' } | { kind: 'circle' } | { kind: 'polygon'; points: ModelCadPoint[] };
-export type ModelCadEdgeTreatment = {
+type ModelCadEdgeTreatment = {
   kind: 'chamfer' | 'fillet';
   distanceMm: number;
   edges: string[];
@@ -24,7 +24,7 @@ export type ModelCadOperand = {
   position: ModelCadVector;
   rotation: ModelCadVector;
 };
-export type ModelCadBoolean = {
+type ModelCadBoolean = {
   operation: ModelCadBooleanOperation;
   operands: [ModelCadOperand, ModelCadOperand];
 };
@@ -183,7 +183,7 @@ const fail = (message: string): never => {
 
 const epsilon = 1e-6;
 type ProfileSize = Pick<ModelCadVector, 'x' | 'y'>;
-export type ModelCadBounds = { min: ModelCadVector; max: ModelCadVector };
+type ModelCadBounds = { min: ModelCadVector; max: ModelCadVector };
 const cross = (a: ModelCadPoint, b: ModelCadPoint, c: ModelCadPoint) =>
   (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 const segmentDistance = (p: ModelCadPoint, a: ModelCadPoint, b: ModelCadPoint) => {

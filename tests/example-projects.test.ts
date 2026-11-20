@@ -23,7 +23,7 @@ import {
   serializeProject,
 } from '../lib/project';
 import { switchingStageFixture } from './fixtures/switching-stage';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { validExampleKey } from '../lib/workspace-example';
 import { defaultExamples } from '../lib/default-examples';
 import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';

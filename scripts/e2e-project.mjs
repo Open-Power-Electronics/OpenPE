@@ -1,5 +1,6 @@
 // Opt-in desktop coverage. Run only at the user's explicit request, after build.
 import { _electron as electron } from 'playwright';
+import { electronTestLaunch } from './electron-test-launch.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -47,9 +48,7 @@ const diskFiles = async (directory = nativeDir, stem = 'combined') =>
     ),
   );
 const application = await electron.launch({
-  ...(process.env.OPENPE_EXECUTABLE
-    ? { executablePath: process.env.OPENPE_EXECUTABLE, args: [] }
-    : { args: ['.'] }),
+  ...electronTestLaunch(),
   env: {
     ...process.env,
     OPENPE_TEST: '1',
@@ -412,7 +411,7 @@ try {
   await button('Source').click();
   await fillSource(page, '{unfinished');
   await fileMenuAction(page, 'Close project');
-  await closeDialog.getByRole('button', { name: "Don't save", exact: true }).click();
+  await closeDialog.getByRole('button', { name: 'Discard', exact: true }).click();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();

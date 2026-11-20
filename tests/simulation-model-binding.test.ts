@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPart, emptyCircuit, type Part } from '../lib/circuit';
-import { createExample } from '../lib/examples';
+import { createHomeExample } from '../lib/create-home-example';
 import { quote, type SExpr } from '../lib/sexpr';
 import { partFields } from '../lib/library';
 import {
@@ -95,8 +95,9 @@ test('primitive model mapping uses established symbol polarity and preserves oth
 });
 
 test('native electrical role mappings retain their authority over drawn pin names', () => {
-  const circuit = createExample('kicad-buck').schematic;
+  const circuit = createHomeExample('emc-flyback-demo').schematic;
   const part = circuit.parts.find((part) => part.ref === 'Q1')!;
+  part.fields = { ...partFields(part), 'Sim.Pins': '1=D 2=G 3=S' };
   const before = JSON.stringify(partFields(part));
   const declaration: ExternalModelDeclaration = {
     name: 'CUSTOM_MOS',

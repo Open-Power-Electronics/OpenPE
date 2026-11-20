@@ -1,4 +1,5 @@
 import { _electron as electron } from 'playwright';
+import { electronTestLaunch } from './electron-test-launch.mjs';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -9,17 +10,28 @@ const { partFields } = await tsImport('../lib/library.ts', import.meta.url);
 const profile = path.resolve('test-results', `libraries-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const app = await electron.launch({
-  args: ['.'],
+  ...electronTestLaunch(),
   env: { ...process.env, OPENPE_TEST: '1', OPENPE_DATA_DIR: profile, OPENPE_DEV_URL: '' },
 });
 try {
   const page = await app.firstWindow();
+  if (process.platform === 'linux')
+    await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.show();
+      window.focus();
+    });
   page.setDefaultTimeout(30_000);
   await page.getByRole('button', { name: 'New project', exact: true }).first().click();
   await page.getByRole('button', { name: 'Add component', exact: true }).click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
-  await page.waitForFunction(() => !document.querySelector('.dialog-button.primary')?.disabled);
   await page.getByLabel('Search components', { exact: true }).press('Enter');
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.library-detail-id')?.textContent === 'Device:R' &&
+      !document.querySelector('.dialog-button.primary')?.disabled,
+  );
+  await page.getByRole('button', { name: 'Place', exact: true }).click();
   const canvas = page.getByTestId('schematic-canvas'),
     bounds = await canvas.boundingBox();
   await page.mouse.click(bounds.x + bounds.width * 0.45, bounds.y + bounds.height * 0.45);
@@ -27,6 +39,7 @@ try {
   await page
     .getByLabel('Search footprints', { exact: true })
     .fill('Resistor_SMD:R_0805_2012Metric');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R_0805_2012Metric', { exact: true }) })
@@ -34,7 +47,7 @@ try {
   await page.getByRole('button', { name: '3D model', exact: true }).click();
   await page.locator('.model-preview [role="status"]').waitFor({ state: 'hidden', timeout: 60000 });
   await page.locator('.model-preview canvas').waitFor({ timeout: 60000 });
-  await page.getByRole('button', { name: 'Assign footprint', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
   assert.equal(
     await page.getByLabel('Footprint', { exact: true }).inputValue(),
     'Resistor_SMD:R_0805_2012Metric',

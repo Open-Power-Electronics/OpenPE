@@ -22,7 +22,11 @@ function statusOf(key) {
 function createCursorCredentialStore({ directory, safeStorage, filesystem = fs }) {
   const file = credentialPath(directory);
   const encryption = () => {
-    if (typeof safeStorage?.isEncryptionAvailable !== 'function' || !safeStorage.isEncryptionAvailable())
+    if (
+      typeof safeStorage?.isEncryptionAvailable !== 'function' ||
+      !safeStorage.isEncryptionAvailable() ||
+      safeStorage.getSelectedStorageBackend?.() === 'basic_text'
+    )
       throw new Error('Cursor API key encryption is unavailable.');
   };
   return {

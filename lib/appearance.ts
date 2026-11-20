@@ -100,6 +100,23 @@ export type Appearance = {
 };
 
 export const appearanceKey = 'openpe.appearance.v1';
+export const layoutPreferencesKey = 'openpe.layout-preferences.v1';
+export const defaultLayoutPreferences = Object.freeze({ placementSuggestions: false });
+
+export function validateLayoutPreferences(value: unknown): { placementSuggestions: boolean } {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    !Object.hasOwn(value, 'placementSuggestions') ||
+    !('placementSuggestions' in value) ||
+    typeof value.placementSuggestions !== 'boolean'
+  )
+    throw new Error('Invalid layout preferences');
+  return { placementSuggestions: value.placementSuggestions };
+}
+
 export const defaultAppearance: Appearance = {
   leftButtonDrag: defaultLeftButtonDrag,
   schematicLayers: { ...defaultSchematicLayers },

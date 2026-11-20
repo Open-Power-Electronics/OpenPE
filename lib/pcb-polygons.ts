@@ -1,12 +1,35 @@
 import Clipper from 'clipper-lib';
 import type { Point } from './circuit';
 import type { BoardLine, BoardZone, CopperLayer, Footprint, Pad, PCB } from './pcb';
-import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
+import {
+  pcbArc,
+  pcbPadChamferEndpoints,
+  pcbPadCorners,
+  transformPCBGraphic,
+  transformPCBZone,
+} from './pcb-geometry';
 import { invalidatePCBFill, pcbFillInputsChanged, samePCBTrackCopper } from './pcb';
-import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
+import {
+  footprintPoint,
+  padDrillLine,
+  padDrillPosition,
+  padPosition,
+  padRotation,
+} from './pcb-layout';
 import { isOwnedPCB, isOwnedProjectNode, ownProjectData } from './immutable-project';
 import { padCopperLayers, partitionPCBRoutingCopper } from './pcb-connectivity';
 import { borrowPCBPadCopperContour } from './pcb-pad-contour';
+import {
+  matchingPCBClearanceRule,
+  pcbRuleNetClass,
+  readPCBDesignRuleSourceTexts,
+  samePCBFillRules,
+  type PCBFillRuleContext,
+  type PCBRuleOperand,
+} from './pcb-clearance-sources';
+import { loadKiCadPCBDesignRuleLimits, workbenchPCBDesignRules } from './design-rule-checks';
+import { insidePolygon, polygonEdges, segmentDistance } from './pcb-collision';
+import { padReach } from './pcb-custom-pad';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
 type CopperFillPolygon = Polygon & { island?: true };
@@ -58,6 +81,19 @@ export function circlePolygon(at: Point, radius: number): Point[] {
     x: at.x + radius * Math.cos((i * Math.PI * 2) / count),
     y: at.y + radius * Math.sin((i * Math.PI * 2) / count),
   }));
+}
+export function padDrillPolygon(footprint: Footprint, pad: Pad): Point[] {
+  const radius = pad.drill! / 2;
+  if (!pad.drillSlot) return circlePolygon(padDrillPosition(footprint, pad), radius);
+  const [start, end] = padDrillLine(footprint, pad);
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const steps = Math.ceil(circleSideCount(radius) / 2);
+  return [end, start].flatMap((point, i) =>
+    Array.from({ length: steps + 1 }, (_, j) => {
+      const theta = angle + (i - 0.5 + j / steps) * Math.PI;
+      return { x: point.x + radius * Math.cos(theta), y: point.y + radius * Math.sin(theta) };
+    }),
+  );
 }
 function strokedPath(
   points: Point[],
@@ -211,29 +247,28 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
   const w = p.size.x,
     h = p.size.y;
   let local: Point[];
-  if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
+  if (p.outline) local = p.outline;
+  else if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
-    const corners = [
-      { x: -1, y: -1, name: 'top_left' },
-      { x: 1, y: -1, name: 'top_right' },
-      { x: 1, y: 1, name: 'bottom_right' },
-      { x: -1, y: 1, name: 'bottom_left' },
-    ] as const;
-    local = corners.flatMap((c, i) => {
+    local = pcbPadCorners.flatMap((c, i) => {
       const cut = p.chamfer?.includes(c.name) ? Math.min(w, h) * (p.chamferRatio ?? 0) : 0;
       const start = Math.PI + (i * Math.PI) / 2;
-      if (cut)
-        return [
-          { x: c.x * (w / 2 - (i % 2 ? 0 : cut)), y: c.y * (h / 2 - (i % 2 ? cut : 0)) },
-          { x: c.x * (w / 2 - (i % 2 ? cut : 0)), y: c.y * (h / 2 - (i % 2 ? 0 : cut)) },
-        ];
+      if (p.chamfer?.includes(c.name))
+        return cut
+          ? pcbPadChamferEndpoints(c, p.size, cut)
+          : [{ x: (c.x * w) / 2, y: (c.y * h) / 2 }];
       if (!radius) return [{ x: (c.x * w) / 2, y: (c.y * h) / 2 }];
       return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
         x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
         y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep),
       }));
     });
+    if (p.chamfer?.length)
+      local = local.filter((point, i) => {
+        const previous = local[(i + local.length - 1) % local.length];
+        return point.x !== previous.x || point.y !== previous.y;
+      });
   }
   const at = padPosition(f, p),
     radians = (-padRotation(f, p) * Math.PI) / 180;
@@ -244,6 +279,20 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
     })),
     holes: [],
   };
+}
+
+/** Uniform mask/paste apertures for straight chamfers follow KiCad's plot geometry. */
+export function offsetPadPolygons(f: Footprint, pad: Pad, margin: number): Polygon[] {
+  if (pad.outline) {
+    const polygon = padPolygon(f, pad);
+    return margin ? offsetPolygons([polygon], margin, 0.0005) : [polygon];
+  }
+  const straightChamfers = pad.chamfer?.length && !pad.roundrectRatio;
+  if (straightChamfers && margin < 0) {
+    const size = { x: pad.size.x + 2 * margin, y: pad.size.y + 2 * margin };
+    return size.x > 0 && size.y > 0 ? [padPolygon(f, { ...pad, size })] : [];
+  }
+  return offsetPolygons([padPolygon(f, pad)], margin, straightChamfers ? 0.0005 : undefined);
 }
 export function worldZones(board: PCB): BoardZone[] {
   return [
@@ -264,13 +313,121 @@ export const polygonPath = (polygons: Polygon[]) =>
 
 export const defaultCopperFillClearance = 0.25;
 
-/** Enable and fill one board zone as one edit, retaining other zones' saved state.
- * Changed zone participation invalidates affected fills before calculation.
+/** The same native net classes, conditional precedence and board floors as DRC.
+ * Only bounded rule texts cross a worker boundary; this preparation stays local. */
+export function preparePCBFillRules(board: PCB, context?: PCBFillRuleContext) {
+  const sources = readPCBDesignRuleSourceTexts(board, context?.projectSource, context?.rulesSource);
+  if (sources.notes.length)
+    throw new Error(`Cannot refill unsupported KiCad clearance rules: ${sources.notes.join(' ')}`);
+  const limits = context
+    ? loadKiCadPCBDesignRuleLimits(context.projectSource, workbenchPCBDesignRules)
+    : { clearance: 0, copperToEdge: 0, copperToHole: 0 };
+  const rules = sources.rules.toReversed();
+  let work = 0;
+  const spend = (amount = 1) => {
+    work += amount;
+    if (work > 2000000)
+      throw new Error('Copper fill clearance rules exceed the geometry work limit.');
+  };
+  const courtyards = new Map<string, Polygon[]>();
+  const operand = (
+    type: string,
+    netId: string | null,
+    geometry?: () => Polygon[],
+  ): PCBRuleOperand => {
+    const hits = new Map<string, boolean>();
+    return {
+      type,
+      netClass: pcbRuleNetClass(sources, netId),
+      intersectsCourtyard(reference) {
+        if (!geometry)
+          throw new Error('Copper fill does not support courtyard conditions on Zone operands.');
+        if (hits.has(reference)) return hits.get(reference)!;
+        let target = courtyards.get(reference);
+        if (!target) {
+          spend(board.footprints.length);
+          const footprint = board.footprints.find((item) => item.reference === reference);
+          target = footprint
+            ? ['F.CrtYd', 'B.CrtYd'].flatMap((layer) => {
+                const graphics = footprint.graphics.filter(
+                  (graphic) =>
+                    graphic.layer === layer &&
+                    graphic.kind !== 'text' &&
+                    graphic.kind !== 'dimension',
+                );
+                spend(graphics.length ** 2);
+                return graphics.length
+                  ? polygonsFromContours(
+                      closedGraphicContours(
+                        graphics.map((graphic) =>
+                          transformPCBGraphic(graphic, (point) => footprintPoint(footprint, point)),
+                        ),
+                        'courtyard',
+                      ),
+                    )
+                  : [];
+              })
+            : [];
+          courtyards.set(reference, target);
+        }
+        const hit = geometry().some((shape) =>
+          target!.some((boundary) => {
+            spend();
+            if (
+              shape.outer.some((point) => insidePolygon(point, boundary, spend)) ||
+              boundary.outer.some((point) => insidePolygon(point, shape, spend))
+            )
+              return true;
+            return polygonEdges(shape).some(([a, b]) =>
+              polygonEdges(boundary).some(([c, d]) => {
+                spend();
+                return segmentDistance(a, b, c, d) <= 1e-10;
+              }),
+            );
+          }),
+        );
+        hits.set(reference, hit);
+        return hit;
+      },
+    };
+  };
+  const gap = (a: PCBRuleOperand, b: PCBRuleOperand, minimum: number) => {
+    const custom = matchingPCBClearanceRule(rules, a, b, spend);
+    return Math.max(
+      minimum,
+      limits.clearance,
+      custom
+        ? custom.clearance
+        : Math.max(
+            sources.classes.get(a.netClass)?.clearance ?? 0,
+            sources.classes.get(b.netClass)?.clearance ?? 0,
+          ),
+    );
+  };
+  return {
+    edge: limits.copperToEdge,
+    hole: limits.copperToHole,
+    zone: (zone: BoardZone) => operand('Zone', zone.netId),
+    track: (track: PCB['tracks'][number]) =>
+      operand('Track', track.netId, () =>
+        strokedPath([track.start, track.end], track.width, false),
+      ),
+    via: (via: PCB['vias'][number]) =>
+      operand('Via', via.netId, () => [{ outer: circlePolygon(via, via.diameter / 2), holes: [] }]),
+    pad: (footprint: Footprint, pad: Pad) =>
+      operand('Pad', pad.netId, () => [padPolygon(footprint, pad)]),
+    gap,
+  };
+}
+
+/** Enable/fill one board zone and its affected accepted neighbours in one edit.
+ * Unfilled peers stay unfilled; changed participation refreshes existing pours.
  */
 export function fillCopperZone(
   board: PCB,
   zoneId: string,
   clearance = defaultCopperFillClearance,
+  rules?: PCBFillRuleContext,
 ): PCB {
   const zone = board.zones.find((item) => item.id === zoneId);
   if (!zone || zone.keepout || !zone.layer.endsWith('.Cu'))
@@ -284,8 +441,29 @@ export function fillCopperZone(
     ),
   });
   requireFillNets(enabled);
-  const targets = new Set([zoneId]);
-  const calculated = calculateCopperPolygons(enabled, clearance, undefined, targets).polygons;
+  const changed = pcbFillInputsChanged(board, enabled);
+  // A newly solved zone can expand into a neighbour's previously accepted gap.
+  // Re-solve the existing same-layer pours together, never enabling unfilled peers.
+  const targets = new Set([
+    zoneId,
+    ...worldZones(board)
+      .filter(
+        (item) =>
+          !item.keepout &&
+          item.fillEnabled !== false &&
+          item.filledPolygons !== undefined &&
+          (changed || item.layer === zone.layer),
+      )
+      .map((item) => item.id),
+  ]);
+  const calculated = calculateCopperPolygons(
+    enabled,
+    clearance,
+    changed ? undefined : new Set([zone.layer as CopperLayer]),
+    targets,
+    false,
+    rules,
+  ).polygons;
   return withCopperFills(enabled, calculated, clearance, targets);
 }
 
@@ -293,8 +471,10 @@ export function fillCopperZone(
 export function copperPolygons(
   board: PCB,
   minimumClearance = defaultCopperFillClearance,
+  rules?: PCBFillRuleContext,
 ): Map<string, Polygon[]> {
-  return calculateCopperPolygons(board, minimumClearance).polygons;
+  return calculateCopperPolygons(board, minimumClearance, undefined, undefined, false, rules)
+    .polygons;
 }
 
 const strokedTrackObstacles = new WeakMap<object, Map<string, Polygon[]>>();
@@ -313,6 +493,7 @@ function foreignTrackObstacle(track: PCB['tracks'][number], clearance: number): 
   );
   if (isOwnedProjectNode(track)) {
     const bucket = strokedTrackObstacles.get(track) ?? new Map<string, Polygon[]>();
+    if (bucket.size >= 64) bucket.delete(bucket.keys().next().value!);
     bucket.set(key, polygons);
     strokedTrackObstacles.set(track, bucket);
   }
@@ -375,7 +556,9 @@ function fillPad(pad: Pad) {
     type: pad.type,
     shape: pad.shape,
     size: fillPoint(pad.size),
+    outline: pad.outline?.map(fillPoint),
     drill: pad.drill === undefined ? null : fillNumber(pad.drill),
+    drillSlot: pad.drillSlot ? [pad.drillSlot.axis, fillNumber(pad.drillSlot.length)] : null,
     netId: pad.netId,
     layers: pad.layers ?? null,
     drillOffset: [fillNumber(offset.x), fillNumber(offset.y)],
@@ -389,13 +572,20 @@ function fillPad(pad: Pad) {
 
 /** Exact inputs of the pour and its island classification. Numbers keep their
  * full values; matching records are identical, not a hash of those values. */
-function copperFillFingerprint(board: PCB, minimumClearance: number): string {
+function copperFillFingerprint(
+  board: PCB,
+  minimumClearance: number,
+  rules?: PCBFillRuleContext,
+): string {
   return JSON.stringify({
     clearance: fillNumber(minimumClearance),
+    rules,
+    nets: board.nets,
     layers: board.layers,
     edges: board.graphics.flatMap(fillEdge),
     zones: board.zones.map(fillZone),
     footprints: board.footprints.map((footprint) => ({
+      reference: footprint.reference,
       x: fillNumber(footprint.x),
       y: fillNumber(footprint.y),
       rotation: fillNumber(footprint.rotation),
@@ -549,6 +739,7 @@ function calculateCopperPolygons(
   affectedLayers?: ReadonlySet<CopperLayer>,
   targets?: ReadonlySet<string>,
   reuse = false,
+  rules?: PCBFillRuleContext,
 ): {
   polygons: Map<string, CopperFillPolygon[]>;
   reusedContours: Map<string, NonNullable<BoardZone['filledPolygons']>>;
@@ -580,7 +771,7 @@ function calculateCopperPolygons(
   const ordered = [...fills].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   const active = (zone: BoardZone) =>
     !affectedLayers || affectedLayers.has(zone.layer as CopperLayer);
-  const fingerprint = reuse ? copperFillFingerprint(board, minimumClearance) : undefined;
+  const fingerprint = reuse ? copperFillFingerprint(board, minimumClearance, rules) : undefined;
   const remembered = fingerprint ? recallFill(board, fingerprint) : undefined;
   const reusable =
     remembered &&
@@ -602,8 +793,11 @@ function calculateCopperPolygons(
     return { polygons: result, reusedContours };
   }
   const boundary = boardPolygons(board);
+  const ruleLimits = preparePCBFillRules(board, rules);
+  const tracks = board.tracks.map((track) => ({ track, operand: ruleLimits.track(track) }));
+  const vias = board.vias.map((via) => ({ via, operand: ruleLimits.via(via) }));
   const pads = board.footprints.flatMap((f) =>
-    f.pads.map((p) => ({ f, p, shape: padPolygon(f, p) })),
+    f.pads.map((p) => ({ f, p, shape: padPolygon(f, p), operand: ruleLimits.pad(f, p) })),
   );
   const drills = [
     ...board.vias.map((v) => ({
@@ -614,7 +808,7 @@ function calculateCopperPolygons(
       .filter(({ p }) => p.drill)
       .map(({ f, p }) => ({
         netId: p.type === 'thru_hole' ? p.netId : null,
-        polygon: { outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2), holes: [] },
+        polygon: { outer: padDrillPolygon(f, p), holes: [] },
       })),
   ];
   const stored = fingerprint
@@ -623,10 +817,13 @@ function calculateCopperPolygons(
   for (const z of ordered) {
     if (!active(z)) continue;
     if (fingerprint && (!targets || targets.has(z.id))) fresh.add(z.id);
-    // Native zero clearance can inherit KiCad rules we do not import. Always
-    // apply the explicit fill minimum, measured from the copper's outer edge.
+    // Explicit zone minima remain floors; native rules apply to each foreign pair.
     const clearance = Math.max(z.clearance, minimumClearance);
-    let region = intersectPolygons([zonePolygon(z)], offset(boundary, -clearance));
+    const zoneOperand = ruleLimits.zone(z);
+    let region = intersectPolygons(
+      [zonePolygon(z)],
+      offset(boundary, -Math.max(clearance, ruleLimits.edge)),
+    );
     const blocked: Polygon[] = [];
     for (const other of zones) {
       if (other.id === z.id || other.layer !== z.layer) continue;
@@ -640,17 +837,29 @@ function calculateCopperPolygons(
         blocked.push(
           ...clearanceOffset(
             result.get(other.id) ?? known.get(other.id) ?? [],
-            Math.max(clearance, other.clearance),
+            ruleLimits.gap(
+              zoneOperand,
+              ruleLimits.zone(other),
+              Math.max(clearance, other.clearance),
+            ),
           ),
         );
     }
-    for (const track of board.tracks)
+    for (const { track, operand } of tracks)
       if (track.layer === z.layer && track.netId !== z.netId)
-        blocked.push(...foreignTrackObstacle(track, clearance));
-    for (const via of board.vias)
-      if (via.netId !== z.netId) blocked.push(circularClearance(via, via.diameter / 2 + clearance));
+        blocked.push(
+          ...foreignTrackObstacle(track, ruleLimits.gap(zoneOperand, operand, clearance)),
+        );
+    for (const { via, operand } of vias)
+      if (via.netId !== z.netId)
+        blocked.push(
+          circularClearance(
+            via,
+            via.diameter / 2 + ruleLimits.gap(zoneOperand, operand, clearance),
+          ),
+        );
     const thermal: Polygon[] = [];
-    for (const { f, p, shape } of pads) {
+    for (const { f, p, shape, operand } of pads) {
       const present =
         p.type !== 'smd' ||
         (p.layers
@@ -674,16 +883,20 @@ function calculateCopperPolygons(
                     ? 'solid'
                     : 'thermal';
       if (!p.netId || p.netId !== z.netId || connection === 'none' || p.type === 'np_thru_hole') {
+        const padClearance =
+          p.netId === z.netId && p.type !== 'np_thru_hole'
+            ? clearance
+            : ruleLimits.gap(zoneOperand, operand, clearance);
         if (p.shape === 'circle')
-          blocked.push(circularClearance(padPosition(f, p), p.size.x / 2 + clearance));
+          blocked.push(circularClearance(padPosition(f, p), p.size.x / 2 + padClearance));
         else {
           const chordLoss = padCornerRadius(p) * (1 - Math.cos(padCornerStep / 2));
-          blocked.push(...clearanceOffset([shape], clearance + chordLoss));
+          blocked.push(...clearanceOffset([shape], padClearance + chordLoss));
         }
       } else if (connection === 'thermal') {
         const gap = offset([shape], z.thermalGap);
         const at = padPosition(f, p),
-          r = Math.hypot(p.size.x, p.size.y) / 2 + z.thermalGap + z.thermalBridge;
+          r = padReach(p) + z.thermalGap + z.thermalBridge;
         const spokes = Array.from({ length: 2 }, (_, i) => {
           const a = (((p.thermalBridgeAngle ?? 90) - padRotation(f, p) + i * 90) * Math.PI) / 180;
           return strokePolygon(
@@ -700,7 +913,9 @@ function calculateCopperPolygons(
     // KiCad stores connected plated drills separately from zone contours.
     const holes = drills
       .filter(({ netId }) => !netId || netId !== z.netId)
-      .map(({ polygon }) => polygon);
+      .flatMap(({ polygon }) =>
+        ruleLimits.hole > 0 ? clearanceOffset([polygon], ruleLimits.hole) : [polygon],
+      );
     region = subtractPolygons(region, [...blocked, ...thermal, ...holes]);
     // Remove narrow webs and undersized remnants before expanding the surviving cores.
     const radius = z.minThickness / 2;
@@ -821,9 +1036,20 @@ function requireFillNets(board: PCB): void {
 }
 
 /** One atomic board replacement: native-style saved fills, in each owner's coordinates. */
-export function fillCopperZones(board: PCB, minimumClearance = defaultCopperFillClearance): PCB {
+export function fillCopperZones(
+  board: PCB,
+  minimumClearance = defaultCopperFillClearance,
+  rules?: PCBFillRuleContext,
+): PCB {
   requireFillNets(board);
-  const calculated = calculateCopperPolygons(board, minimumClearance).polygons;
+  const calculated = calculateCopperPolygons(
+    board,
+    minimumClearance,
+    undefined,
+    undefined,
+    false,
+    rules,
+  ).polygons;
   return withCopperFills(board, calculated, minimumClearance);
 }
 
@@ -870,7 +1096,7 @@ function withCopperFills(
 
 // A refreshed immutable preview can pass through Core without calculating the
 // same contours twice. Neither abandoned poses nor older undo bases are retained.
-const refreshedFillBases = new WeakMap<PCB, WeakRef<PCB>>();
+const refreshedFillBases = new WeakMap<PCB, { basis: WeakRef<PCB>; rules?: PCBFillRuleContext }>();
 const localZones = (board: PCB) => [
   ...board.zones,
   ...board.footprints.flatMap((footprint) => footprint.zones ?? []),
@@ -901,11 +1127,26 @@ function changedTrackLayers(previous: PCB, next: PCB): ReadonlySet<CopperLayer> 
 /** Refresh active saved pours for a copper edit, without enabling other zones.
  * Geometry, effective rules and contours form one complete board candidate.
  * Explicit native contour edits with unchanged copper inputs stay authoritative. */
-export function refreshPCBFill(previous: PCB, next: PCB, reuseOwned = true): PCB {
+export function refreshPCBFill(
+  previous: PCB,
+  next: PCB,
+  reuseOwned = true,
+  rules?: PCBFillRuleContext,
+  previousRules = rules,
+): PCB {
+  const rulesChanged =
+    !samePCBFillRules(previousRules, rules) ||
+    (!!rules?.projectSource && JSON.stringify(previous.nets) !== JSON.stringify(next.nets)) ||
+    (!!rules?.rulesSource &&
+      JSON.stringify(previous.footprints.map((f) => f.reference)) !==
+        JSON.stringify(next.footprints.map((f) => f.reference)));
+  const prepared = refreshedFillBases.get(next);
   if (
-    previous === next ||
+    (!rulesChanged && previous === next) ||
     previous.id !== next.id ||
-    refreshedFillBases.get(next)?.deref() === previous
+    (!rulesChanged &&
+      prepared?.basis.deref() === previous &&
+      samePCBFillRules(prepared.rules, rules))
   )
     return next;
   const previousZones = localZones(previous);
@@ -913,7 +1154,7 @@ export function refreshPCBFill(previous: PCB, next: PCB, reuseOwned = true): PCB
   if (
     (!previousZones.some((zone) => zone.filledPolygons !== undefined) &&
       !nextZones.some((zone) => zone.filledPolygons !== undefined)) ||
-    !pcbFillInputsChanged(previous, next)
+    (!rulesChanged && !pcbFillInputsChanged(previous, next))
   )
     return next;
   const previouslyFilled = new Set(
@@ -931,12 +1172,11 @@ export function refreshPCBFill(previous: PCB, next: PCB, reuseOwned = true): PCB
   const invalidated = invalidatePCBFill(previous, next);
   if (!targets.length) return invalidated;
   const targetIds = new Set(targets.map((zone) => zone.id));
-  const affectedLayers = changedTrackLayers(previous, next);
+  const affectedLayers = rulesChanged ? undefined : changedTrackLayers(previous, next);
   const previousById = new Map(previousZones.map((zone) => [zone.id, zone]));
   const nextById = new Map(nextZones.map((zone) => [zone.id, zone]));
-  // Native zero inherits board/net-class rules that this bounded format does
-  // not import. Use the same explicit default as manual Fill for those targets;
-  // positive fine-clearance rules retain their existing value.
+  // Retain the default for native zero and positive fine-clearance zone values.
+  // Project and pair-specific native minima are applied separately by the solver.
   const effectiveZone = (zone: BoardZone) => {
     if (!targetIds.has(zone.id)) return zone;
     if (affectedLayers && !affectedLayers.has(zone.layer as CopperLayer)) {
@@ -967,6 +1207,7 @@ export function refreshPCBFill(previous: PCB, next: PCB, reuseOwned = true): PCB
     affectedLayers,
     targetIds,
     reuse,
+    rules,
   );
   if (reuse && calculated.reusedContours.size) {
     const restore = (zone: BoardZone) => {
@@ -994,6 +1235,9 @@ export function refreshPCBFill(previous: PCB, next: PCB, reuseOwned = true): PCB
       if (!record || !calculated.polygons.has(zone.id) || !zone.filledPolygons) continue;
       record.contours = zone.filledPolygons;
     }
-  refreshedFillBases.set(owned, new WeakRef(previous));
+  refreshedFillBases.set(owned, {
+    basis: new WeakRef(previous),
+    rules: rules ? { ...rules } : undefined,
+  });
   return owned;
 }

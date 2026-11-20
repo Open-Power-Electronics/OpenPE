@@ -157,13 +157,15 @@ ids.net = board.nets[0].id;
 const bundle = await build({
   stdin: {
     contents: `import React,{useEffect,useState,useSyncExternalStore}from'react';import{createRoot}from'react-dom/client';
-import LayoutEditor from './components/LayoutEditor';import SourceEditor from './components/SourceEditor';import{ProjectCore}from'./core/project-core';
+import LayoutEditor from './components/LayoutEditor';import SourceEditor from './components/SourceEditor';import{ProjectCore}from'./core/project-core';import{captureLayoutPNG}from'./lib/drawing-export';
 function Fixture(){const[core]=useState(()=>new ProjectCore(window.fixture));
 const snapshot=useSyncExternalStore(core.subscribe,core.getSnapshot,core.getSnapshot);
 const[sourceView,setSourceView]=useState(false),[selectedFile,setSelectedFile]=useState('');
 const files=core.getNativeFiles().files,selected=files.find(f=>f.name===selectedFile)||files[0];
 useEffect(()=>{const save=event=>{if(!event.defaultPrevented&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();window.saves++;window.savedPCBSource=core.getNativeFiles().files.find(file=>file.name.endsWith('.kicad_pcb')).source}};window.addEventListener('keydown',save);return()=>window.removeEventListener('keydown',save)},[core]);
 window.readLayoutState=()=>({board:core.getSnapshot().project.pcb,revision:core.getSnapshot().revision,commits:window.commits,error:window.commitError,saves:window.saves,savedPCBSource:window.savedPCBSource});
+window.lockLayoutObjects=targets=>core.execute('layout.lock',{boardId:core.getSnapshot().project.pcb.id,targets,locked:true});
+window.layoutImage=()=>captureLayoutPNG(document.querySelector('[data-testid="layout-canvas"]'),{minX:0,minY:0,maxX:70,maxY:50});
 return <><nav className="fixture-navigation"><button onClick={()=>setSourceView(false)}>Layout</button><button onClick={()=>setSourceView(true)}>Source</button></nav>
 <div className="fixture-editor" hidden={sourceView}><LayoutEditor board={snapshot.project.pcb} schematic={snapshot.project.schematic} active={!sourceView} visible={!sourceView}
 onCommit={next=>{if(window.rejectCommit)return false;try{if(core.replaceBoard(next))window.commits++;window.commitError='';return true}catch(e){window.commitError=e.message;return false}}}
@@ -240,11 +242,21 @@ async function run(name, check) {
     const state = () => page.evaluate(() => window.readLayoutState());
     const assertPropertiesFormatting = async () => {
       const formatting = await panel.evaluate((element) => {
+        const fontSize = (token) => {
+          const probe = document.createElement('span');
+          probe.style.cssText = `position:fixed;visibility:hidden;font-size:var(${token})`;
+          element.append(probe);
+          const size = parseFloat(getComputedStyle(probe).fontSize);
+          probe.remove();
+          return size;
+        };
         const bounds = (target) => {
           const { top, bottom, left, width } = target.getBoundingClientRect();
           return { top, bottom, left, width };
         };
         return {
+          labelFontSize: fontSize('--font-small'),
+          controlFontSize: fontSize('--font-control'),
           radius: getComputedStyle(element).getPropertyValue('--radius').trim(),
           fields: Array.from(element.querySelectorAll('.layout-field, .layout-property-select'))
             .filter((field) => field.getClientRects().length)
@@ -254,11 +266,17 @@ async function run(name, check) {
               const surface = field.querySelector('.quantity-input') ?? control;
               const surfaceStyle = getComputedStyle(surface);
               return {
+                name: control.getAttribute('aria-label'),
                 label: bounds(field.querySelector(':scope > span')),
                 field: bounds(field),
                 control: bounds(surface),
-                labelFontSize: parseFloat(getComputedStyle(field).fontSize),
+                labelFontSize: parseFloat(
+                  getComputedStyle(field.querySelector(':scope > span')).fontSize,
+                ),
                 controlFontSize: parseFloat(style.fontSize),
+                compactQuantity: control.matches(
+                  ':is(.geometry-fields.component-geometry, .layout-property-grid[data-columns="3"]) .quantity-input > input',
+                ),
                 radius: surfaceStyle.borderRadius,
                 minHeight: parseFloat(surfaceStyle.minHeight),
               };
@@ -285,9 +303,15 @@ async function run(name, check) {
                 ) <= 2,
           'Properties keeps controls aligned beside labels with the compact label gap.',
         );
-        assert.ok(
-          field.controlFontSize > field.labelFontSize,
-          'Properties values use the control text size above the secondary label size.',
+        assert.equal(
+          field.labelFontSize,
+          formatting.labelFontSize,
+          `${field.name}: Properties labels use the small UI text size.`,
+        );
+        assert.equal(
+          field.controlFontSize,
+          field.compactQuantity ? formatting.labelFontSize : formatting.controlFontSize,
+          `${field.name}: compact three-column quantities use small text; other values use control text.`,
         );
         assert.equal(field.radius, formatting.radius, 'Properties uses the shared control radius.');
         assert.ok(field.minHeight >= 30, 'Properties retains the standard minimum control height.');
@@ -364,8 +388,95 @@ async function run(name, check) {
 
 try {
   await run(
+    'locked footprint can be picked again after enabling Locked items',
+    async ({ page, canvas, panel, click, state, frames }) => {
+      const initialDisclosure = page.getByRole('button', { name: 'Selection', exact: true });
+      await initialDisclosure.click();
+      await page.getByRole('checkbox', { name: 'Footprints', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Pads', exact: true }).uncheck();
+      await initialDisclosure.click();
+      await click(20, 15);
+      await panel.getByRole('checkbox', { name: 'Locked', exact: true }).check();
+      const before = await state();
+      await click(60, 45);
+      await click(20, 15);
+      assert.equal(
+        await canvas
+          .locator(`[data-selection-id="${ids.footprint}"] [data-selection-only]`)
+          .count(),
+        0,
+        'Locked objects remain excluded until locked picking is enabled.',
+      );
+      const disclosure = page.getByRole('button', { name: 'Selection', exact: true });
+      await disclosure.click();
+      await page.getByRole('checkbox', { name: 'Footprints', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Pads', exact: true }).uncheck();
+      await page.getByRole('checkbox', { name: 'Locked items', exact: true }).check();
+      await disclosure.click();
+      await click(60, 45);
+      await click(20, 15);
+      await frames();
+      assert.equal(
+        await panel.getByRole('checkbox', { name: 'Locked', exact: true }).isChecked(),
+        true,
+      );
+      assert.equal((await state()).revision, before.revision);
+      assert.equal(
+        await panel.getByRole('spinbutton', { name: 'X (mm)', exact: true }).isDisabled(),
+        true,
+      );
+      await panel.getByRole('checkbox', { name: 'Locked', exact: true }).uncheck();
+      assert.equal((await state()).board.footprints[0].locked, undefined);
+    },
+  );
+  await run(
+    'locked object colours preserve native layer paint and image exports',
+    async ({ page, canvas, state, frames }) => {
+      const before = await page.evaluate(() => window.layoutImage());
+      await page.evaluate(
+        (ids) =>
+          window.lockLayoutObjects([
+            { kind: 'footprint', id: ids.footprint },
+            { kind: 'track', id: ids.track },
+            { kind: 'via', id: ids.via },
+            { kind: 'graphic', id: ids.line },
+            { kind: 'graphic', id: ids.text },
+            { kind: 'zone', id: ids.rule },
+          ]),
+        ids,
+      );
+      await frames();
+      for (const id of [ids.footprint, ids.track, ids.via, ids.line, ids.text, ids.rule]) {
+        const paints = canvas.locator(`[data-selection-id="${id}"] [data-layout-locked-paint]`);
+        assert.ok(await paints.count(), `Locked ${id} has colour paint.`);
+        assert.equal(await paints.first().getAttribute('data-export-exclude'), 'true');
+      }
+      const light = await canvas
+        .locator(`[data-selection-id="${ids.track}"] [data-layout-locked-paint] line`)
+        .evaluate((node) => getComputedStyle(node).stroke);
+      await canvas.evaluate((svg) =>
+        svg.closest('.layout-editor').setAttribute('data-pcb-theme', 'dark'),
+      );
+      const dark = await canvas
+        .locator(`[data-selection-id="${ids.track}"] [data-layout-locked-paint] line`)
+        .evaluate((node) => getComputedStyle(node).stroke);
+      assert.notEqual(light, dark, 'Locked paint adapts to board brightness.');
+      await canvas.evaluate((svg) =>
+        svg.closest('.layout-editor').setAttribute('data-pcb-theme', 'light'),
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.layoutImage()),
+        before,
+        'Lock paint never changes exported pixels.',
+      );
+      assert.equal((await state()).revision, 1, 'Only the lock transaction changes the project.');
+      await mkdir('test-results', { recursive: true });
+      await page.screenshot({ path: 'test-results/layout-locked-colours.png' });
+    },
+  );
+  await run(
     'locked component keeps Properties and a visible screen-size lock marker',
-    async ({ page, panel, click, state, frames }) => {
+    async ({ page, canvas, panel, click, state, frames }) => {
       await click(20, 15);
       await panel.getByRole('button', { name: 'Footprint properties', exact: true }).click();
       const before = await state();
@@ -378,7 +489,15 @@ try {
       assert.equal(await marker.getAttribute('aria-label'), 'J1 locked');
       const markerSize = await marker.locator(':scope > rect').boundingBox();
       assert.ok(Math.abs(markerSize.width - 16) < 0.1);
-      await runCanvasAction(page, 'Zoom in');
+      const beforeView = await canvas.getAttribute('viewBox');
+      await canvas.hover({ position: { x: 12, y: 12 } });
+      await page.mouse.wheel(0, -100);
+      await page.waitForFunction(
+        (before) =>
+          document.querySelector('[data-testid="layout-canvas"]').getAttribute('viewBox') !==
+          before,
+        beforeView,
+      );
       await frames();
       const zoomed = await marker.locator(':scope > rect').boundingBox();
       assert.ok(

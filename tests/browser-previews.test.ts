@@ -134,7 +134,7 @@ test('browser plugin routes share bundled lifecycle and delegate provider operat
     const { token } = await (await post('session')).json();
     const plugin = (action: string, body = {}) => post(`plugin/${action}`, body, token);
     const catalog: WorkbenchPluginCatalog = await (await plugin('catalog')).json();
-    assert.equal(catalog.plugins.length, 4);
+    assert.equal(catalog.plugins.length, 5);
     assert.ok(catalog.plugins.every(({ installed, enabled }) => installed && enabled));
     assert.equal((await plugin('guide?document=workflow')).status, 200);
     assert.equal((await plugin('guide?document=missing')).status, 400);
@@ -150,16 +150,24 @@ test('browser plugin routes share bundled lifecycle and delegate provider operat
     assert.equal((await plugin('provider-list?provider=codex&refresh=true')).status, 200);
     assert.equal((await plugin('provider-list?provider=unknown')).status, 400);
     assert.equal(
-      (await plugin('provider-change', {
-        provider: 'claude', action: 'disable', id: 'fixture@local',
-      })).status,
+      (
+        await plugin('provider-change', {
+          provider: 'claude',
+          action: 'disable',
+          id: 'fixture@local',
+        })
+      ).status,
       200,
     );
     assert.equal(
-      (await plugin('provider-change', { provider: 'claude', action: 'disable', id: '--unknown' })).status,
+      (await plugin('provider-change', { provider: 'claude', action: 'disable', id: '--unknown' }))
+        .status,
       400,
     );
-    assert.deepEqual(providerCalls, [['codex', 'true'], ['claude', 'disable', 'fixture@local']]);
+    assert.deepEqual(providerCalls, [
+      ['codex', 'true'],
+      ['claude', 'disable', 'fixture@local'],
+    ]);
     for (const [action, id] of [
       ['spice-status', 'spice-simulation@openpe'],
       ['thermal-status', 'pcb-thermal@openpe'],
@@ -230,7 +238,7 @@ test('browser preview forwards cancellation and keeps kernel failures retryable'
   }
 });
 
-test('browser model previews resolve library identities without exposing file grants, imports or downloads', async () => {
+test('browser library previews resolve identities without exposing file grants, imports or downloads', async () => {
   const calls: unknown[] = [];
   let closed = false;
   const host = await startBrowserPreviewServer({
@@ -251,6 +259,14 @@ test('browser model previews resolve library identities without exposing file gr
           calls.push({ id, index });
           return { meshes: [] };
         },
+        price: async (input) => {
+          calls.push(input);
+          return { source: input.source, currency: 'USD', checkedAt: 1, offers: [] };
+        },
+        datasheet: async (input) => {
+          calls.push(input);
+          return null;
+        },
         close: () => {
           closed = true;
         },
@@ -265,13 +281,23 @@ test('browser model previews resolve library identities without exposing file gr
     });
   try {
     const { token } = await (await post('session', {})).json();
+    const lookup = { id: 'JLCPCB:C123', kind: 'symbols', source: 'lcsc' };
+    const datasheet = { id: lookup.id, kind: lookup.kind, source: 'jlcpcb', page: 1 };
     assert.equal((await post('footprint', { id: 'Device:Package' })).status, 401);
+    assert.equal((await post('price', lookup)).status, 401);
+    assert.equal((await post('datasheet', datasheet)).status, 401);
     for (const [route, body] of [
       ['model', { id: 'Device:Package', index: -1 }],
       ['model', { id: 'Device:Package', index: 100 }],
       ['model', { id: 'Device:Package', index: 0, fileId: 'not-a-grant' }],
       ['footprint', { id: 'Device:Package', path: 'C:/secret.step' }],
       ['footprint', { id: 'x'.repeat(257) }],
+      ['price', { id: 'Device:Package' }],
+      ['price', { ...lookup, url: 'https://example.invalid' }],
+      ['price', { ...lookup, source: 'custom' }],
+      ['datasheet', { ...datasheet, page: 0 }],
+      ['datasheet', { ...datasheet, source: 'lcsc' }],
+      ['datasheet', { ...datasheet, url: 'https://example.invalid' }],
     ] as const)
       assert.equal((await post(route, body, token)).status, 400);
     for (const route of ['component-model', 'component-model/library', 'state'])
@@ -288,9 +314,24 @@ test('browser model previews resolve library identities without exposing file gr
     assert.equal(calls.length, 0);
     assert.equal((await post('footprint', { id: 'Device:Package' }, token)).status, 200);
     assert.equal((await post('model', { id: 'Device:Package', index: 0 }, token)).status, 200);
+    const price = await post('price', lookup, token);
+    assert.equal(price.status, 200);
+    assert.equal(price.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await price.json(), {
+      source: 'lcsc',
+      currency: 'USD',
+      checkedAt: 1,
+      offers: [],
+    });
+    const preview = await post('datasheet', datasheet, token);
+    assert.equal(preview.status, 200);
+    assert.equal(preview.headers.get('cache-control'), 'no-store');
+    assert.equal(await preview.json(), null);
     assert.deepEqual(calls, [
       { action: 'detail', kind: 'footprints', id: 'Device:Package' },
       { id: 'Device:Package', index: 0 },
+      lookup,
+      datasheet,
     ]);
   } finally {
     await host.close();

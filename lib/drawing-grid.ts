@@ -1,4 +1,4 @@
-export type LayoutGridMetrics = { spacing: number; radius: number };
+type LayoutGridMetrics = { spacing: number; radius: number };
 
 /** Thin only the displayed dots; the selected spacing remains the snap interval. */
 export function layoutGridMetrics(spacing: number, unitsPerPixel: number): LayoutGridMetrics {

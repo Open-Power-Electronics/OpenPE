@@ -5,13 +5,26 @@ import { mkdir, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
+const localPackage = JSON.parse(
+  await readFile('docs/examples/project-summary.openpe-plugin', 'utf8'),
+);
 await mkdir('test-results', { recursive: true });
 const bundle = await build({
   stdin: {
     contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
       import PluginsPage from './components/PluginsPage';
+      import {createCapabilityHost, emptyCapabilityInput} from './api/capabilities';
+      import {registerRuntimePluginCapabilities} from './plugins/runtime/client';
+      import {registerPcbDesignCapability} from './plugins/pe-layout-skill/renderer/capabilities';
+      import {registerWorkbenchPluginCapabilities} from './lib/workbench-plugins';
+      import {registerProviderPluginCapabilities} from './lib/provider-plugin-capabilities';
+      const host=createCapabilityHost();
+      host.register({owner:'core', id:'project.get', kind:'query', description:'Fixture', inputSchema:emptyCapabilityInput,
+        handler:()=>({project:{name:'UI fixture'},schematic:{components:[]}})});
+      registerWorkbenchPluginCapabilities(host); registerProviderPluginCapabilities(host);
+      registerRuntimePluginCapabilities(host); registerPcbDesignCapability(host);
       const root = createRoot(document.getElementById('root'));
-      window.mountPlugins = () => root.render(<PluginsPage onBack={() => root.render(null)}/>);
+      window.mountPlugins = () => root.render(<PluginsPage capabilityHost={host} onBack={() => root.render(null)}/>);
       window.mountPlugins();`,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -58,14 +71,47 @@ let holdClaude = new Promise((resolve) => {
 try {
   const page = await browser.newPage({ viewport: { width: 1120, height: 760 } });
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.error(error);
+  });
   page.setDefaultTimeout(10000);
+  await page.exposeFunction('installLocalPluginFixture', () => {
+    workbench.plugins.push({
+      ...localPackage.manifest,
+      sha256: '0'.repeat(64),
+      scope: 'application',
+      marketplace: 'Local plugins',
+      origin: 'openpe',
+      managed: false,
+      installed: true,
+      enabled: true,
+    });
+    return { id: localPackage.manifest.id };
+  });
   await page.addInitScript(() => {
-    window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
+    window.openpe = {
+      installPlugin: () => window.installLocalPluginFixture(),
+      connection: async () => ({ base: 'http://localhost', token: 'fixture' }),
+    };
   });
   await page.route('http://localhost/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname === '/api/runtime-plugins/run') {
+      const body = request.postDataJSON();
+      assert.equal(body.id, localPackage.manifest.id);
+      assert.equal(body.command, localPackage.manifest.contributes.commands[0].id);
+      assert.equal(body.context.project.project.name, 'UI fixture');
+      assert.equal(body.sha256, '0'.repeat(64));
+      return route.fulfill({
+        json: {
+          name: 'UI fixture',
+          components: 0,
+          includeReferences: body.input.includeReferences ?? false,
+        },
+      });
+    }
     if (url.pathname === '/api/pcb-design/guide') {
       assert.equal(url.searchParams.get('document'), 'workflow');
       return route.fulfill({ json: { text: '# Verified workflow fixture' } });
@@ -309,6 +355,34 @@ try {
   assert.match(
     await page.getByRole('button', { name: 'Refresh plugins' }).getAttribute('aria-description'),
     /Claude Code: Update your CLI/,
+  );
+  await page.getByRole('button', { name: 'Install plugin from file', exact: true }).click();
+  await category('OpenPE')
+    .getByRole('button', { name: 'View Project Summary', exact: true })
+    .click();
+  await page.getByText('Can read this project when a command runs.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Summarize project', exact: true }).click();
+  const commandDialog = page.getByRole('dialog', { name: 'Summarize project', exact: true });
+  await commandDialog.getByRole('textbox', { name: 'Plugin command inputs' }).fill('{invalid');
+  await commandDialog.getByRole('button', { name: 'Run', exact: true }).click();
+  await commandDialog.getByRole('alert').waitFor();
+  await commandDialog
+    .getByRole('textbox', { name: 'Plugin command inputs' })
+    .fill('{"includeReferences":true}');
+  await commandDialog.getByRole('button', { name: 'Run', exact: true }).click();
+  await commandDialog.getByLabel('Plugin command result').waitFor();
+  assert.match(await commandDialog.innerText(), /"includeReferences": true/);
+  await page.screenshot({
+    path: 'test-results/plugins-runtime-command.png',
+    animations: 'disabled',
+  });
+  await page.keyboard.press('Escape');
+  await commandDialog.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Disable', exact: true }).click();
+  await page.getByRole('button', { name: 'Enable', exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole('button', { name: 'Summarize project', exact: true }).count(),
+    0,
   );
   assert.deepEqual(errors, []);
   console.log(

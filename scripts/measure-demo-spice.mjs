@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analysisFilename } from '../server/flat-analysis-files.mjs';
 import { createProjectSpiceStore } from '../server/project-spice-files.mjs';
-import { readNativeSpiceRows } from '../server/spice-raw.mjs';
+import { readNativeSpiceRows } from '../plugins/spice-simulation/host/spice-raw.mjs';
+import { spiceProjectDirectory } from '../plugins/runtime/project-data.mjs';
 import { voltageWindow } from './home-simulation-verification.ts';
 
 const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
@@ -31,7 +32,7 @@ export async function measureDemoSpice(directory, { secondaryReturn = 'GND2' } =
     throw new Error('The directory must contain exactly one native .kicad_pro project.');
   const projectFile = path.join(input, projects[0].name);
   const stem = path.basename(projectFile, path.extname(projectFile));
-  const spiceDirectory = path.join(input, 'spice');
+  const spiceDirectory = path.join(input, spiceProjectDirectory);
   const manifestFile = path.join(spiceDirectory, analysisFilename(stem, 'manifest.json'));
   const manifestBefore = await lstat(manifestFile);
   const manifestBytes = await readFile(manifestFile);

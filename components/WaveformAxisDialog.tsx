@@ -7,7 +7,7 @@ import {
   validWaveformAxis,
   validWaveformTime,
   type WaveformAxis,
-} from '@/lib/waveform-view';
+} from '@/plugins/spice-simulation/domain/waveform-view';
 
 export default function WaveformAxisDialog({
   axis,
@@ -84,7 +84,7 @@ export default function WaveformAxisDialog({
               if (!composing.current) onApply(null);
             }}
           >
-            Auto scale
+            Autoscale
           </button>
           <button className="dialog-button primary" onClick={apply}>
             Apply

@@ -1,3 +1,4 @@
+import { parameterizedHomeProject } from './fixtures/model-parameters';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exampleProject } from '../lib/project-example';
@@ -7,17 +8,17 @@ import {
   simulationSourceProperties,
   type FieldRow,
 } from '../lib/part-properties';
-import { createExample } from '../lib/examples';
 import { exportKiCad, importDocument, parseProject, serializeProject } from '../lib/project';
 import { createHomeExample } from '../lib/create-home-example';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 
 test('source controls edit DC literals, bound DC values and pulse parameters without changing model mappings', () => {
-  const buck = createExample('kicad-buck');
+  const buck = parameterizedHomeProject();
   const home = createHomeExample('reference-lm2598-to220-7-buck');
+  const pulse = parameterizedHomeProject('PULSE');
   for (const [project, ref, key, input] of [
-    [buck, 'V102', 'dc', '18'],
-    [buck, 'V101', 'y2', '10'],
+    [buck, 'V1', 'dc', '18'],
+    [pulse, 'V1', 'y2', '10'],
     [home, 'V1', 'dc', '25'],
   ] as const) {
     const part = project.schematic.parts.find((part) => part.ref === ref)!;
@@ -41,7 +42,8 @@ test('source controls edit DC literals, bound DC values and pulse parameters wit
     );
     for (const name of ['Sim.Device', 'Sim.Type', 'Sim.Pins'])
       assert.equal(change.fields[name], fields[name]);
-    if (ref === 'V102') assert.equal(change.fields['Sim.Params'], undefined);
+    if (project === buck) assert.equal(change.fields['Sim.Params'], undefined);
+    if (project === home) assert.equal(change.fields['Sim.Params'], `dc=${input}`);
     if (part.value === '${SIM.PARAMS}') assert.equal(change.value, part.value);
     const reopened = importDocument(exportKiCad(edited, 'schematic'));
     assert.equal(
@@ -93,7 +95,7 @@ test('numeric simulation Properties share compiler limits and retain engineering
 });
 
 test('SIN source edits retain omitted defaults and reject invalid frequency and delay', () => {
-  const original = createExample('kicad-buck').schematic.parts.find((part) => part.ref === 'V102')!;
+  const original = parameterizedHomeProject().schematic.parts.find((part) => part.ref === 'V1')!;
   const part = {
     ...original,
     value: 'VSIN',
@@ -172,8 +174,8 @@ test('property commits reject invalid drafts and support explicit field removal'
 });
 
 test('resolved simulation values stay clean on blur and preserve edits to other properties', () => {
-  const project = createExample('kicad-buck');
-  const part = project.schematic.parts.find((part) => part.ref === 'L101')!;
+  const project = parameterizedHomeProject();
+  const part = project.schematic.parts.find((part) => part.ref === 'L1')!;
   const before = serializeProject(project);
   const fields = partFields(part);
   const rows = Object.entries(fields).map(([name, value]) => ({ name, value }));
@@ -195,8 +197,8 @@ test('resolved simulation values stay clean on blur and preserve edits to other 
 });
 
 test('editing a resolved value updates its simulation field through JSON and KiCad round trips', () => {
-  const project = createExample('kicad-buck');
-  const part = project.schematic.parts.find((part) => part.ref === 'L101')!;
+  const project = parameterizedHomeProject();
+  const part = project.schematic.parts.find((part) => part.ref === 'L1')!;
   const rows = Object.entries(partFields(part)).map(([name, value]) => ({ name, value }));
   const change = preparePartProperties(part, part.ref, '220u', rows)!;
   assert.equal(change.value, '${SIM.PARAMS}');

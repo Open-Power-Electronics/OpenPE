@@ -2,7 +2,13 @@ import type { Point } from './circuit';
 import type { BoardLine, CopperLayer, PCB } from './pcb';
 import { isOwnedProjectNode } from './immutable-project';
 import { padCopperLayers } from './pcb-connectivity';
-import { footprintPoint, padDrillPosition, padPosition, routePoints } from './pcb-layout';
+import {
+  footprintPoint,
+  padDrillLine,
+  padDrillPosition,
+  padPosition,
+  routePoints,
+} from './pcb-layout';
 import { pcbArc, transformPCBGraphic } from './pcb-geometry';
 import { pcbDimensionStrokes } from './pcb-routing-artwork';
 import { borrowPCBPadOutline } from './pcb-pad-contour';
@@ -69,7 +75,7 @@ type PreparedRouter = {
  * the stationary clearance index so a later dynamic router only builds pairs
  * for records on the supplied board. The session is not a document and must be
  * dropped with the gesture. */
-export type PCBRouterSession = {
+type PCBRouterSession = {
   slices: WeakMap<object, Map<string, RouterSlice>>;
   stations: Map<string, { signature: readonly Obstacle[]; tree: ObstacleTree | undefined }>;
   prepared: Map<string, PreparedRouter>;
@@ -380,7 +386,12 @@ export function createPCBRouter(
   let vertices = preparedStation?.vertices ?? 0;
   let edgeTolerance = 0;
   let edgeCuts = false;
-  const createObstacle = (points: Point[], radius: number, polygon: Polygon | undefined, pending: number) => {
+  const createObstacle = (
+    points: Point[],
+    radius: number,
+    polygon: Polygon | undefined,
+    pending: number,
+  ) => {
     vertices += points.length + (polygon?.holes.reduce((n, h) => n + h.length, 0) ?? 0);
     if (obstacleReserve + obstacles.length + pending >= 15000 || vertices > 120000)
       throw new Error(limitMessage);
@@ -425,10 +436,7 @@ export function createPCBRouter(
     const saved = owned ? session!.slices.get(source)?.get(key) : undefined;
     if (saved) {
       vertices += saved.vertices;
-      if (
-        vertices > 120000 ||
-        obstacleReserve + obstacles.length + saved.obstacles.length > 15000
-      )
+      if (vertices > 120000 || obstacleReserve + obstacles.length + saved.obstacles.length > 15000)
         throw new Error(limitMessage);
       edgeTolerance = Math.max(edgeTolerance, saved.edgeTolerance);
       edgeCuts ||= saved.edgeCuts;
@@ -489,7 +497,8 @@ export function createPCBRouter(
     const arc = graphic.kind === 'arc' ? pcbArc(graphic) : null;
     const tolerance =
       graphic.kind === 'circle'
-        ? Math.sqrt(squaredDistance(graphic.start, graphic.end)) * (1 - Math.cos(Math.PI / points.length))
+        ? Math.sqrt(squaredDistance(graphic.start, graphic.end)) *
+          (1 - Math.cos(Math.PI / points.length))
         : arc
           ? arc.radius * (1 - Math.cos(Math.abs(arc.delta) / (2 * (points.length - 1))))
           : 0;
@@ -508,20 +517,30 @@ export function createPCBRouter(
   for (const footprint of board.footprints)
     adopt(footprint, 'pads', (addPad) => {
       for (const pad of footprint.pads) {
-        if ((netId === null || pad.netId !== netId) && padCopperLayers(board, footprint, pad).includes(layer)) {
+        if (
+          (netId === null || pad.netId !== netId) &&
+          padCopperLayers(board, footprint, pad).includes(layer)
+        ) {
           if (pad.shape === 'circle') addPad([padPosition(footprint, pad)], pad.size.x / 2);
           else {
             const shape = borrowPCBPadOutline(footprint, pad);
             const radius =
               Math.min(pad.size.x, pad.size.y) *
-              (pad.shape === 'oval' ? 0.5 : pad.shape === 'roundrect' ? (pad.roundrectRatio ?? 0) : 0);
+              (pad.shape === 'oval'
+                ? 0.5
+                : pad.shape === 'roundrect'
+                  ? (pad.roundrectRatio ?? 0)
+                  : 0);
             // Cover the maximum sagitta of padPolygon's 9-point quarter arcs.
             addPad(shape.outer, radius * (1 - Math.cos(Math.PI / 32)), shape);
           }
         }
         // A plated same-net pad is a legal routing anchor, including its center.
         if (pad.drill && (netId === null || pad.netId !== netId || pad.type === 'np_thru_hole'))
-          addPad([padDrillPosition(footprint, pad)], pad.drill / 2);
+          addPad(
+            pad.drillSlot ? padDrillLine(footprint, pad) : [padDrillPosition(footprint, pad)],
+            pad.drill / 2,
+          );
       }
     });
   for (const track of board.tracks)
@@ -532,7 +551,9 @@ export function createPCBRouter(
   // New tracks invalidate saved pours; only explicit track keepouts block routing.
   for (const zone of worldZones(board)) {
     if (zone.layer !== layer) continue;
-    if (zone.keepout?.[obstacleType === 'pad' ? 'pads' : obstacleType === 'via' ? 'vias' : 'tracks']) {
+    if (
+      zone.keepout?.[obstacleType === 'pad' ? 'pads' : obstacleType === 'via' ? 'vias' : 'tracks']
+    ) {
       const shape = { outer: zone.outline, holes: zone.holes ?? [] };
       add(shape.outer, 0, shape);
     }
@@ -551,8 +572,19 @@ export function createPCBRouter(
           // Match the local strokes used by the artwork collision adapter before
           // rounding their transformed endpoints into board space.
           for (const stroke of pcbDimensionStrokes(graphic))
-            contributeGraphic(transformPCBGraphic(stroke, point), addGraphic, noteTolerance, noteEdge);
-        } else contributeGraphic(transformPCBGraphic(graphic, point), addGraphic, noteTolerance, noteEdge);
+            contributeGraphic(
+              transformPCBGraphic(stroke, point),
+              addGraphic,
+              noteTolerance,
+              noteEdge,
+            );
+        } else
+          contributeGraphic(
+            transformPCBGraphic(graphic, point),
+            addGraphic,
+            noteTolerance,
+            noteEdge,
+          );
       }
     });
   // No outline permits early layout work. An existing broken outline fails closed.
@@ -721,10 +753,7 @@ export function createPCBRouter(
               }
             }
         }
-        if (
-          ok &&
-          !visitTrees(stationaryTrees, segmentBounds(a, b), hitsObstacle(a, b), spend)
-        )
+        if (ok && !visitTrees(stationaryTrees, segmentBounds(a, b), hitsObstacle(a, b), spend))
           ok = false;
         cache?.set(key, { ok, work: work - before });
         if (!ok) return false;
@@ -1108,6 +1137,10 @@ export function createPCBRouter(
 /** Clearance index for records added beside a station prepared by createPCBRouter.
  * The supplied board must contain only the moved records; stationary copper stays
  * in the session index. Missing preparation throws. */
-export function createDynamicPCBRouter(board: PCB, options: RoutingOptions, session: PCBRouterSession) {
+export function createDynamicPCBRouter(
+  board: PCB,
+  options: RoutingOptions,
+  session: PCBRouterSession,
+) {
   return createPCBRouter(board, options, session, true);
 }

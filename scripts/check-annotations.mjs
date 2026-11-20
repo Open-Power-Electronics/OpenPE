@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import {
   runCanvasAction,
   exportCanvasImage,
@@ -17,7 +18,7 @@ import {
 } from './visualization-test-helpers.mjs';
 // Isolated renderer regression: no Electron, real CLIs, native dialogs or user data.
 await mkdir('test-results', { recursive: true });
-const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+const source = formatTestProjectSource();
 const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 let state = {
   version: 2,

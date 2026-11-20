@@ -9,6 +9,7 @@ function createNativeSave({
   fileGrants,
   exampleRoots = [],
   showSaveDialog,
+  prepareModelSources,
   prepareProjectFiles,
   atomicWrite,
 }) {
@@ -45,6 +46,10 @@ function createNativeSave({
     if (owner && owner !== fileId)
       throw new Error('This file is open in another project. Choose a different filename.');
     const bundle = projectNativeFiles(savedProject, path.basename(file));
+    await preflightNativeProject(file, bundle);
+    const originalFileCount = bundle.files.length;
+    await prepareModelSources?.(savedProject, bundle, file, sourceFile);
+    if (bundle.files.length !== originalFileCount) await preflightNativeProject(file, bundle);
     for (const model of savedProject.simulationModels ?? []) {
       const source = bundle.files.find(
         (item) => item.name.toLowerCase() === model.file.toLowerCase(),
@@ -88,7 +93,6 @@ function createNativeSave({
       if (fileGrants.get(fileId) !== sourceFile)
         throw new Error('The project destination changed. Try saving again.');
     };
-    await preflightNativeProject(file, bundle);
     await checkOwners();
     await prepareProjectFiles(savedProject, file, sourceFile);
     await checkOwners();

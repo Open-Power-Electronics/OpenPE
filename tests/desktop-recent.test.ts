@@ -74,7 +74,10 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
     './workspace-recovery.cjs': { registerWorkspaceRecovery() {} },
     './project-directory.cjs': { registerProjectDirectory: () => ({ clear() {}, release() {} }) },
     './component-model-picker.cjs': { registerComponentModelPicker() {} },
-    './spice-model-picker.cjs': { registerSpiceModelPicker() {} },
+    '../plugins/spice-simulation/electron/spice-model-picker.cjs': {
+      registerSpiceModelPicker() {},
+    },
+    './plugin-installer.cjs': { registerPluginInstaller: () => {} },
     './cursor-credential.cjs': require('../electron/cursor-credential.cjs'),
   };
   const modules: Record<string, unknown> = {
@@ -108,7 +111,17 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
   });
   await bootstrap;
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
-  const call = (id: string, ...args: unknown[]) => handlers.get(`openpe:${id}`)!(event, ...args);
+  const invoke = (id: string, ...args: unknown[]) => handlers.get(`openpe:${id}`)!(event, ...args);
+  const call = async (id: string, ...args: unknown[]) => {
+    const result = await invoke(id, ...args);
+    return id === 'list-recent'
+      ? {
+          ...result,
+          entries: result.entries.filter((entry: { id: string }) => entry.id.startsWith('recent:')),
+        }
+      : result;
+  };
+  assert.equal((await invoke('list-recent')).entries[0].id, 'emc-flyback-demo');
   assert.equal((await call('list-recent')).entries.length, 0);
   canceled = true;
   assert.equal(await call('open'), null);
@@ -124,6 +137,14 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
   const grant = await call('accept-open', replacement.openId);
   const [entry] = (await call('list-recent')).entries;
   assert.equal(entry.description, nativePath);
+  await call('pin-recent', entry.id, true);
+  assert.equal((await call('list-recent')).entries[0].pinned, true);
+  await assert.rejects(call('remove-recent', entry.id), /Unpin/);
+  await call('pin-recent', entry.id, false);
+  await assert.rejects(
+    handlers.get('openpe:pin-recent')!({ sender: {}, senderFrame: {} }, entry.id, true),
+    /Unauthorized/,
+  );
   const beforePreview = await call('list-recent');
   const preview = await call('preview-recent', entry.id);
   assert.equal(preview.title, createBlankProject().schematic.title);

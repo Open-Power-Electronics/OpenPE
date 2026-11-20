@@ -2,12 +2,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api } from './bridge';
 import type { CapabilityHost } from '@/api/capabilities';
-import {
-  analyzeLayoutParasitics,
-  PARASITICS_THICKNESS_RANGE,
-  type ParasiticsInput,
-} from './layout-parasitics';
-import type { PCB } from './pcb';
 
 export type PluginAction = 'install' | 'uninstall' | 'enable' | 'disable';
 export type WorkbenchPlugin = {
@@ -26,6 +20,11 @@ export type WorkbenchPlugin = {
   category?: string;
   author?: string;
   capabilities?: string[];
+  runtime?: 'builtin' | 'javascript';
+  projectDirectory?: string;
+  sha256?: string;
+  permissions?: string[];
+  contributes?: import('../api/plugins').PluginManifest['contributes'];
 };
 export type WorkbenchPluginCatalog = {
   controlsVersion: number;
@@ -35,23 +34,6 @@ export type WorkbenchPluginCatalog = {
   warning: string;
   updatedAt: number;
 };
-export const SPICE_PLUGIN_ID = 'spice-simulation@openpe';
-export const THERMAL_PLUGIN_ID = 'pcb-thermal@openpe';
-export const PCB_DESIGN_PLUGIN_ID = 'ai-pcb-layout@openpe';
-export const LAYOUT_PARASITICS_PLUGIN_ID = 'layout-parasitics@openpe';
-export const pcbDesignDocuments = [
-  'workflow',
-  'analysis-and-measurement',
-  'behavioral-evaluation',
-  'cad-and-tools',
-  'devices',
-  'electrical-layout',
-  'electrical-net-table',
-  'implementation-and-delivery',
-  'insulation-and-copper',
-  'regimes-and-standards',
-  'topologies',
-] as const;
 const initial = { catalog: null as WorkbenchPluginCatalog | null, loading: false, error: '' };
 let snapshot = initial;
 let pending: Promise<WorkbenchPluginCatalog> | null = null;
@@ -149,7 +131,8 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
       owner: 'host',
       id: 'workbench.plugins.change',
       kind: 'command',
-      description: 'Install, uninstall, enable or disable an allowlisted bundled workbench plugin.',
+      description:
+        'Install built-in features, or uninstall, enable or disable a confirmed workbench plugin. Local packages require the native installer.',
       mutation: 'external',
       review: 'optional',
       inputSchema: {
@@ -158,37 +141,22 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
         properties: {
           action: { enum: ['install', 'uninstall', 'enable', 'disable'] },
           id: {
-            enum: [
-              SPICE_PLUGIN_ID,
-              THERMAL_PLUGIN_ID,
-              PCB_DESIGN_PLUGIN_ID,
-              LAYOUT_PARASITICS_PLUGIN_ID,
-            ],
+            type: 'string',
+            minLength: 1,
+            maxLength: 129,
+            pattern: '^[a-z][a-z0-9-]*@[a-z][a-z0-9-]*$',
           },
         },
         additionalProperties: false,
       },
       handler: async ({ action, id }, { signal }) => {
         if (signal.aborted) throw new Error('Plugin operation cancelled.');
+        const catalog = await loadWorkbenchPlugins();
+        if (!catalog.plugins.some((plugin) => plugin.id === id))
+          throw new Error('Unknown OpenPE plugin.');
         await changeWorkbenchPlugin(action, id, signal);
         return snapshot.catalog;
       },
-    }),
-    host.register<{ document?: (typeof pcbDesignDocuments)[number] }>({
-      owner: 'plugin',
-      id: 'pcbDesign.guide',
-      kind: 'query',
-      plugin: PCB_DESIGN_PLUGIN_ID,
-      description:
-        'Read the PE Layout Skill workflow (default) or a named offline engineering reference. Read workflow first for scope, review gates and document IDs. Guidance does not run checks or edit the project.',
-      inputSchema: {
-        type: 'object',
-        properties: { document: { enum: [...pcbDesignDocuments] } },
-        additionalProperties: false,
-      },
-      available: () => workbenchPluginAvailability(PCB_DESIGN_PLUGIN_ID),
-      handler: async ({ document = 'workflow' }, { signal }) =>
-        (await api(`pcb-design/guide?document=${document}`, { signal })).json(),
     }),
   ];
   const listener = () => {
@@ -205,63 +173,24 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
   };
 }
 
-/** Read the originating project's accepted board through the shared GUI and Agent host. */
-export function registerLayoutParasiticsCapability(
-  host: CapabilityHost,
-  read: () => {
-    project: { pcb: PCB | null } | null;
-    revision: number;
-    sourceDraft: string | null;
-    editingBlocked: string | null;
-  },
-) {
-  function available(state = read()) {
-    const plugin = workbenchPluginAvailability(LAYOUT_PARASITICS_PLUGIN_ID);
-    if (plugin !== true) return plugin;
-    if (state.editingBlocked) return state.editingBlocked;
-    if (state.sourceDraft !== null)
-      return 'Apply the Source edits before measuring PCB resistance.';
-    return !!state.project?.pcb || 'This project has no PCB layout.';
-  }
-  const identity = { type: 'string', minLength: 1, maxLength: 200 };
-  const thickness = {
-    type: 'number',
-    minimum: PARASITICS_THICKNESS_RANGE.min,
-    maximum: PARASITICS_THICKNESS_RANGE.max,
+export function workbenchPluginLifecycle(id: string) {
+  return {
+    available: () => workbenchPluginAvailability(id),
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   };
-  return host.register<ParasiticsInput & { boardId: string }>({
-    owner: 'plugin',
-    plugin: LAYOUT_PARASITICS_PLUGIN_ID,
-    id: 'parasitics.measure',
-    kind: 'query',
-    description:
-      'Estimate two-terminal DC resistance, shortest-route length and shortest-route partial inductance (nH, excludes the return path) between same-net pad or via IDs. Copper thickness and via plating are in mm. Inspect Layout for board and endpoint IDs.',
-    inputSchema: {
-      type: 'object',
-      required: ['boardId', 'startId', 'endId'],
-      properties: {
-        boardId: identity,
-        startId: identity,
-        endId: identity,
-        copperThicknessMm: thickness,
-        viaPlatingMm: thickness,
-      },
-      additionalProperties: false,
-    },
-    available: () => available(),
-    handler: ({ boardId, ...input }, { expectedRevision, signal }) => {
-      const state = read();
-      const gate = available(state);
-      if (gate !== true) throw new Error(gate);
-      signal.throwIfAborted();
-      if (expectedRevision !== undefined && expectedRevision !== String(state.revision))
-        throw new Error(
-          'The project changed before measurement. Measure the current layout again.',
-        );
-      const board = state.project?.pcb;
-      if (!board || board.id !== boardId)
-        throw new Error('This PCB layout is no longer in the project.');
-      return { boardId, revision: state.revision, ...analyzeLayoutParasitics(board, input) };
-    },
-  });
+}
+
+export function getWorkbenchPluginCatalog() {
+  return snapshot.catalog;
+}
+export function subscribeWorkbenchPlugins(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

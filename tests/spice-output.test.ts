@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { appendFile, mkdtemp, open, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { readWaveforms } from '../server/spice-waveforms.mjs';
-import { validatedSimulationResult } from '../lib/waveform';
-import type { SpiceDeck } from '../lib/spice';
+import { readWaveforms } from '../plugins/spice-simulation/host/spice-waveforms.mjs';
+import { validatedSimulationResult } from '../plugins/spice-simulation/domain/waveform';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
 
 const deck: SpiceDeck = {
   netlist: '',

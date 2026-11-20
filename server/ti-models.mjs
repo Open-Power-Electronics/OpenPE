@@ -2,11 +2,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { mkdir, readFile, writeFile, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { tiModels, referenceModels } from './ti-format.mjs';
+import { controllerModelSources } from './reference-model-format.mjs';
 import { fetchModelResponse } from './model-download.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const limit = 128 * 1024;
+const cacheFile = (dataDir, model) =>
+  path.join(dataDir, 'ti-models', `${model.archive}-${model.sha256}.zip`);
 
 // Only decode our hash-pinned TI archives. Never extract archive paths to disk.
 export function decodeTiModel(archive, model) {
@@ -40,8 +42,10 @@ export function decodeTiModel(archive, model) {
   throw new Error('TI archive does not contain the verified simulation model.');
 }
 
-async function download(model, signal, fetcher) {
-  let url = `https://www.ti.com/lit/zip/${model.archive}`;
+export async function downloadTiModelArchive(archive, signal, fetcher, maximum = limit) {
+  if (typeof archive !== 'string' || !/^[a-z0-9]{6,16}$/i.test(archive))
+    throw new Error('Invalid TI model archive ID.');
+  let url = `https://www.ti.com/lit/zip/${archive}`;
   for (let redirects = 0; redirects < 5; redirects++) {
     const target = new URL(url);
     if (
@@ -71,7 +75,7 @@ async function download(model, signal, fetcher) {
     let size = 0;
     for await (const chunk of response.body) {
       size += chunk.length;
-      if (size > limit) throw new Error('TI model download exceeded 128 KB.');
+      if (size > maximum) throw new Error(`TI model download exceeded ${maximum / 1024} KB.`);
       chunks.push(chunk);
     }
     return Buffer.concat(chunks);
@@ -79,29 +83,32 @@ async function download(model, signal, fetcher) {
   throw new Error('TI model download returned an invalid response.');
 }
 
+export async function readCachedTiModel(dataDir, id) {
+  const model = controllerModelSources.find((item) => item.id === id);
+  if (!model) throw new Error('Unsupported TI simulation model.');
+  const file = cacheFile(dataDir, model);
+  try {
+    if ((await stat(file)).size <= limit) return decodeTiModel(await readFile(file), model);
+  } catch {
+    // Missing, stale or corrupt cached bytes cannot be used as a model.
+  }
+  return null;
+}
+
 export function createTiModelStore(dataDir, fetcher = fetch) {
   return async (id, signal) => {
-    const model = [...tiModels, ...referenceModels].find((item) => item.id === id);
+    const model = controllerModelSources.find((item) => item.id === id);
     if (!model) throw new Error('Unsupported TI simulation model.');
-    const directory = path.join(dataDir, 'ti-models');
-    const file = path.join(directory, `${model.archive}-${model.sha256}.zip`);
-    let archive;
-    try {
-      if ((await stat(file)).size <= limit) archive = await readFile(file);
-      if (archive) {
-        const bytes = decodeTiModel(archive, model);
-        signal.throwIfAborted();
-        return bytes;
-      }
-    } catch (error) {
-      if (signal.aborted) throw error;
-      // A stale/corrupt cache never reaches the solver. Recover from the official source.
-    }
+    signal.throwIfAborted();
+    const cached = await readCachedTiModel(dataDir, id);
+    signal.throwIfAborted();
+    if (cached) return cached;
+    const file = cacheFile(dataDir, model);
     const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(30000)]);
-    archive = await download(model, boundedSignal, fetcher);
+    const archive = await downloadTiModelArchive(model.archive, boundedSignal, fetcher);
     const bytes = decodeTiModel(archive, model);
     boundedSignal.throwIfAborted();
-    await mkdir(directory, { recursive: true });
+    await mkdir(path.dirname(file), { recursive: true });
     const temporary = `${file}.${randomUUID()}.tmp`;
     try {
       await writeFile(temporary, archive);

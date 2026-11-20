@@ -10,8 +10,12 @@ import {
   type RuleCheckResult,
 } from './design-rule-checks';
 import { analyzePCBConnectivity, padCopperLayers } from './pcb-connectivity';
-import type { PCBDesignRuleSources } from './pcb-clearance-sources';
-import { footprintPoint, padDrillPosition, padPosition } from './pcb-layout';
+import {
+  matchingPCBClearanceRule,
+  pcbRuleNetClass,
+  type PCBDesignRuleSources,
+} from './pcb-clearance-sources';
+import { footprintPoint, padDrillLine, padDrillPosition, padPosition } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
 import { pcbSilkscreen } from './pcb-silkscreen';
 import { pcbStrokeText } from './pcb-stroke-text';
@@ -23,6 +27,7 @@ import {
   graphicVertices,
   intersectPolygons,
   offsetPolygons,
+  padDrillPolygon,
   padPolygon,
   polygonResolution,
   polygonsFromContours,
@@ -60,8 +65,15 @@ type Body = {
   maxY: number;
   disk?: { at: Point; outer: number; inner: number };
 };
-type Hole = { id: string; at: Point; radius: number; netId: string | null; plated: boolean };
 type Bounds = Pick<Body, 'minX' | 'minY' | 'maxX' | 'maxY'>;
+type Hole = Bounds & {
+  id: string;
+  at: Point;
+  line: [Point, Point];
+  radius: number;
+  netId: string | null;
+  plated: boolean;
+};
 type IndexedEdge = Bounds & { line: [Point, Point]; ring: number };
 type EdgeIndex = Bounds & { edges?: IndexedEdge[]; left?: EdgeIndex; right?: EdgeIndex };
 const epsilon = 0.00001;
@@ -502,6 +514,7 @@ export function runPCBDesignRules(
       for (const p of f.pads) {
         const at = padPosition(f, p),
           drill = padDrillPosition(f, p);
+        const line: [Point, Point] = p.drillSlot ? padDrillLine(f, p) : [drill, drill];
         if (
           enabled.has('pcb.pad-drill') &&
           p.drill &&
@@ -517,7 +530,9 @@ export function runPCBDesignRules(
           holes.push({
             id: p.id,
             at: drill,
+            line,
             radius: p.drill / 2,
+            ...pointBounds(line, p.drill / 2),
             netId: p.netId,
             plated: p.type === 'thru_hole',
           });
@@ -530,11 +545,14 @@ export function runPCBDesignRules(
             let ring = Infinity;
             for (const [a, b] of polygonEdges(polygon)) {
               spend();
-              ring = Math.min(ring, Math.sqrt(pointSegmentDistance(drill, a, b)) - p.drill / 2);
+              ring = Math.min(ring, Math.sqrt(segmentDistance(...line, a, b)) - p.drill / 2);
             }
-            if (!insidePolygon(drill, polygon, spend)) ring = -p.drill / 2;
+            if (line.some((end) => !insidePolygon(end, polygon, spend))) ring = -p.drill / 2;
             if (p.shape === 'circle')
-              ring = p.size.x / 2 - Math.sqrt(squaredDistance(at, drill)) - p.drill / 2;
+              ring =
+                p.size.x / 2 -
+                Math.sqrt(Math.max(...line.map((end) => squaredDistance(at, end)))) -
+                p.drill / 2;
             if (ring + epsilon < settings.minAnnularRing)
               issue(
                 'pcb.annular-ring',
@@ -543,7 +561,7 @@ export function runPCBDesignRules(
                 at,
               );
           }
-          if (needsCopper) polygon.holes.push(circlePolygon(drill, p.drill / 2));
+          if (needsCopper) polygon.holes.push(padDrillPolygon(f, p));
         }
         if (!needsCopper) continue;
         const copper = body(
@@ -556,7 +574,11 @@ export function runPCBDesignRules(
           0,
           polygon,
         );
-        if (p.shape === 'circle' && (!p.drill || squaredDistance(at, drill) < epsilon ** 2))
+        if (
+          p.shape === 'circle' &&
+          !p.drillSlot &&
+          (!p.drill || squaredDistance(at, drill) < epsilon ** 2)
+        )
           copper.disk = { at, outer: p.size.x / 2, inner: p.drill ? p.drill / 2 : 0 };
         bodies.push(copper);
       }
@@ -614,7 +636,15 @@ export function runPCBDesignRules(
           via,
         );
       if (holesEnabled)
-        holes.push({ id: via.id, at: via, radius: via.drill / 2, netId: via.netId, plated: true });
+        holes.push({
+          id: via.id,
+          at: via,
+          line: [via, via],
+          radius: via.drill / 2,
+          netId: via.netId,
+          plated: true,
+          ...pointBounds([via], via.drill / 2),
+        });
       if (!needsCopper) continue;
       const polygon = {
         outer: circlePolygon(via, via.diameter / 2),
@@ -711,12 +741,7 @@ export function runPCBDesignRules(
       }
     }
     const sorted = clearance ? [...bodies].sort((a, b) => a.minX - b.minX) : [];
-    const netClasses = new Map(
-      sorted.map(({ netId }) => {
-        const name = netId ? sources?.netNames.get(netId) : undefined;
-        return [netId, (name && sources?.assignments.get(name)) || 'Default'];
-      }),
-    );
+    const netClasses = new Map(sorted.map(({ netId }) => [netId, pcbRuleNetClass(sources, netId)]));
     if (settings.useKiCadClearance && enabled.has('pcb.clearance')) {
       for (const copper of sorted) {
         if (!copper.netId) continue;
@@ -808,12 +833,10 @@ export function runPCBDesignRules(
         if (customRules.length) {
           const left = ruleOperand(a),
             right = ruleOperand(b);
-          for (const rule of customRules) {
-            spend();
-            if (!rule.matches(left, right) && !rule.matches(right, left)) continue;
+          const rule = matchingPCBClearanceRule(customRules, left, right, spend);
+          if (rule) {
             required = overrides.get(rule.key)?.clearance ?? rule.clearance;
             clearanceLabel = `rule ${rule.label}`;
-            break;
           }
         }
         if (!clearanceLabel) {
@@ -939,27 +962,28 @@ export function runPCBDesignRules(
         if (hole.id === copper.id || (hole.plated && hole.netId && hole.netId === copper.netId))
           continue;
         if (
-          hole.at.x + hole.radius + settings.copperToHole < copper.minX ||
-          hole.at.x - hole.radius - settings.copperToHole > copper.maxX ||
-          hole.at.y + hole.radius + settings.copperToHole < copper.minY ||
-          hole.at.y - hole.radius - settings.copperToHole > copper.maxY
+          hole.maxX + settings.copperToHole < copper.minX ||
+          hole.minX - settings.copperToHole > copper.maxX ||
+          hole.maxY + settings.copperToHole < copper.minY ||
+          hole.minY - settings.copperToHole > copper.maxY
         )
           continue;
         let gap = Infinity;
         if (copper.disk) {
-          const between = Math.sqrt(squaredDistance(hole.at, copper.disk.at));
-          gap = Math.max(0, between - copper.disk.outer, copper.disk.inner - between) - hole.radius;
-        } else if (insideBody(hole.at, copper)) gap = -hole.radius;
+          const { at, outer, inner } = copper.disk;
+          const near = Math.sqrt(pointSegmentDistance(at, ...hole.line));
+          const far = Math.sqrt(Math.max(...hole.line.map((end) => squaredDistance(at, end))));
+          gap = Math.max(0, near - outer, inner - far) - hole.radius;
+        } else if (hole.line.some((end) => insideBody(end, copper))) gap = -hole.radius;
         else {
-          const { x, y } = hole.at;
           query(
             index(copper),
-            { minX: x, maxX: x, minY: y, maxY: y },
+            pointBounds(hole.line),
             copper.radius + hole.radius + settings.copperToHole + epsilon,
             ({ line: [a, b] }) => {
               gap = Math.min(
                 gap,
-                Math.sqrt(pointSegmentDistance(hole.at, a, b)) - copper.radius - hole.radius,
+                Math.sqrt(segmentDistance(...hole.line, a, b)) - copper.radius - hole.radius,
               );
             },
           );
@@ -975,14 +999,14 @@ export function runPCBDesignRules(
     }
     if (holeSpacing) {
       phase = 'drill-to-drill clearance';
-      const ordered = holes.toSorted((a, b) => a.at.x - a.radius - (b.at.x - b.radius));
+      const ordered = holes.toSorted((a, b) => a.minX - b.minX);
       for (let i = 0; i < ordered.length; i++) {
         const a = ordered[i];
         for (let j = i + 1; j < ordered.length; j++) {
           const b = ordered[j];
-          if (b.at.x - b.radius > a.at.x + a.radius + settings.holeToHole) break;
+          if (b.minX > a.maxX + settings.holeToHole) break;
           spend();
-          const gap = Math.hypot(a.at.x - b.at.x, a.at.y - b.at.y) - a.radius - b.radius;
+          const gap = Math.sqrt(segmentDistance(...a.line, ...b.line)) - a.radius - b.radius;
           if (gap + epsilon < settings.holeToHole)
             issue(
               'pcb.hole-spacing',

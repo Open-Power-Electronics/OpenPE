@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -6,6 +7,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 // Actual workspace components in an isolated headless browser, with in-memory
@@ -16,7 +18,7 @@ const { parseSExpr, child, children, val, writeSExpr } = await tsImport(
   '../lib/sexpr.ts',
   import.meta.url,
 );
-const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+const source = formatTestProjectSource();
 const projects = ['First project', 'Second project'].map((name) => {
   const document = JSON.parse(source);
   document.project.id = crypto.randomUUID();

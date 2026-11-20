@@ -7,7 +7,8 @@ Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench wit
 <!-- prettier-ignore -->
 | Work | Owning contract |
 | --- | --- |
-| Setup, commands and product scope | [README](README.md) |
+| Product overview and supported scope | [README](README.md), [Documentation](docs/README.md) |
+| Installation, development and commands | [Development](docs/DEVELOPMENT.md) |
 | Visual style, controls, gestures, focus and panels | [Design](DESIGN.md) |
 | Modules, trust boundaries, execution and storage | [Architecture](docs/ARCHITECTURE.md), [source diagram](assets/architecture.drawio) |
 | Document ownership, transactions, revisions and caches | [Core](docs/CORE.md) |
@@ -15,7 +16,8 @@ Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench wit
 | Native files, preservation, Source and Save | [Format](docs/FORMAT.md) |
 | PCB/Model geometry and bounded rule coverage | [Layout](docs/LAYOUT.md), [Design rules](docs/DESIGN-RULES.md) |
 | Catalog, pinned resources and reference evidence | [Examples](docs/EXAMPLES.md), [Libraries](docs/LIBRARIES.md), [Datasheets](docs/DATASHEETS.md) |
-| Solver profiles, execution, artifacts and results | [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md), [EMC verification](docs/EMC-FLYBACK.md) |
+| Solver profiles, execution, artifacts and results | [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md) |
+| EMC review, evidence boundaries and reference case | [EMC Analysis](docs/EMC.md), [EMC Flyback verification](docs/EMC-FLYBACK.md) |
 | Bundled features and provider management | [Plugins](docs/PLUGINS.md) |
 | Destination-bound local Git history | [Version history](docs/VERSION-HISTORY.md) |
 
@@ -28,6 +30,8 @@ Keep one owning explanation for each mechanism. Update affected contracts and th
 - Use OpenPE / `openpe` for product copy and application-owned identities (`window.openpe`, `openpe:` IPC, `X-OpenPE-Token`, `OPENPE_*`, appearance keys, `ai.openpe.desktop`, native properties and resource IDs). Establish data under `OpenPE` or explicit `OPENPE_DATA_DIR` before setting the native name; no former-brand aliases/directory fallback.
 - Designs are native `.kicad_pro`, `.kicad_sch`, `.kicad_pcb` and supporting files. Never publish private snapshots as designs, create `.openpe.json` or disguise JSON as KiCad. Use plain circuit filenames with separate provenance/licenses.
 - Follow [Design](DESIGN.md). `public/brand/openpe-mark.svg` is the sole transparent Signal E master; regenerate derivatives with `node scripts/brand-assets.mjs`.
+- Settings and editor windows must use [Design](DESIGN.md#dialogs-and-native-actions)'s shared full `Dialog` size; functional prompts use the shared compact size and content height. All modes share header/footer chrome, with no feature-specific frame overrides. Anchored contextual panels retain the documented intrinsic sizing.
+- Follow [Design](DESIGN.md#typography-spacing-and-shapes) for dropdown sizing. Choose field matching or content sizing to show complete options without unnecessary width.
 
 ## Architecture and ownership
 
@@ -38,7 +42,7 @@ Classify changes by GUI, Context Management, Agent, Uniform API, Core, Plugin or
 - `ProjectCore` alone owns validated documents, Source drafts and whole-project undo. Workbench owns presentation/adapters/current dirty baseline; DesktopWorkspace owns selection/recovery; host ports own grants/native writes/Git.
 - GUI and Agent design, simulation and project-file operations share Core or bounded host-backed capabilities, preparation, validation and transactions, with native dialogs and Agent model/log access restrictions intact. Expose editable parameters in discovery; verify native-file/undo GUI-Agent parity. Pointer/camera presentation creates no second mutation algorithm. Generate PCB property schemas from canonical definitions. Partial constrained commands require explicit consent and report applied displacement.
 - Owner/abstraction metadata is not permission; runtime discovery defines availability. Update [API](docs/API.md) for ID/schema/result/route/bridge/lifecycle changes. Unsupported schema keywords fail explicitly.
-- Generate schemas, validators and service bundles atomically with `scripts/build-format.mjs` from TypeScript/generator sources. Never hand-edit generated validators or embed duplicate project validators in consumers.
+- Regenerate schemas, validators and service bundles with `npm run build:format`. Change the TypeScript/generator sources and keep consumers on the shared validator.
 
 ## Editing and validation
 
@@ -80,25 +84,28 @@ Read [Format](docs/FORMAT.md) for preservation/Source/Save/export, [Datasheets](
 
 Follow [Examples](docs/EXAMPLES.md)'s catalog, provenance, native paths and generation contract and [Libraries](docs/LIBRARIES.md)'s resource/license delivery.
 
-- Open original files from `examples/` and its dedicated `examples/project/` group. Scan and package each root independently without including the project group in the outer root. Runtime never copies/regenerates/cleans/downloads Home content. Fixed resource IDs are not grants. Desktop Recent uses persisted native opening/save history, with EMC Flyback as the default only before real history exists.
+- Open original files from `examples/` and its dedicated `examples/project/` group. Scan and package each root independently without including the project group in the outer root. Runtime never copies/regenerates/cleans/downloads Home content. Fixed resource IDs are not grants. Desktop Recent uses persisted native opening/save history and pins, with EMC Flyback pinned by default alongside real history until explicitly unpinned.
 - Preserve neutral names, pinned bytes/transforms and provenance/licenses; keep manufacturer supplements separate. Create only populated asset directories, retain `.pretty`, exclude `.kicad_prl`, and never hand-edit snapshots/pinned source, substitute assets or use preview downloads.
-- Use `npm run examples` (KiCad via `KICAD_CLI`: 10.0.1 for the TPS61046 refill and 10 for EMC conversion), then `npm run build:format` after generated TypeScript changes. Run `npm run examples:prepare` before renderer build/dev. Preserve portable paths/bundled sources; no runtime KiCad CLI or user-library discovery.
+- Follow [example regeneration](docs/EXAMPLES.md#regeneration-and-resource-preparation) for pinned KiCad versions and format generation. Prepare Home assets before starting the renderer directly. Preserve portable paths and bundled sources. Runtime must stay independent of KiCad CLI and user-library discovery.
 - Service/window/Home/new/ordinary recovery stay independent of example preflight. First example open shares the [bounded opening barrier](docs/VERSION-HISTORY.md#opening-barrier-and-concurrency), including clean recovery; unrelated failures/missing Git cannot block a usable project.
 
 ## Plugins, simulation and Agents
 
 [Plugins](docs/PLUGINS.md), [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md), [Core](docs/CORE.md#agent-transport-and-review) and [API](docs/API.md#agent-tools) own lifecycle/execution/transport details.
 
-- Bundled allowlisted plugins add no general loader/tool authority; host lifecycle gates/cancels work. Provider management is separate: verify effective state/managed policies, retain uninstall confirmation and never alter unrelated global config.
+- Each built-in plugin owns its manifest, domain, renderer and host adapters under `plugins/<name>/`. Local runtime packages use the versioned manifest, native installation approval and bounded QuickJS workers; they receive declared JSON inputs/project reads and no native or network authority. Shared capability scopes enforce declarations and cancel disabled work. Provider management is separate: verify effective state/managed policies, retain uninstall confirmation and never alter unrelated global config.
+- Project-owned plugin data lives inside the owning plugin-named folder beside the native project. Keep shared model assets, including simulation `.lib` files, in project-root `models/`, independently of plugin ownership. Completed solver data/publication backups stay in the owning plugin folder and outside native design files. Do not persist session settings merely because a directory exists.
 - Preserve exact supported model variants/mappings/derivatives. Simulation attributes remain Core data without plugins; immutable allowlisted `.lib` files use grant/link/hash checks and remain portable through Save/history/plugin removal. Only finite completed runs add references, as one undo edit.
 - Use verified bundled solvers/resources, argument arrays and private temporary directories. Requests accept validated project/settings/opaque IDs, never decks/scripts/executables/paths/URLs; no system solver discovery/environment overrides. Positive finite SPICE timing has no fixed range/runtime timeout or file/sample-size cutoff. Bound logs/display data. Stop retains validated partial samples; failure/automatic cancellation discards previews.
 - Thermal is read-only; missing enabled fills block Run. Distinguish PCB from junction temperature; SPICE heat uses verified full-resolution final-20% terminal power with explicit assumptions.
 - Desktop Run requires a saved destination. Results stay outside design/undo/recovery/dirty state. Follow current publication/rollback contracts, preserving unknown/damaged files, other projects and prior success. No cross-file crash-atomic claim. Restore validates without solving/downloading/migrating.
-- Keep all five Agents; installation is not authentication/runtime support. Codex, Claude, and Cursor get scoped query/execute/observe. Cursor runs `@cursor/sdk` locally in the service process, with built-in tools limited to MCP, one frozen empty filesystem and exact MCP environment, no setting sources, and a private temporary working directory. Cursor model-list failures are fixed diagnostics and do not forward SDK exception text. Stop keeps emitted text, stops reading the stream, and disposes the local agent when the run cannot be cancelled. DeepSeek/Pi retain restricted context/proposals. Every runnable harness gets bounded user questions without tool or host permission grants. Never read credentials, fabricate replies, silently switch providers, or interpolate user input into shell commands. The one exception is a Cursor API key the user pastes into Cursor provider settings: Electron main encrypts it with `safeStorage` as `cursor-credential.bin` under the OpenPE data directory, and only the service passes it to the SDK. The renderer then sees configured state and at most the last four characters. POSIX writes use mode 0600. On Windows the file stays in the per-user OpenPE data directory, which inherits the `%APPDATA%` profile ACL; OpenPE does not call `icacls`. OpenPE does not read other tools' credential files.
+- Keep all five Agents; installation is not authentication/runtime support. Codex, Claude, and Cursor get scoped query/execute/observe. Cursor runs `@cursor/sdk` locally in the service process, with built-in tools limited to MCP, one frozen empty filesystem and exact MCP environment, no setting sources, and a private temporary working directory. Cursor model-list failures are fixed diagnostics and do not forward SDK exception text. Stop keeps emitted text, stops reading the stream, and disposes the local agent when the run cannot be cancelled. DeepSeek/Pi retain restricted context/proposals. Every runnable harness gets bounded user questions without tool or host permission grants. Never read credentials, fabricate replies, silently switch providers, or interpolate user input into shell commands. The one exception is a Cursor API key the user pastes into Cursor provider settings: Electron main encrypts it with `safeStorage` as `cursor-credential.bin` under the OpenPE data directory, and only the service passes it to the SDK. The renderer then sees configured state and at most the last four characters. POSIX writes use mode 0600. On Windows the file stays in the per-user OpenPE data directory; OpenPE does not call `icacls`, and inheritance of the `%APPDATA%` profile ACL is unverified. OpenPE does not read other tools' credential files.
 - Reviews capture immutable arguments; Agent commands and manual Apply operate on current project data without caller revision preconditions. Serialize Agent document mutations per project; Apply rechecks schema/availability/targets/domain/Source/close gates. Auto uses the same host, never queued reviews. Fenced proposals require successful completion and originating sheet/fingerprint/mode. Bind tools/streams to run/session/project/origin and revoke tokens on cancel/disconnect/completion. Stop retains text/drafts but blocks late proposals.
 - Explicit Send captures bounded context; scoped tools observe current state. Never expose other-project UI, credentials, logs, model bytes or disabled results. Annotations remain immutable session presentation behind Source/visibility gates. Preserve raw text; follow [Design](DESIGN.md#agent-conversation)'s bounded lazy Markdown/KaTeX, hidden proposal payloads and no raw HTML/external images/trusted evaluation.
 
 ## Verification and delivery
+
+- Keep changes local for review. Push to a remote only when the user explicitly requests it for the current changes; completed pushes do not authorize later pushes.
 
 <!-- prettier-ignore -->
 | Change or check | Required handling |
@@ -110,7 +117,7 @@ Follow [Examples](docs/EXAMPLES.md)'s catalog, provenance, native paths and gene
 | Electron, `npm run test:e2e`, desktop visual/integration checks or benchmarks | Explicit user authorization before launching. |
 | Real solvers/providers | Opt-in; mocks are not native/provider/solver evidence. |
 
-- Windows x64 and macOS arm64 are both required for every change. macOS arm64 is tested locally. Windows x64 verification may be deferred and must be recorded as unverified.
+- Verify Windows x64, macOS arm64 and glibc Linux x64 separately. Test the current supported host locally; unavailable hosts may be deferred and must be recorded as unverified. Linux solver builds target Debian 13 / glibc 2.41 or newer.
 - Classify by behaviour/dependencies, not diff size/location; mixed changes use the highest tier. Naming changes affecting native data/recovery require the full tier. Run docs checks whenever maintained docs/rules change; review scoped diffs for formatting/unrelated edits.
 - Run focused checks while iterating, then required full checks once stable. Reuse passes for unchanged inputs; repeat after relevant changes/failures/unresolved concerns. Use `npm test -- <test paths>` for focused Node tests. Keep generation/tests/build sequential when sharing outputs.
 - Architecture runs before typecheck and after generation in test/build; do not duplicate passed applicable checks. Build/dev/package may prepare/download resources. [Verification index](docs/ARCHITECTURE.md#verification) and feature contracts own focused/opt-in commands. Report actual reviewed-tree passes, focused/full coverage and unverified behaviour.

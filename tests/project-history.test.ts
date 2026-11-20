@@ -259,7 +259,7 @@ test('file comparison retains supporting bytes, encodings, empty additions and r
     files: [
       { name: 'design.kicad_pro', source: '{}' },
       { name: 'symbols/device.kicad_sym', source: '(kicad_symbol_lib)' },
-      { name: 'circuits/model.lib', source: '.subckt device 1 2\n.ends\n' },
+      { name: 'models/model.lib', source: '.subckt device 1 2\n.ends\n' },
       { name: 'notes.txt', source: 'unchanged', encoding: 'latin1' },
     ],
   };
@@ -268,7 +268,10 @@ test('file comparison retains supporting bytes, encodings, empty additions and r
     files: [
       { name: 'notes.txt', source: 'unchanged' },
       { name: 'design.kicad_pro', source: '{}' },
-      { name: 'circuits/model.lib', source: '.subckt device 1 2\nR1 1 2 1k\n.ends\n' },
+      {
+        name: 'models/model.lib',
+        source: '.subckt device 1 2\nR1 1 2 1k\n.ends\n',
+      },
       { name: 'empty.txt', source: '' },
     ],
   };
@@ -276,16 +279,16 @@ test('file comparison retains supporting bytes, encodings, empty additions and r
   assert.deepEqual(
     changes.map(({ name, kind }) => [name, kind]),
     [
-      ['circuits/model.lib', 'changed'],
       ['empty.txt', 'added'],
+      ['models/model.lib', 'changed'],
       ['notes.txt', 'changed'],
       ['symbols/device.kicad_sym', 'removed'],
     ],
   );
-  assert.equal(changes[1].before, undefined);
-  assert.equal(changes[1].after!.source, '');
+  assert.equal(changes[0].before, undefined);
+  assert.equal(changes[0].after!.source, '');
   assert.equal(changes[3].after, undefined);
-  changes[0].before!.source = 'caller edit';
+  changes[1].before!.source = 'caller edit';
   assert.notEqual(
     before.files[2].source,
     'caller edit',

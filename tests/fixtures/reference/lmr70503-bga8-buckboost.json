@@ -6083,7 +6083,7 @@
     "files": [
       {
         "name": "lmr70503-bga8-buckboost.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lmr70503-bga8-buckboost.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LMR70503 Buck-Boost\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LMR70503.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lmr70503-bga8-buckboost.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LMR70503 Buck-Boost\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LMR70503.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lmr70503-bga8-buckboost.kicad_sym",
@@ -6107,7 +6107,7 @@
     {
       "id": "reference-lmr70503",
       "sha256": "1d661a243a8a44cab8f6e67448dfdafcc96249dea54f35927b25283e01e7aba9",
-      "file": "circuits/LMR70503.lib"
+      "file": "models/LMR70503.lib"
     }
   ]
 }

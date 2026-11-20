@@ -44,15 +44,24 @@ test('Review executes presentation commands and queries but holds design and fil
   const f = fixture();
   let selection: string[] = [];
   let view = '';
+  let section = 'hardware';
+  let sectionAllowed = true;
+  let sectionChanges = 0;
   let saves = 0;
   const remove = registerWorkbenchCapabilities(f.host, () => ({
     revision: () => String(f.core.getSnapshot().revision),
-    state: () => ({}),
+    state: () => ({ ui: { schematicSection: section } }),
     view: (next: string) => {
       view = next;
       return true;
     },
     sheet: () => {},
+    schematicSection: (next) => {
+      sectionChanges++;
+      if (!sectionAllowed) return false;
+      section = next;
+      return true;
+    },
     selection: (ids: string[]) => {
       selection = ids;
     },
@@ -77,6 +86,28 @@ test('Review executes presentation commands and queries but holds design and fil
     await resolve('workbench.view', { view: 'layout' });
     await resolve('workbench.selection', { ids: [f.input('').partId] });
     await resolve('workbench.panel', { panel: 'parts' });
+    await resolve('workbench.schematicSection', { section: 'simulation' });
+    assert.deepEqual(await f.host.query('workbench.state'), {
+      ui: { schematicSection: 'simulation' },
+    });
+    await resolve('workbench.schematicSection', { section: 'all' });
+    assert.equal(section, 'all');
+    const sectionCommand = f.host
+      .catalog()
+      .find((entry) => entry.id === 'workbench.schematicSection')!;
+    assert.equal(sectionCommand.mutation, 'session');
+    assert.equal(sectionCommand.review, 'none');
+    await assert.rejects(
+      resolve('workbench.schematicSection', { section: 'invalid' }),
+      /Invalid input/,
+    );
+    assert.equal(sectionChanges, 2);
+    sectionAllowed = false;
+    await assert.rejects(
+      resolve('workbench.schematicSection', { section: 'hardware' }),
+      /finish pending edits/,
+    );
+    assert.equal(section, 'all');
     await resolve('simulation.show');
     await resolveAgentCapability(
       { ...f.request('core.state', {}), tool: 'openpe_query' },
@@ -88,6 +119,8 @@ test('Review executes presentation commands and queries but holds design and fil
     assert.deepEqual(selection, [f.input('').partId]);
     assert.equal(reviews.length, 0);
     assert.equal(f.core.getSnapshot().project, before.project);
+    assert.equal(f.core.getSnapshot().revision, before.revision);
+    assert.equal(f.core.getSnapshot().undoDepth, before.undoDepth);
     for (const [name, input] of [
       ['part.properties', f.input('47k')],
       ['source.update', { draft: '{invalid Source' }],

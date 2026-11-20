@@ -7,10 +7,11 @@ import { startServer } from '../server/index.mjs';
 import { makePrompt, resolveAgent } from '../server/agents.mjs';
 import { exampleProject } from '../lib/project-example';
 import { serializeProject } from '../lib/project';
-import { createExample, projectExamples } from '../lib/examples';
+import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
 import { pinPositions } from '../lib/circuit';
 import { schematicTexts } from '../lib/schematic-text';
 import { commitWireRoute } from '../lib/wiring';
+import { saveAnnotation } from '../lib/schematic-edit';
 import { createSession } from '../lib/chat-sessions';
 import { defaultAgentPreferences } from '../lib/workspace-state';
 import {
@@ -40,17 +41,22 @@ function changeDocument(payload: ReturnType<typeof workspace>, changes: Record<s
   return { ...payload, documents: [{ ...payload.documents[0], ...changes }] };
 }
 
-test('wiring official examples with free text survives native validation and draft persistence', async (t) => {
+test('wiring Home projects with added free text survives native validation and draft persistence', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-text-wire-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const service = await startServer({ dataDir: dir });
   const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
   try {
-    for (const { id } of projectExamples) {
-      const project = createExample(id),
-        d = project.schematic;
+    for (const { id } of referenceExamples) {
+      const project = createReferenceExample(id);
+      const d = saveAnnotation(project.schematic, 'Native annotation test\nSecond line', {
+        x: 200,
+        y: 200,
+      }).circuit;
+      project.schematic = d;
       const text = schematicTexts(d.original);
-      if (['kicad-rectifier', 'kicad-buck'].includes(id)) assert.ok(text.length > 0);
+      assert.ok(text.some((item) => item.text === 'Native annotation test\nSecond line'));
+
       const part = d.parts.find((p) => pinPositions(p, d.libraries[p.libId]).length > 0)!;
       const pin = pinPositions(part, d.libraries[part.libId])[0];
       project.schematic = commitWireRoute(d, [

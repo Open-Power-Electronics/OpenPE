@@ -29,6 +29,7 @@
   --pcb-paste: #9c9c9c;
   --pcb-substrate: #efede9;
   --pcb-selected: var(--selection-edge);
+  --pcb-locked: #7c3aed;
   --pcb-selection-tone: #000000;
   display: flex;
   flex-direction: column;
@@ -56,13 +57,14 @@
   --pcb-inner2: #ba9de4;
   --pcb-substrate: #30352f;
   --pcb-selection-tone: #ffffff;
+  --pcb-locked: #c4a3ff;
 }
 .layout-toolbar {
   z-index: 5;
 }
 .layout-main {
-  --layout-sidebar-min-width: min(224px, calc(100% - 172px));
-  --layout-sidebar-max-width: min(480px, calc(100% - 172px));
+  --layout-sidebar-min-width: min(224px, var(--editor-dock-available-width));
+  --layout-sidebar-max-width: min(var(--editor-sidebar-max-width), var(--editor-dock-available-width));
   display: flex;
   flex: 1;
   min-width: 0;
@@ -83,7 +85,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: var(--layout-sidebar-width, var(--editor-sidebar-default-width, 280px));
+  width: var(--layout-sidebar-width, var(--editor-sidebar-default-width));
   max-width: var(--layout-sidebar-max-width);
   flex-shrink: 0;
   min-width: var(--layout-sidebar-min-width);
@@ -106,7 +108,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   overscroll-behavior: contain;
 }
 .layout-design-layer[data-active='true'],
@@ -266,9 +268,9 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  width: var(--editor-sidebar-default-width, 280px);
-  min-width: min(280px, calc(100% - 172px));
-  max-width: min(480px, calc(100% - 172px));
+  width: var(--editor-sidebar-default-width);
+  min-width: min(var(--editor-sidebar-default-width), var(--editor-dock-available-width));
+  max-width: min(var(--editor-sidebar-max-width), var(--editor-dock-available-width));
   min-height: 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
@@ -767,7 +769,7 @@
 .layout-inspector .layout-field,
 .layout-inspector .layout-property-select {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
   min-width: 0;
@@ -893,7 +895,7 @@
 .layout-property-section > .layout-property-select,
 .model-properties-body > .layout-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: 8px;
 }
@@ -917,7 +919,7 @@
 .field-properties > label,
 .geometry-fields > label {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
 }
@@ -1075,11 +1077,6 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.component-model-dialog .dialog-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 .component-model-dialog details > summary {
   cursor: pointer;
   color: var(--muted);
@@ -1088,15 +1085,16 @@
 }
 .component-model-settings {
   min-width: 0;
+  min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: var(--space-3);
   border-right: 1px solid var(--line-soft);
   background: var(--panel);
   scrollbar-gutter: stable;
 }
 .component-model-card {
-  padding: 10px;
-  margin: 8px 0;
+  padding: var(--space-3);
+  margin: 0 0 var(--space-2);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1107,9 +1105,9 @@
 .component-model-select {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
   text-align: left;
   color: var(--text-strong);
   font-size: var(--font-small);
@@ -1130,7 +1128,7 @@
   font-variant-numeric: tabular-nums;
 }
 .component-model-card .component-model-actions {
-  margin-block: 10px 2px;
+  margin-block: var(--space-2) 2px;
 }
 .component-model-settings .property-actions {
   display: flex;
@@ -1144,7 +1142,7 @@
   display: none;
 }
 .component-model-preview .assignment-preview-stage {
-  flex: 1 0 220px;
+  flex: 1 0 180px;
 }
 .component-model-empty {
   color: var(--muted);

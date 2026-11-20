@@ -11,7 +11,7 @@ import {
   waveformSampleWindow,
   waveformTicks,
   zoomWaveformAxis,
-} from '../lib/waveform-view';
+} from '../plugins/spice-simulation/domain/waveform-view';
 
 test('axis inputs accept engineering values without evaluating expressions', () => {
   assert.equal(parseWaveformNumber('100us', 's'), 0.0001);

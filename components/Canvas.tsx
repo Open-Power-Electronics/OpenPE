@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { isOwnedCircuit } from '@/lib/immutable-project';
 import type { RuleCheckFocus } from '@/lib/design-rule-checks';
@@ -22,7 +22,7 @@ import CanvasAnnotations, {
   type CanvasAnnotationsHandle,
 } from './CanvasAnnotations';
 import type { AgentAnnotation } from '@/lib/agent-annotations';
-import type { ProbeTarget } from '@/lib/spice';
+import type { ProbeTarget } from '@/plugins/spice-simulation/domain/spice';
 import { annotationSelectionBounds } from '@/lib/annotation-screenshot';
 import {
   type Circuit,
@@ -39,6 +39,12 @@ import SymbolGraphic from './SymbolGraphic';
 import SchematicDrawing from './SchematicDrawing';
 import useCanvasBrightness from './useCanvasBrightness';
 import type { SchematicLayers } from '@/lib/schematic-layers';
+import {
+  prepareSchematicSection,
+  schematicSectionEmphasisIds,
+  schematicSectionIds,
+  type SchematicSectionView,
+} from '@/lib/schematic-section';
 import { resizeDrawingView, type CanvasBounds } from '@/lib/drawing-viewport';
 import {
   fieldDragLinks,
@@ -46,11 +52,13 @@ import {
   visibleSchematicWireTargetIds,
   visibleJunctions,
 } from '@/lib/schematic-view';
-import { schematicTexts, schematicPolylines } from '@/lib/schematic-text';
+import { schematicTexts, schematicPolylines, schematicNoteBoxCorners } from '@/lib/schematic-text';
+import { schematicImageCorners } from '@/lib/schematic-image';
 import { type SExpr } from '@/lib/sexpr';
 import { createLibraryPart, symbolAnnotation } from '@/lib/library';
 import { commitWireRoute, onWire, samePoint } from '@/lib/wiring';
 import {
+  fieldId,
   selectedField,
   objectPosition,
   moveSelection,
@@ -72,6 +80,8 @@ import {
   type SelectionMode,
 } from '@/lib/schematic-selection';
 import { captureSchematicPNG, saveDrawingPNG } from '@/lib/drawing-export';
+import type { CapabilityHost } from '@/api/capabilities';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { previewSchematicMove, type SchematicMoveOperation } from '@/lib/schematic-move';
 import {
   createSchematicWireDraft,
@@ -91,6 +101,7 @@ import {
   type SchematicSelectionFilters,
 } from '@/lib/schematic-selection-filters';
 import { isCommandModifier } from '@/lib/command-modifier';
+import usePanelFindCanvas, { panelFindCanvasView } from './usePanelFindCanvas';
 
 export type SchematicMoveRequest = { id: number; schematicId: string; connected: boolean };
 export type SchematicNavigationRequest = {
@@ -98,6 +109,7 @@ export type SchematicNavigationRequest = {
   basis: Circuit;
   tool: Tool;
   partId?: string;
+  objectIds?: string[];
   cancelPending?: boolean;
 };
 type Pickup = {
@@ -141,7 +153,9 @@ export type CanvasViewport = {
   zoomBaseWidth: number;
 };
 type Props = {
+  capabilityHost?: CapabilityHost;
   ruleFocus?: RuleCheckFocus | null;
+  showRuleMarker?: boolean;
   initialViewport?: CanvasViewport;
   onViewportChange?: (viewport: CanvasViewport) => void;
   active?: boolean;
@@ -161,24 +175,29 @@ type Props = {
   kind: Kind;
   placement?: { symbol: SExpr; unit: number };
   onProperties?: (id: string) => void;
+  getComponentActions?: (id: string) => CanvasMenuAction[];
   onDelete?: (ids: string[]) => void;
   annotations: AgentAnnotation[];
   annotationSessionId: string;
   onAnnotationsChange: (annotations: AgentAnnotation[]) => void;
   onAnnotationAdd?: () => void;
   onCommit: (d: Circuit) => boolean;
+  onPlacePart?: (d: Circuit, id: string, signal: AbortSignal) => boolean | Promise<boolean>;
   setTool: (t: Tool) => void;
   fitKey: number;
   onPosition: (p: Point) => void;
   grid: boolean;
   gridSpacing: number;
   layers: SchematicLayers;
+  sectionView?: SchematicSectionView;
   selectionFilters?: SchematicSelectionFilters;
   leftButtonDrag?: LeftButtonDrag;
   onNotify?: (message: string) => void;
 };
 export default function Canvas({
+  capabilityHost,
   ruleFocus,
+  showRuleMarker = true,
   initialViewport,
   onViewportChange,
   active = true,
@@ -198,18 +217,21 @@ export default function Canvas({
   kind,
   placement,
   onProperties,
+  getComponentActions,
   onDelete,
   annotations,
   annotationSessionId,
   onAnnotationsChange,
   onAnnotationAdd,
   onCommit,
+  onPlacePart,
   setTool,
   fitKey,
   onPosition,
   grid,
   gridSpacing,
   layers,
+  sectionView = 'all',
   selectionFilters = defaultSchematicSelectionFilters,
   leftButtonDrag = defaultLeftButtonDrag,
   onNotify,
@@ -264,6 +286,15 @@ export default function Canvas({
     }
   }, [wireDraft, cursor]);
   const [placementRotation, setPlacementRotation] = useState(0);
+  const placementRequest = useRef<AbortController | null>(null);
+  function cancelPlacement() {
+    placementRequest.current?.abort();
+    placementRequest.current = null;
+  }
+  useLayoutEffect(
+    () => cancelPlacement,
+    [active, doc, editingBlocked, placement, placementRotation, sectionView, tool],
+  );
   const pendingWire = useRef<Point | null>(null);
   const pointerPosition = useRef<{ clientX: number; clientY: number } | null>(null);
   const pointerInside = useRef(false);
@@ -290,9 +321,25 @@ export default function Canvas({
     mode: SelectionMode;
     clickId?: string;
   } | null>(null);
-  const visibleIds = useMemo(() => visibleSchematicIds(doc, layers), [doc, layers]);
+  const sectionIds = useMemo(
+    () => (sectionView === 'all' ? null : schematicSectionIds(doc, sectionView)),
+    [doc, sectionView],
+  );
+  const contextIdentity = useMemo(() => ({ doc, sectionView }), [doc, sectionView]);
+  const sectionRuleFocus =
+    ruleFocus &&
+    (sectionView === 'all' ||
+      !ruleFocus.objectIds.length ||
+      ruleFocus.objectIds.some((id) => sectionIds?.has(id)))
+      ? ruleFocus
+      : null;
+  const visibleIds = useMemo(
+    () => visibleSchematicIds(doc, layers, sectionView),
+    [doc, layers, sectionView],
+  );
+  const displayedIds = useMemo(() => visibleSchematicIds(doc, layers), [doc, layers]);
   const wireTargetIds = useMemo(
-    () => visibleSchematicWireTargetIds(doc, layers),
+    () => visibleSchematicWireTargetIds(doc, layers, sectionView),
     [
       doc.parts,
       doc.libraries,
@@ -302,6 +349,7 @@ export default function Canvas({
       layers.symbols,
       layers.wires,
       layers.labels,
+      sectionView,
     ],
   );
   const resolveWireTarget = useMemo(
@@ -311,28 +359,36 @@ export default function Canvas({
   const snapTargets = useMemo(
     () => [
       ...(layers.symbols
-        ? doc.parts.flatMap((part) =>
-            visibleSchematicPins(part, doc.libraries[part.libId]).map((pin) => ({
-              id: part.id,
-              point: pin.point,
-            })),
-          )
+        ? doc.parts
+            .filter((part) => visibleIds.has(part.id))
+            .flatMap((part) =>
+              visibleSchematicPins(part, doc.libraries[part.libId]).map((pin) => ({
+                id: part.id,
+                point: pin.point,
+              })),
+            )
         : []),
       ...(layers.wires
-        ? doc.wires.flatMap((wire) => [
-            { id: wire.id, point: wire.a },
-            { id: wire.id, point: wire.b },
-          ])
+        ? doc.wires
+            .filter((wire) => visibleIds.has(wire.id))
+            .flatMap((wire) => [
+              { id: wire.id, point: wire.a },
+              { id: wire.id, point: wire.b },
+            ])
         : []),
     ],
-    [doc.parts, doc.libraries, doc.wires, layers.symbols, layers.wires],
+    [doc.parts, doc.libraries, doc.wires, layers.symbols, layers.wires, visibleIds],
   );
   const selectableIds = useMemo(
-    () => selectableSchematicIds(doc, layers, selectionFilters),
-    [doc, layers, selectionFilters],
+    () => selectableSchematicIds(doc, layers, selectionFilters, sectionView),
+    [doc, layers, selectionFilters, sectionView],
   );
   const editable = tool === 'select' || tool === 'drag';
   const drawing = pickup?.preview ?? (drag?.moved && drag.connected ? (drag.preview ?? doc) : doc);
+  const drawingSectionIds = useMemo(
+    () => (sectionView === 'all' ? undefined : schematicSectionEmphasisIds(drawing, sectionView)),
+    [drawing, sectionView],
+  );
   // Geometry depends on document/preview replacements, not selection or camera state.
   const drawingJunctions = useMemo(
     () => (layers.wires ? visibleJunctions(drawing) : []),
@@ -370,6 +426,7 @@ export default function Canvas({
     [],
   );
   function pinPointerDown(event: React.PointerEvent, id: string, pin: Point) {
+    if (!visibleIds.has(id)) return;
     if (canProbe) return;
     if (event.button !== 0 || !['select', 'wire'].includes(tool)) return;
     if (tool === 'select' && selectionMode(event) !== 'replace') {
@@ -477,7 +534,11 @@ export default function Canvas({
     if (!active) pointerInside.current = false;
     pendingWire.current = null;
     updateWireDraft(null);
-  }, [doc, layers, active, editingBlocked]);
+  }, [doc, layers, active, editingBlocked, sectionView]);
+  useEffect(() => {
+    setProbeHover(null);
+    setCursor(null);
+  }, [sectionView]);
   useEffect(() => {
     cancelGesture();
   }, [selectionFilters, leftButtonDrag]);
@@ -609,8 +670,16 @@ export default function Canvas({
     cancelGesture();
   }
   const handledMoveRequest = useRef<number | null>(null);
-  const moveContext = useRef({ active, editingBlocked, doc, layers, tool, beginPickup });
-  moveContext.current = { active, editingBlocked, doc, layers, tool, beginPickup };
+  const moveContext = useRef({
+    active,
+    editingBlocked,
+    doc,
+    layers,
+    tool,
+    beginPickup,
+    sectionView,
+  });
+  moveContext.current = { active, editingBlocked, doc, layers, tool, beginPickup, sectionView };
   useEffect(() => {
     let previous: CanvasBounds | null = null;
     let windowWidth = window.innerWidth;
@@ -620,7 +689,8 @@ export default function Canvas({
       if (!b?.width || !b.height) return;
       const before = previous;
       previous = b;
-      const windowResized = windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
+      const windowResized =
+        windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
       windowWidth = window.innerWidth;
       windowHeight = window.innerHeight;
       // ResizeObserver runs before paint. Commit the SVG viewBox and scale together
@@ -643,18 +713,26 @@ export default function Canvas({
     if (svg.current) observer.observe(svg.current);
     return () => observer.disconnect();
   }, []);
-  async function exportImage() {
-    if (!svg.current || exporting) return;
-    setExporting(true);
-    try {
+  const saveImage = useDrawingImageExport(
+    capabilityHost,
+    'Schematic',
+    doc,
+    active && !editingBlocked,
+    setExporting,
+    async (check) => {
+      if (!svg.current) throw new Error('The schematic drawing is not ready.');
       flushSync(() => cancelGesture());
       const image = await captureSchematicPNG(svg.current);
-      const name = await saveDrawingPNG(image, doc.title);
+      check();
+      return saveDrawingPNG(image, doc.title);
+    },
+  );
+  async function exportImage() {
+    try {
+      const { name } = await saveImage();
       if (name) onNotify?.(`Exported ${name}`);
     } catch (error) {
       onNotify?.((error as Error).message);
-    } finally {
-      setExporting(false);
     }
   }
   function fit() {
@@ -681,25 +759,40 @@ export default function Canvas({
       ...textBounds,
       ...(layers.symbols
         ? [
-            ...doc.parts,
-            ...doc.parts.flatMap((p) =>
-              visibleSchematicPins(p, doc.libraries[p.libId]).map((pin) => pin.point),
-            ),
+            ...doc.parts.filter((part) => displayedIds.has(part.id)),
+            ...doc.parts
+              .filter((part) => displayedIds.has(part.id))
+              .flatMap((p) =>
+                visibleSchematicPins(p, doc.libraries[p.libId]).map((pin) => pin.point),
+              ),
           ]
         : []),
-      ...(layers.wires ? [...doc.wires.flatMap((w) => [w.a, w.b]), ...doc.junctions] : []),
-      ...(layers.labels ? doc.labels : []),
-      ...(layers.noConnects ? doc.noConnects || [] : []),
+      ...(layers.wires
+        ? [
+            ...doc.wires.filter((wire) => displayedIds.has(wire.id)).flatMap((w) => [w.a, w.b]),
+            ...doc.junctions.filter((point) => displayedIds.has(point.id)),
+          ]
+        : []),
+      ...(layers.labels ? doc.labels.filter((label) => displayedIds.has(label.id)) : []),
+      ...(layers.noConnects
+        ? (doc.noConnects || []).filter((point) => displayedIds.has(point.id))
+        : []),
       ...doc.parts.flatMap((p) =>
         [
-          ...(layers.references && !p.ref.startsWith('#')
+          ...(displayedIds.has(fieldId(p.id, 'Reference'))
             ? [symbolAnnotation(p, doc.libraries[p.libId], 'Reference')]
             : []),
-          ...(layers.values ? [symbolAnnotation(p, doc.libraries[p.libId], 'Value')] : []),
+          ...(displayedIds.has(fieldId(p.id, 'Value'))
+            ? [symbolAnnotation(p, doc.libraries[p.libId], 'Value')]
+            : []),
         ].filter((p): p is NonNullable<typeof p> => !!p),
       ),
-      ...(layers.notes ? schematicTexts(doc.original) : []),
+      ...(layers.notes
+        ? schematicTexts(doc.original).filter((text) => displayedIds.has(text.id))
+        : []),
       ...(layers.notes ? schematicPolylines(doc.original).flatMap((line) => line.points) : []),
+      ...(layers.notes ? schematicNoteBoxCorners(doc.original) : []),
+      ...(layers.notes ? schematicImageCorners(doc.original) : []),
     ];
     if (!pts.length) {
       setView({ x: 0, y: 0, width: 185 });
@@ -713,6 +806,19 @@ export default function Canvas({
     setView({ x: (minX + maxX - width) / 2, y: (minY + maxY - width * ratio) / 2, width });
   }
   const fittedKey = useRef<number | null>(initialViewport ? fitKey : null);
+  usePanelFindCanvas(svg, (matchedId, range) => {
+    if (!active || editingBlocked || hasOpenOverlay() || tool !== 'select') return false;
+    const owner = selectedField(matchedId)?.id ?? matchedId;
+    const id = selectableIds.has(owner) ? owner : matchedId;
+    if (!selectableIds.has(id) || !svg.current) return false;
+    const target = panelFindCanvasView(svg.current, id, range);
+    if (!target) return false;
+    cancelGesture();
+    fittedKey.current = fitKey;
+    onSelection([id]);
+    setView(target);
+    return true;
+  });
   useEffect(() => {
     if (!active || !fitKey || fittedKey.current === fitKey) return;
     const timer = setTimeout(() => {
@@ -724,16 +830,19 @@ export default function Canvas({
   }, [active, fitKey, ratio]);
   const handledRuleFocus = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!active || !ruleFocus || handledRuleFocus.current === ruleFocus.request) return;
-    handledRuleFocus.current = ruleFocus.request;
+    if (!active || !sectionRuleFocus || handledRuleFocus.current === sectionRuleFocus.request)
+      return;
+    handledRuleFocus.current = sectionRuleFocus.request;
     cancelGesture();
-    if (ruleFocus.location) {
-      const { x, y } = ruleFocus.location;
+    if (sectionRuleFocus.location) {
+      // Explicit navigation wins over the delayed initial whole-sheet Fit.
+      fittedKey.current = fitKey;
+      const { x, y } = sectionRuleFocus.location;
       setView((current) => {
         const width = Math.max(20, Math.min(current.width, 80));
         const pixels = Math.max(1, svg.current?.getBoundingClientRect().width ?? canvasWidth);
         const occluded = Math.min(
-          Math.max(0, ruleFocus.occludedWidth ?? 0),
+          Math.max(0, sectionRuleFocus.occludedWidth ?? 0),
           Math.max(0, pixels - 16),
         );
         return {
@@ -743,7 +852,7 @@ export default function Canvas({
         };
       });
     }
-  }, [active, ruleFocus, ratio, canvasWidth]);
+  }, [active, sectionRuleFocus, ratio, canvasWidth, fitKey]);
   useEffect(() => {
     const start = tool === 'wire' ? pendingWire.current : null;
     cancelGesture();
@@ -764,6 +873,7 @@ export default function Canvas({
         live.editingBlocked ||
         live.doc !== doc ||
         live.layers !== layers ||
+        live.sectionView !== sectionView ||
         live.tool !== tool ||
         moveRequest.schematicId !== live.doc.id ||
         hasOpenOverlay()
@@ -783,9 +893,18 @@ export default function Canvas({
     doc,
     tool,
     visibleIds,
+    sectionView,
     navigationRequest,
   });
-  navigationContext.current = { active, editingBlocked, doc, tool, visibleIds, navigationRequest };
+  navigationContext.current = {
+    active,
+    editingBlocked,
+    doc,
+    tool,
+    visibleIds,
+    sectionView,
+    navigationRequest,
+  };
   useEffect(() => {
     if (!navigationRequest || handledNavigationRequest.current === navigationRequest.id) return;
     const frame = requestAnimationFrame(() => {
@@ -801,6 +920,7 @@ export default function Canvas({
         live.navigationRequest !== navigationRequest ||
         live.doc !== navigationRequest.basis ||
         live.tool !== navigationRequest.tool ||
+        live.sectionView !== sectionView ||
         pointerId.current !== null ||
         hasOpenOverlay()
       )
@@ -812,7 +932,26 @@ export default function Canvas({
         pendingWire.current = null;
         updateWireDraft(null);
       }
-      if (navigationRequest.partId) {
+      if (navigationRequest.objectIds?.length) {
+        const ids = navigationRequest.objectIds.filter((id) => live.visibleIds.has(id));
+        let target: ReturnType<typeof annotationSelectionBounds>;
+        try {
+          target = annotationSelectionBounds(canvas, ids);
+        } catch {
+          return;
+        }
+        const aspect = bounds.height / bounds.width;
+        const width = Math.max(8, target.width + 8, (target.height + 8) / aspect);
+        cancelGesture();
+        pendingWire.current = null;
+        updateWireDraft(null);
+        fittedKey.current = fitKey;
+        setView({
+          x: target.x + target.width / 2 - width / 2,
+          y: target.y + target.height / 2 - (width * aspect) / 2,
+          width,
+        });
+      } else if (navigationRequest.partId) {
         const part = live.doc.parts.find((part) => part.id === navigationRequest.partId);
         if (!part || !live.visibleIds.has(part.id)) return;
         let target: ReturnType<typeof annotationSelectionBounds>;
@@ -976,6 +1115,7 @@ export default function Canvas({
     }
     const p = tool === 'wire' ? wirePoint(e) : point(e);
     if (tool === 'place') {
+      if (placementRequest.current) return;
       const d = structuredClone(doc);
       const part = placement
         ? createLibraryPart(d, placement.symbol, p.x, p.y, placement.unit)
@@ -983,8 +1123,33 @@ export default function Canvas({
       if (placement) d.libraries[part.libId] = structuredClone(placement.symbol);
       part.rotation = placementRotation;
       d.parts.push(part);
-      if (!onCommit(d)) return;
-      onSelect(part.id);
+      const prepared = prepareSchematicSection(
+        d,
+        [part.id],
+        sectionView === 'simulation' ? 'simulation' : 'hardware',
+      );
+      if (onPlacePart) {
+        const request = new AbortController();
+        const accepted = onPlacePart(prepared, part.id, request.signal);
+        if (typeof accepted !== 'boolean') {
+          placementRequest.current = request;
+          void accepted
+            .then((placed) => {
+              if (placed) setTool('select');
+            })
+            .catch((error: Error) => {
+              if (!request.signal.aborted) onNotify?.(error.message);
+            })
+            .finally(() => {
+              if (placementRequest.current === request) placementRequest.current = null;
+            });
+          return;
+        }
+        if (!accepted) return;
+      } else {
+        if (!onCommit(prepared)) return;
+        onSelect(part.id);
+      }
       setTool('select');
     } else if (tool === 'wire') addWire(p);
     else if (tool === 'label' || tool === 'global-label') {
@@ -1154,7 +1319,7 @@ export default function Canvas({
   function probeTarget(e: React.PointerEvent): ProbeTarget | null {
     const hit = e.target as Element;
     const pin = hit.closest<SVGElement>('[data-probe-pin]');
-    if (pin && layers.symbols)
+    if (pin && layers.symbols && visibleIds.has(pin.dataset.probePart!))
       return { kind: 'voltage', id: pin.dataset.probePart!, pin: Number(pin.dataset.probePin) };
     const id = hit.closest<SVGElement>('[data-selection-id]')?.dataset.selectionId;
     if (!id || !visibleIds.has(id)) return null;
@@ -1343,6 +1508,10 @@ export default function Canvas({
         disabled: editingBlocked,
         run: () => onProperties(propertiesTarget!),
       });
+    if (menuSelection.length === 1 && getComponentActions) {
+      const id = selectedField(menuSelection[0])?.id ?? menuSelection[0];
+      if (doc.parts.some((part) => part.id === id)) menuActions.push(...getComponentActions(id));
+    }
     menuActions.push({
       id: 'move',
       label: 'Move',
@@ -1387,6 +1556,7 @@ export default function Canvas({
       label: 'Cancel tool',
       icon: X,
       run: () => {
+        cancelPlacement();
         cancelGesture();
         updateWireDraft(null);
         pendingWire.current = null;
@@ -1430,6 +1600,8 @@ export default function Canvas({
       <svg
         ref={svg}
         data-testid="schematic-canvas"
+        data-wire-undo={tool === 'wire' && wireDraft ? true : undefined}
+        data-wire-redo={tool === 'wire' && wireDraftRedo.current.length ? true : undefined}
         data-pointer-focus={pointerFocused || undefined}
         data-move-preview={pickup ? (pickup.connected ? 'drag' : 'move') : undefined}
         aria-label="Schematic canvas"
@@ -1496,10 +1668,12 @@ export default function Canvas({
           if (id && selectableIds.has(id)) onProperties?.(id);
         }}
         onKeyDown={(e) => {
-          if (!active || hasOpenOverlay() || e.nativeEvent.isComposing) return;
+          if (!active || hasOpenOverlay() || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)
+            return;
           const key = e.key.toLowerCase();
           const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
           const currentPickup = pickupRef.current;
+          if (e.key === 'Escape') cancelPlacement();
           if (
             e.key === 'Escape' &&
             (currentPickup || drag || box || pan.current || annotationGesture)
@@ -1579,8 +1753,8 @@ export default function Canvas({
               return;
             }
             if (['v', 'h', 'w', 'a', 'e', 'delete', 'backspace'].includes(key)) cancelGesture();
-            if ((isCommandModifier(e)) && ['a', 'c', 'd', 'v'].includes(key)) cancelGesture();
-            if ((isCommandModifier(e)) && key === 'z') {
+            if (isCommandModifier(e) && ['a', 'c', 'd', 'v', 'x'].includes(key)) cancelGesture();
+            if (isCommandModifier(e) && (key === 'z' || key === 'y')) {
               e.preventDefault();
               e.stopPropagation();
               cancelGesture();
@@ -1598,16 +1772,16 @@ export default function Canvas({
             return;
           }
           if (
-            (isCommandModifier(e)) &&
+            isCommandModifier(e) &&
             !e.altKey &&
-            key === 'z' &&
+            (key === 'z' || (key === 'y' && !e.shiftKey)) &&
             tool === 'wire' &&
             (wireDraftRef.current || wireDraftRedo.current.length)
           ) {
             e.preventDefault();
             e.stopPropagation();
             if (editingBlocked || e.repeat) return;
-            if (e.shiftKey) {
+            if (e.shiftKey || key === 'y') {
               const next = wireDraftRedo.current.pop();
               if (next) {
                 updateWireDraft(next, true);
@@ -1648,7 +1822,7 @@ export default function Canvas({
             return;
           }
           if (
-            (isCommandModifier(e)) &&
+            isCommandModifier(e) &&
             !e.altKey &&
             e.key.toLowerCase() === 'a' &&
             (editable || tool === 'annotate')
@@ -1815,6 +1989,7 @@ export default function Canvas({
         />
         <SchematicDrawing
           drawing={drawing}
+          sectionIds={drawingSectionIds}
           libraries={doc.libraries}
           junctions={drawingJunctions}
           selection={selection}
@@ -1845,7 +2020,10 @@ export default function Canvas({
               pointerEvents="none"
             />
           ))}
-        <RuleCheckMarker location={ruleFocus?.location} radius={(view.width / canvasWidth) * 8} />
+        <RuleCheckMarker
+          location={showRuleMarker ? sectionRuleFocus?.location : undefined}
+          radius={(view.width / canvasWidth) * 8}
+        />
         {box && (
           <rect
             data-export-exclude
@@ -1954,7 +2132,7 @@ export default function Canvas({
       <CanvasContextMenu
         target={svg}
         active={active}
-        identity={doc}
+        identity={contextIdentity}
         onError={(message) => onNotify?.(message)}
         onOpen={(target) => {
           if (

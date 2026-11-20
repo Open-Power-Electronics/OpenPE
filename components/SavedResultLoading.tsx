@@ -25,7 +25,7 @@ export default function SavedResultLoading({
       <span className="analysis-saved-loading-message" title={message}>
         {message}
       </span>
-      <span className="analysis-saved-loading-bar" role="progressbar" aria-label={message} />
+      <span className="indeterminate-progress" role="progressbar" aria-label={message} />
     </span>
   );
 }

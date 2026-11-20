@@ -20,6 +20,48 @@ resize functions as the GUI. Official footprint placement shares the chooser's
 bounded parser and one assignment/board undo transaction. [API](API.md#layout-object-properties)
 documents the direct commands and generated property schemas; these do not add
 collision checks to numerical Properties beyond their documented Core validation.
+Catalog placement accepts front or back SMD copper with explicit same-side mask
+and paste membership. Unnumbered SMD apertures on same-side mask, paste or both
+layers keep their native shape and are visible and selectable on those layers.
+They have no schematic pin, net or copper. Plated round drills and straight slots retain their
+all-copper layers with optional mask membership on either or both sides. Numbered and unnumbered
+non-plated holes retain their mask layers. Round mechanical holes that match
+their drill size may also carry KiCad's `F&B.Cu` or `*.Cu` marker and produce no
+copper flash.
+An oval opening must contain its non-plated slot, including any offset.
+Non-plated hole numbers remain mechanical identifiers through schematic
+synchronization, including when they match an electrical pad number. Blank copper
+pad numbers retain their geometry as unassigned copper. Linking a catalog
+footprint to a symbol requires at least one numbered electrical pad, and every
+numbered electrical pad must match a symbol pin.
+A plated drill must stay inside its copper outline. Pad drill offsets and slot
+axes use the unrotated pad coordinates. The slot length includes
+both round ends. Layout, clearance checks and fills use the slot's full extent.
+Catalog rounded corners, chamfers and pad paste margins retain their dimensionless ratios.
+Chamfers retain their selected corners. Copper shape
+rendering and clearance checks traverse those corners in the same order
+as the native pad outline.
+Simple custom pad polygons accept 3–128 vertices and retain their concave or
+convex edges in Layout, selection, routing clearance, copper fills and
+manufacturing output. Flipping a footprint mirrors its pad-local polygon.
+The polygon must contain its rectangular or circular anchor. Up to 16 filled,
+unstroked axis-aligned rectangular primitives can join a rectangular anchor on
+the native nanometre grid when their union forms one outline without holes. A native
+circular anchor can use a diameter down to 0.000001 mm.
+The board permits a combined sum of squared custom pad vertex counts of up to
+4,000,000.
+Supported catalog cutouts retain footprint-local Edge.Cuts contours. The
+board outline, copper fills, Model and profile export use their placed
+coordinates. Filled catalog rectangles use four exact corners in the board's
+polygon representation. Filled mask and paste artwork retains its native layer
+and requires a zero stroke. Catalog graphics and text retain supported native
+drawing, comment, ECO and numbered user layers.
+Footprint text with native free rotation keeps its angle relative to the
+footprint for display and selection. Its orientation and editing lock are
+independent.
+Catalog placement retains explicit footprint-level solder mask margin, solder
+paste margin and paste margin ratio independently of pad-level values.
+Pads retain KiCad's native `pad_prop_heatsink` fabrication property.
 
 ## Custom component drawings
 
@@ -50,16 +92,25 @@ Loaded boards stay authoritative until relevant primary-sheet inputs change.
 Opening, saving, board-only edits and other-sheet changes do not refetch packages
 or normalize nets. Ordinary Value, simulation and custom captions retain PCB
 network names, fills and packages while updating linked captions.
-Participation-only edits retain PCB bytes. Power-symbol Values, references,
-assignments, geometry and libraries remain electrical synchronization inputs.
+Participation-only edits retain PCB bytes. Isolated elements marked `on_board no`
+and their annotations do not change the physical source. Connectivity shared with
+board-included pins, power-symbol rail names, references, assignments, geometry
+and embedded libraries of board-included symbols remain synchronization inputs.
 
 Relevant edits automatically synchronize even while Layout is hidden; there is
-no Update PCB action. The host resolves bundled footprints with at most three
+no Update PCB action. The host resolves catalog footprints with at most three
 concurrent requests, then Core validates the prepared complete project.
 Unsupported geometry/ambiguous connectivity fails atomically; Source, revisions
 and close gates reject stale work. Save/export wait for required synchronization.
 Cached success applies only to internally owned immutable inputs; missing results
 and mutable inputs retry/revalidate.
+
+Layout and Model expose pending/failed package synchronization. Entering either
+view retries a failed preparation, and Model offers explicit Retry without
+replacing its retained scene or camera. Pending Source and close gates block
+retry. Online package preparation adds its native footprint library and any
+portable model references to the originating edit. [Libraries](LIBRARIES.md#catalog-service-and-chooser)
+owns resource delivery and offline local package reuse.
 
 A nonblank assigned Footprint makes an instance physical. Unassigned instances
 create no package or missing-package warning. Clearing assignment or deleting a
@@ -71,9 +122,27 @@ Synchronization retains package UUID, placement, rotation and side; replacement
 retains matching pad UUIDs. Source aliases keep embedded geometry until explicit
 reassignment. New packages appear beside the board. Physical pin numbers, units,
 labels and power pins determine nets; incidental crossings remain separate.
-Pad nets are read-only. Conflicts/no-connect errors require schematic fixes.
+Net islands containing only power symbols or `on_board no` symbols do not create
+PCB nets. Their connections into board-included pins still determine physical
+nets. Pad nets are read-only. Conflicts/no-connect errors require schematic fixes.
 Unambiguous net merges/renames carry copper; splits retain previous copper nets
 with a review notice. Replacement never moves track endpoints.
+
+Explicit [parasitic series groups](#parasitic-study-schematics) have a bounded
+PCB-only conductive equivalence. Core validates their native group fields,
+exact board/pad identities and actual series connection before joining the
+group's endpoint nets for physical PCB synchronization. On each PCB use, both
+declared terminals must still be assigned same-net pads linked by their exact
+symbol identities and pin numbers into the group's outer label networks.
+Moving an anchored connection label or altering endpoint metadata cannot retain
+an invalid physical short. Coordinate-only PCB movement preserves the association
+but does not recalculate the stored measurement. Generated LP label names
+do not rename the physical net. This preserves the measured board's original
+packages, pad nets, tracks, fills and native bytes. Schematic and SPICE topology
+still use the actual native wires, labels and R/L terminals; no solver-only
+rewiring is inferred from provenance. Invalid or incomplete group data cannot
+grant a conductive equivalence. This native rule remains available independently
+of the plugin lifecycle.
 
 ## Object locking
 
@@ -88,6 +157,10 @@ Locking the current selection retains its Properties and selection for immediate
 unlocking; explicit filter changes still clear ineligible selections. Visible
 locked footprints show a constant-screen-size lock marker in Layout, outside
 native geometry and image exports.
+All supported locked objects use brightness-aware purple canvas paint; footprint
+locks also colour their visible artwork, captions, pads and embedded zones.
+Selected locked geometry changes contrast within purple. Original layer paint,
+drill voids, widths and fill opacity remain intact for image exports.
 Locked footprint pads inherit their owner's editing barrier; pad-local locks
 protect edits within the footprint without preventing its owner's movement.
 Core board replacement and object commands reject locked geometry/property
@@ -278,8 +351,9 @@ Selection independently gates footprints, tracks, vias, pads, text,
 graphics, dimensions, zones and rule areas. These supported categories default
 checked, so All items starts checked and reports a mixed state only when their
 eligibility differs. Locked items defaults unchecked, independently gates picking
-locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items. Unsupported
-Points stays disabled and unchecked. Point picking works through disabled
+locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items.
+Points selection stays disabled and unchecked. [Native Source](FORMAT.md#document-ownership)
+retains fabrication reference points. Point picking works through disabled
 categories and footprint overlays. Explicit inspection reveals a collapsed dock.
 
 Place footprint opens an independent centered component/library chooser with
@@ -355,6 +429,43 @@ Exact pad centres/track projections take precedence for routing. Properties
 shows accepted snapped coordinates after commit while untouched off-grid native
 coordinates remain exact. Invalid/rejected drafts remain retryable. Grid changes
 never move existing objects.
+
+### Placement suggestions
+
+A completed marquee of two to eight footprints wholly outside closed board
+material can preview an on-board placement. It samples on-grid positions
+across the board and refines near electrical anchors and free space around
+existing packages. The planner uses actual pad endpoints from the current
+airwires regardless of layer visibility. Without anchors it starts near the
+center of the largest board region. It tries the largest packages first and,
+when the order differs, the most electrically anchored packages first. It
+ranks complete alternatives by the total length of affected airwires. Each
+footprint can retain its orientation or take a quarter or half turn.
+
+The complete group must fit inside the native outline, clear cutouts and
+footprint keepouts, and leave the standard Layout clearance between same-side
+body bounds. Connected drag validates pad and drill clearance and preserves
+routed connectivity. A locked footprint, a footprint with copper artwork,
+its own board edge or a zone, or a footprint requiring track rerouting blocks
+the whole suggestion. A group with any on-board footprint, an open outline
+or no complete legal plan leaves Tab available for focus navigation.
+Search is bounded to eight board regions, 1,024 combined outline and footprint
+keepout segments, 6,000 placement objects, and 24 validated poses per
+footprint in each order. The planner checks nearby high-ranked poses first,
+then visits different board regions so congestion near an anchor cannot use
+the entire validation budget. Placement objects include footprints, pads,
+graphics, zones, tracks and vias.
+
+Tab submits the exact shown positions and rotations through the existing board transaction.
+Core refreshes affected enabled fills in the same undo edit. The preview has
+no picking, export or native-file effect. A new selection gesture, tool or
+layer change, grid spacing change, document revision, pending Source, close
+barrier or leaving the active Layout discards it.
+
+Agent preview and application use the same placement planner and Core board
+transaction. The Layout preference controls automatic marquee previews.
+[Layout capabilities](API.md#layout-capabilities) defines the inputs and the
+exact pose check.
 
 ### Layers, labels and selection
 
@@ -688,7 +799,9 @@ zone retains its pieces. Area-based island pruning and exact KiCad contour
 generation are outside the editor's fill operation. Invalid, open or excessive
 geometry fails.
 
-Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the Fill action above the fields. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
+Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the Fill action above the fields. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero uses the 0.25 mm default on recalculated layers. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It solves previously filled same-layer neighbours with the selected zone so new copper cannot intrude into their accepted clearances. Enabling a target or changing effective zone rules refreshes previously filled affected pours in the same transaction. Unfilled peers remain unfilled. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Viewing and Properties disclosure never calculate fills.
+
+Manual fill, automatic Core refresh and renderer Worker previews share native board copper/edge/hole minima and the supported net-class/custom clearance sources described in [Design rules](DESIGN-RULES.md#layout-drc). Each foreign-net pair uses the last matching conditional clearance in either operand order, otherwise the larger participating net-class clearance, with board and requested zone minima as floors. Pair limits affect generated contours without replacing the native zone's own clearance setting. Rule-text, net-name and relevant courtyard-reference changes invalidate prepared fills; unrelated project metadata does not. The bounded fill rejects unsupported rule sources and courtyard predicates evaluated on Zone operands before publication. Courtyard predicates on pad, track and via operands use their current geometry. Check-only source overrides and disabled checks do not alter native fill constraints.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
@@ -1205,9 +1318,9 @@ PCB geometry independently of CAD bodies.
 
 ### Model resolution and alignment
 
-Model paths are metadata, not grants. Component Properties share the same field editor across Schematic, Layout and Model. Model appears directly after Footprint; its browser opens the secondary Component models dialog. File/library selection, multiple assignments, placement, visibility and opacity are edited there through one validated PCB transaction per accepted change. Component reference/value/Footprint edits use the same shared part transaction. Schematic symbol placement remains distinct from PCB placement.
+Model paths are metadata, not grants. Component Properties share the same field editor across Schematic, Layout and Model. Model appears directly after Footprint and opens the same library browser in model assignment mode. Each accepted assignment, removal or placement edit is one validated PCB transaction. Component reference/value/Footprint edits use the same shared part transaction. Schematic symbol placement remains distinct from PCB placement.
 
-Local STEP selection requires a saved project and an explicit native picker. The host validates regular unlinked STEP files up to 32 MiB and tessellates them before accepting the choice. Approved bytes enter an immutable content-addressed private cache; native PCB references use `${KIPRJMOD}/models/<SHA-256>.step`. Save/Save as prepares verified model sidecars without replacing changed files. Reopening can read verified relative STEP files through the project grant; arbitrary absolute paths do not grant access. Official KiCad paths use the bounded library resource resolver. Component STEP import adds preview geometry only; it does not import editable CAD topology.
+Local STEP selection requires a live project grant and an explicit native picker. The host validates regular unlinked STEP files up to 32 MiB and tessellates them before accepting the choice. Approved bytes enter an immutable content-addressed private cache and native PCB references use `${KIPRJMOD}/models/<SHA-256>.step`. Save/Save as prepares verified model sidecars without replacing changed files. A project with a granted location can read verified relative STEP files there. Unsaved projects can preview approved staged bytes and exact bundled portable references for the corresponding footprint. Official KiCad paths use the bounded library resource resolver. Component STEP import supplies preview geometry.
 
 Requests use fixed bundled identities, official footprint/model indices or the current validated project with component/model indices. Explicit assignments, including empty ones,
 remain authoritative. Without links, all numbered embedded pads must support
@@ -1283,13 +1396,16 @@ layer connections within a plated through-hole pad, on their enabled copper
 layers. A selected via uses its front copper layer as the terminal.
 
 The bounded network uses straight track centerlines with shared endpoints within
-1 nm. A track endpoint inside pad copper or a via annulus connects to that
-conductor on the track's layer. A rounded endpoint cap with positive overlap
-beyond the 1 nm tolerance also connects. Tracks sharing that junction share
-its contact. Two tracks with disjoint centerlines may contact the same terminal
-at different endpoints when the bounds of their copper overlap lie entirely
-within its land. A centered track also connects if its copper reaches the pad
-or annulus. Each track uses its native centerline length and contributes
+1 nm. Pad and via contacts require positive-area track-copper overlap with their
+conductive land on an enabled layer, retaining drill holes. Proven contacts
+connect through ordered, clamped projections onto the native centerline; virtual
+cuts subdivide the graph without moving or splitting the native track. Intervals
+retain native centerline lengths, without trimming to pad boundaries or guessing
+new route geometry. Returned paths name the original tracks. Tracks sharing a
+junction share its contact. Two tracks may contact the same terminal when their
+copper overlap lies entirely within that proven conductive land. A track capsule
+provably contained wholly inside one eligible drill hole contributes no physical
+copper and is omitted without creating graph edges or joins. Each track interval contributes
 `R = ρL/(wt)` for length `L`, width `w` and uniform copper thickness `t`. Each
 via interval contributes `R = ρL/[πp(d+p)]` for drill diameter `d` and barrel
 plating `p`. Use `ρ = 1.724 × 10⁻⁸ Ω·m` at 20 °C with formula dimensions in
@@ -1313,22 +1429,108 @@ distance results. The model excludes capacitance, shorts to other nets,
 frequency-dependent losses and fabrication tolerances.
 [Ruehli, 1972](https://doi.org/10.1147/rd.165.0470) describes partial inductance.
 
-Unsupported contacts, including pad or via contact without an eligible endpoint,
-track-body joins, overlapping
+Unsupported contacts, including pad/via contact without a proven eligible land,
+general track-body or parallel joins outside a proven shared land, overlapping
 same-net pads/vias, nonempty same-net saved fills and copper artwork anywhere on
 the board, reject the measurement. Unfilled zones, empty fills and keepouts
-contribute no copper. The graph is limited to 256 nodes and 512 tracks on the
-selected net, with at most 2,000,000 contact operations and 120,000 anchor contour
+contribute no copper. The graph, including projected subdivision nodes, is
+limited to 256 nodes and 512 native tracks on the selected net, with at most
+2,000,000 contact operations and 120,000 anchor contour
 vertices. Disconnected terminals also return an error. OpenPE implements the
 two-terminal workflow independently. [KiCad-Parasitics](https://github.com/Steffen-W/KiCad-Parasitics)
 
+### Parasitic study schematics
+
+Add parasitic components captures the current terminal pair and thickness inputs
+as an actual series insertion in an existing schematic. The GUI targets the schematic selected
+before entering Layout; the shared command explicitly identifies that existing
+schematic. It recomputes the accepted PCB before preparing the edit, without
+importing rounded panel readouts or caller-supplied resistance/inductance values.
+The compact block is placed in clear space near the corresponding schematic
+terminals, with both terminal labels and the series elements on one straight line.
+Both selected terminals must be PCB pads mapped through their exact linked
+native symbol identities and unique pin/pad numbers into that target. Vias, duplicate
+pad-number lands, unmapped or
+co-located pins, a nonexclusive end lead and an already inserted endpoint pair
+reject without editing. Matching a reference, net or label name alone cannot
+establish the connection. The end pin must have one eligible leaf wire; that
+wire retains its identity and is shortened by 1.27 mm at the pin. Native copies
+of the endpoint LP labels connect the separated original nets through the new
+R/L chain, with no remaining ideal bypass. Other native circuit geometry and
+embedded symbol definitions are retained.
+Nearby placement checks at most 2,401 snapped positions and two million obstacle
+comparisons. It considers accepted geometry and visible native field bounds,
+reserving hidden field anchors independently of the current view. Repeated
+additions avoid earlier blocks. If no supported clear position is available,
+preparation rejects without changing the design.
+Its native `on_board no` components belong to the Schematic Virtual section;
+GUI success switches to that section before revealing and selecting the block.
+This is one Core
+transaction and one whole-project undo, with no additional schematic, tab or
+native file. Other schematics, PCB placement, connectivity, copper and PCB native
+bytes are preserved.
+
+The added block uses fresh identities and project-wide unused component
+references. It contains a footprint-free resistor for the equivalent DC
+resistance. When the shortest-route partial inductance is positive and finite,
+a footprint-free inductor follows in series. Their native Values use SI-prefixed
+ohms or henries with exactly two decimal places, such as `7.14mΩ` and `3.89nH`.
+Prefix selection keeps small positive parameters from rounding to zero; values
+outside the supported SI-prefix range use a scientific mantissa with two decimal
+places. These stored design parameters are rounded, while the command result
+retains the original full-precision measurement. An outside-model
+inductance produces only the resistor, with `omittedInductance` reported in the
+command result; no zero or guessed inductor is added. Nonpositive or
+unrepresentable resistance rejects the entire edit. Existing project geometry
+and size bounds apply to the complete edit.
+Existing embedded R/L definitions are reused. Unsupported custom pin geometry,
+oversized bodies or library simulation defaults reject the addition while
+preserving the original definitions and design.
+
+Two distinct local net labels identify the actual measured endpoints. Pad labels
+use the component reference and pad number, such as `LP_J3.1` and `LP_C7.1`, so
+the schematic shows which physical terminals the series model spans. Ambiguous or
+missing reference/pad names, normalized whitespace and duplicate endpoint names
+include a terminal UUID qualifier, using the shortest unique hyphen-free prefix
+of at least eight hexadecimal characters. A shared study suffix such as `_S2`
+or `_S3` is added to both label names
+when needed to avoid existing schematic labels, power and hidden power-pin
+names, and PCB net names. Repeated creation for the same endpoint pair rejects;
+other supported insertions receive distinct labels.
+Wires join the compact block's two labels through the prepared series elements;
+connection-label copies remain on the start pin, shortened lead's cut anchor
+and end pin.
+The generated content consists of the series
+components, their fields, labels and joining wires, without an explanatory
+text annotation. Measurement assumptions and model limits remain in the plugin
+panel and this contract.
+
+Each added R/L stores the hidden [native group and endpoint properties](FORMAT.md#document-ownership).
+Source, Save, reopen, recovery and undo preserve them without adding canvas text
+or a private plugin file. Provenance alone grants no mutation authority; the
+physical equivalence above requires a fully validated group and native topology.
+
+The resistor represents equivalent DC current sharing, while the optional
+inductor represents only the shortest route's partial inductance. Their series
+combination is a deterministic terminal-side approximation: other schematic
+branches remain on the start side. It does not reconstruct a distributed PCB
+network from the equivalent resistance and shortest-route partial inductance.
+The combination is an editable study snapshot, not a validated broadband or closed
+return-loop equivalent. It includes no capacitance, frequency-dependent loss,
+automatic excitation, load or ground. The existing circuit must already be a
+supported simulation testbench; creation does not expand the bounded
+[SPICE compiler scope](SIMULATION.md). Later PCB changes do not update an
+existing study automatically.
+
+The block is ordinary native content in the target schematic, covered by Source,
+Save, recovery and Git history. It remains editable after plugin disable/uninstall;
+no plugin-specific JSON or private result store is created. GUI and Agent use
+the same [creation capability](API.md#layout-parasitics-capabilities).
+
 ## Examples and verification
 
-Home has nine curated projects under Example and fixed EMC Flyback Recent. Their original
-geometry, source attribution and model identities remain pinned; support does
-not establish hardware qualification. [Examples](EXAMPLES.md) owns
-regeneration/assets and [EMC verification](EMC-FLYBACK.md) owns recorded numerical
-comparisons.
+[Examples](EXAMPLES.md) lists the native projects and pinned resources.
+[EMC Flyback verification](EMC-FLYBACK.md) describes the reference comparisons.
 
 To compare OpenPE's all-zone refill with KiCad 10 on LM25017, copy the bundled
 `.kicad_pcb` and matching `.kicad_pro` into a scratch directory. Run
@@ -1340,35 +1542,38 @@ requires exact contour segments and island flags, ignoring polygon order,
 starting vertices and winding. It exits unsuccessfully on any difference.
 Passing the bundled PCB directly compares against its saved contours.
 
-| Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-fill-incremental.test.ts`, `tests/pcb-footprint-press.test.ts`, `tests/pcb-dynamic-fill.test.ts` | Synchronization, geometry, routing, dynamic fill transactions, incremental refill parity and footprint press-drag targeting |
-| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                               |
-| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
-| `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
-| `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                 |
-| `tests/layout-parasitics.test.ts`                                                                                                                                                                                           | Analytical DC series/parallel networks and via spans, unsupported contacts and disconnected terminals                                                                                                         |
-| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared upper-right actions; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                                                                                     |
-| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                        |
-| `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                         | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                            |
-| `node --import tsx scripts/check-pcb-fill-worker-bundle.mjs` after `npm run build`                                                                                                                                         | Emitted production Worker bootstrap and chunks calculate changed copper and SVG paths in an isolated Node worker; no Electron, host service or native solver                                                 |
-| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                                                          |
-| `tests/layout-camera-frame-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                         |
-| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                                                      |
-| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                                                                    |
-| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                                                                             |
-| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                                                                          |
-| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                                                                                                                                  |
-| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                                                                                                                                |
-| `node scripts/check-object-retention-ui.mjs --status-layout`                                                                                                                                                               | Three drawing/inspector regions, drawing-only footers, aligned actions, mode header, sidebar resize/visibility, retained cameras and Grid keyboard/IME focus                                                 |
-| `node scripts/check-model-cad-ui.mjs --ground`, `tests/model-ground-scene.test.ts`                                                                                                                                         | Fixed XY reference frame, independent visibility/Grid Off, retained resources/camera, keyboard/IME, zoom-stable centered extents and bounded compact ruler scaling without native edits                      |
-| `node scripts/check-model-cad-ui.mjs --sketch-plane`, `tests/model-cad-sketch-scene.test.ts`                                                                                                                               | Live workplane coordinates/surfaces, distant-plane clipping/start alignment, draft/IME guards, camera restoration and preview resource disposal                                                              |
-| `node scripts/check-model-cad-ui.mjs --color`, `tests/model-cad-mesh.test.ts`, `tests/model-cad-scad.test.ts`                                                                                                              | Solid color drafts/preview, material reset, undo, native persistence, appearance rendering and OpenSCAD color                                                                                                |
-| `node scripts/check-model-cad-ui.mjs --sketch-boolean`, `tests/model-cad-sketch.test.ts`                                                                                                                                   | Contour picking, placement and dimensions, local cancellation and undo, planar Difference before extrusion, shared human/Agent command, native round trips, IME and lifecycle barriers. Native cut/volume evidence is in the opt-in kernel suite. |
-| `node scripts/check-model-cad-ui.mjs --sketch-input`                                                                                                                                                                       | Zero-offset rectangle/circle click and drag gestures, incomplete previews, Escape/IME guards, extrusion Apply and native-file undo                                                                           |
-| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                                                                |
-| `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process                                                 |
-| `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                                                                    |
+| Check                                                                                                                                                                                                                            | Scope                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-fill-incremental.test.ts`, `tests/pcb-footprint-press.test.ts`, `tests/pcb-dynamic-fill.test.ts` | Synchronization, geometry, routing, dynamic fill transactions, incremental refill parity and footprint press-drag targeting                                                                                                                       |
+| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                                    | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                                                                    |
+| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                                  | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
+| `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                               | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                                                          |
+| `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                         | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                                                      |
+| `tests/pcb-placement-suggestion.test.ts`, `node scripts/check-layout-placement-suggestion-ui.mjs` | Shadow settings persistence, marquee preview, exact Tab placement, keyboard and lifecycle guards, native geometry and one-step undo |
+| `tests/layout-parasitics.test.ts`, `tests/layout-parasitics-study.test.ts`                                                                                                                                                       | Analytical DC networks and via spans; same-schematic additions, endpoint identity and native-property preservation, precision, one-step undo and rejected inputs                                                                                  |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-study`                                                                                                                                                                 | Real Workbench terminal picks and endpoint-labelled study, hidden native endpoint fields, unchanged PCB/other native files and one GUI undo; mocked host services, no Electron or solver                                                          |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-contact`                                                                                                                                                               | Actual LM25017 D1.2/C8.1 /VOUT1 pad picks, finite contact measurement, thickness reactivity, Add availability and unchanged native files; mocked host services, no Electron or solver                                                             |
+| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                             | Shared upper-right actions; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                                                                                     |
+| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                          | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                                                             |
+| `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                               | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                                                                 |
+| `node --import tsx scripts/check-pcb-fill-worker-bundle.mjs` after `npm run build`                                                                                                                                               | Emitted production Worker bootstrap and chunks calculate changed copper and SVG paths in an isolated Node worker; no Electron, host service or native solver                                                                                      |
+| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                                 | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                                                                                               |
+| `tests/layout-camera-frame-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                     | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                                                              |
+| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                             | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                                                                                           |
+| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts`       | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                                                                                                         |
+| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                            | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                                                                                                                  |
+| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                                   | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                                                                                                               |
+| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                                    | Isolated Layout editing/preview integration                                                                                                                                                                                                       |
+| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                              | Isolated CAD focus/drafts and retained scenes                                                                                                                                                                                                     |
+| `node scripts/check-object-retention-ui.mjs --status-layout`                                                                                                                                                                     | Three drawing/inspector regions, drawing-only footers, aligned actions, mode header, sidebar resize/visibility, retained cameras and Grid keyboard/IME focus                                                                                      |
+| `node scripts/check-model-cad-ui.mjs --ground`, `tests/model-ground-scene.test.ts`                                                                                                                                               | Fixed XY reference frame, independent visibility/Grid Off, retained resources/camera, keyboard/IME, zoom-stable centered extents and bounded compact ruler scaling without native edits                                                           |
+| `node scripts/check-model-cad-ui.mjs --sketch-plane`, `tests/model-cad-sketch-scene.test.ts`                                                                                                                                     | Live workplane coordinates/surfaces, distant-plane clipping/start alignment, draft/IME guards, camera restoration and preview resource disposal                                                                                                   |
+| `node scripts/check-model-cad-ui.mjs --color`, `tests/model-cad-mesh.test.ts`, `tests/model-cad-scad.test.ts`                                                                                                                    | Solid color drafts/preview, material reset, undo, native persistence, appearance rendering and OpenSCAD color                                                                                                                                     |
+| `node scripts/check-model-cad-ui.mjs --sketch-boolean`, `tests/model-cad-sketch.test.ts`                                                                                                                                         | Contour picking, placement and dimensions, local cancellation and undo, planar Difference before extrusion, shared human/Agent command, native round trips, IME and lifecycle barriers. Native cut/volume evidence is in the opt-in kernel suite. |
+| `node scripts/check-model-cad-ui.mjs --sketch-input`                                                                                                                                                                             | Zero-offset rectangle/circle click and drag gestures, incomplete previews, Escape/IME guards, extrusion Apply and native-file undo                                                                                                                |
+| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                 | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                                                                                                     |
+| `node scripts/e2e-new-project.mjs`                                                                                                                                                                                               | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process                                                                                      |
+| `npm run examples:check-models -- --render`                                                                                                                                                                                      | Verified offline STEP assets and all ten Home Model views                                                                                                                                                                                         |
 
 `tests/pcb-contact-intervals.test.ts` compares ordered broad-phase candidates with
 exhaustive interval filtering, including inclusive epsilon boundaries. The Shove
@@ -1471,13 +1676,13 @@ moves skip that barrier. Synthetic queue differences cannot establish physical
 mouse latency. Neither optional sample replaces the complete acceptance plan,
 and acknowledgement pacing does not measure a fixed-rate continuous input stream.
 
-| Mode | Setting | Evidence and limits |
-| --- | --- | --- |
-| Current built renderer | Default | Copies and hashes `out` into a private profile; unchanged source/copy manifests and original Electron main identity are required. Host resources remain current. |
-| Retained renderer A/B | `OPENPE_EXPERIENCE_RENDERER_SNAPSHOT` | Accepts only unlinked workspace `test-results/editor-experience-*/renderer/1` or `/2` snapshots with a matching prior artifact record and manifest. Reports retain source/record hashes. |
-| Development renderer | `OPENPE_DEV_URL` | Uses an already-running `npm run dev:web` server; cannot accompany a retained snapshot and makes no fixed-build claim. |
-| Node diagnostics | `OPENPE_PROFILE_NODE=1` | Bounded CPU/thread/event-loop observations of the benchmark process; excludes Electron CPU and changes no acceptance clock or threshold. Compare diagnostic runs separately. |
-| Input trace | `OPENPE_PROFILE_TRACE=input` with Node diagnostics | Probes a fixed category allowlist once and records explicit renderer/trace clock anchors. Missing critical categories, anchors or threads yield `inconclusive`; trace coverage cannot establish a latency pass. |
+| Mode                    | Setting                                            | Evidence and limits                                                                                                                                                                                                                                                                                                      |
+| ----------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Current built renderer  | Default                                            | Copies and hashes `out` into a private profile; unchanged source/copy manifests and original Electron main identity are required. Host resources remain current.                                                                                                                                                         |
+| Retained renderer A/B   | `OPENPE_EXPERIENCE_RENDERER_SNAPSHOT`              | Accepts only unlinked workspace `test-results/editor-experience-*/renderer/1` or `/2` snapshots with a matching prior artifact record and manifest. Reports retain source/record hashes.                                                                                                                                 |
+| Development renderer    | `OPENPE_DEV_URL`                                   | Uses an already-running `npm run dev:web` server; cannot accompany a retained snapshot and makes no fixed-build claim.                                                                                                                                                                                                   |
+| Node diagnostics        | `OPENPE_PROFILE_NODE=1`                            | Bounded CPU/thread/event-loop observations of the benchmark process; excludes Electron CPU and changes no acceptance clock or threshold. Compare diagnostic runs separately.                                                                                                                                             |
+| Input trace             | `OPENPE_PROFILE_TRACE=input` with Node diagnostics | Probes a fixed category allowlist once and records explicit renderer/trace clock anchors. Missing critical categories, anchors or threads yield `inconclusive`; trace coverage cannot establish a latency pass.                                                                                                          |
 | Native wheel diagnostic | `OPENPE_EXPERIENCE_OPERATIONS=layout-native-wheel` | Injects one guarded Windows pointer move and four alternating wheel ticks through an owned worker. Requires verified process/window/profile identity, foreground focus, unchanged viewport/DPI and released buttons/modifiers before every input. Interference aborts; no activation or cursor restoration is attempted. |
 
 Formal accessibility runs additionally set `OPENPE_EXPERIENCE_NATIVE_AX=1`;
@@ -1489,10 +1694,10 @@ guards and input budgets. Unset diagnostic/snapshot variables before an ordinary
 
 These helper checks verify the measurement mechanisms without launching Electron:
 
-| Browser-free check | Responsibility |
-| --- | --- |
-| `node scripts/editor-experience-clock.mjs --test` | Clock calibration, paired event/API intervals and acceptance completeness. |
-| `node scripts/editor-experience-artifact.mjs --test` | Bounded renderer copying, manifests, retry and native-module identity. |
-| `node scripts/editor-experience-node-diagnostics.mjs --test` | Bounded process diagnostics, lifecycle and unavailable counters. |
-| `node scripts/editor-experience-trace.mjs --test` | Trace modes, category selection, clock anchors and metadata. |
-| `node scripts/editor-experience-native-input.mjs --test` | Native-input parser and compiled C# guards; no Win32 observation or input calls. |
+| Browser-free check                                           | Responsibility                                                                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `node scripts/editor-experience-clock.mjs --test`            | Clock calibration, paired event/API intervals and acceptance completeness.       |
+| `node scripts/editor-experience-artifact.mjs --test`         | Bounded renderer copying, manifests, retry and native-module identity.           |
+| `node scripts/editor-experience-node-diagnostics.mjs --test` | Bounded process diagnostics, lifecycle and unavailable counters.                 |
+| `node scripts/editor-experience-trace.mjs --test`            | Trace modes, category selection, clock anchors and metadata.                     |
+| `node scripts/editor-experience-native-input.mjs --test`     | Native-input parser and compiled C# guards; no Win32 observation or input calls. |

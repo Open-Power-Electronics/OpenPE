@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { validateAgentWorkspaceContext } from '../server/agent-context-format.mjs';
 import { fillSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
@@ -17,7 +18,10 @@ const { createProject, serializeProject, parseProject } = await tsImport(
   '../lib/project.ts',
   import.meta.url,
 );
-const { buildSpiceDeck } = await tsImport('../lib/spice.ts', import.meta.url);
+const { buildSpiceDeck } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
 const { pinPositions } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);

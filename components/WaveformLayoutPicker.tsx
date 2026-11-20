@@ -2,7 +2,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, LayoutGrid } from 'lucide-react';
-import { waveformGrid, waveformGridColumns, waveformGridRows } from '@/lib/waveform-layout';
+import {
+  waveformGrid,
+  waveformGridColumns,
+  waveformGridRows,
+} from '@/plugins/spice-simulation/domain/waveform-layout';
 import { scrollMovesAnchor } from '@/lib/popup-scroll';
 
 const describe = (rows: number, columns: number) =>

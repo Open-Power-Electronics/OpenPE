@@ -1,0 +1,18 @@
+[
+  {
+    "number": 1,
+    "spec": "Design a high-power constant-current supply. Operate from a nominal 24 V input and withstand input voltages up to 60 V. An external control signal must adjust the output current from 1 A to 15 A. Limit the output voltage to 24 V and monitor the output current in real time.",
+    "eval": {
+      "accuracy": {
+        "unit": "%FS",
+        "method": "At 24 V input with a 1 Ω resistive load, command 1 A, 8 A and 15 A (I_cmd). At each setting, average the actual output current (I_actual) and the circuit's current readout (I_reported, converted to amperes) over the same 10 ms after settling. Obtain I_actual independently of the circuit's readout. Use the largest regulation or sensing error across all three settings.",
+        "formula": "100 × max over all settings of max(|I_actual − I_cmd|, |I_reported − I_actual|) / (15 A)"
+      },
+      "cost": {
+        "unit": "USD",
+        "method": "Use each BOM component quantity q_i and USD unit price p_i.",
+        "formula": "sum(q_i × p_i)"
+      }
+    }
+  }
+]

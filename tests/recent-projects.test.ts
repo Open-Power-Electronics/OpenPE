@@ -109,21 +109,15 @@ test('Recent rejects linked application data directories', async (t) => {
   await assert.rejects(readFile(path.join(target, 'recent-projects.json')), /ENOENT/);
 });
 
-test('removing Recent preserves native files and persists an empty list without restoring the default', async (t) => {
+test('removing Recent preserves native files and persists an empty history', async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), 'openpe-recent-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const store = new RecentProjects(dir, atomicWrite);
-  await store.remove('default:emc-flyback-demo');
-  assert.deepEqual(await new RecentProjects(dir, atomicWrite).list(), {
-    initialized: true,
-    entries: [],
-    warnings: [],
-  });
   const file = path.join(dir, 'keep.kicad_pro');
   await writeFile(file, 'native bytes to preserve');
   await store.remember(file);
   const [entry] = (await store.list()).entries;
-  await assert.rejects(store.remove('default:emc-flyback-demo'), /Recent changed/);
+  await assert.rejects(store.remove('default:emc-flyback-demo'), /no longer listed/);
   await store.remove(entry.id);
   assert.equal(await readFile(file, 'utf8'), 'native bytes to preserve');
   assert.deepEqual(await new RecentProjects(dir, atomicWrite).list(), {
@@ -133,4 +127,121 @@ test('removing Recent preserves native files and persists an empty list without 
   });
   await assert.rejects(store.resolve(entry.id), /no longer listed/);
   await assert.rejects(store.remove(file), /no longer listed/);
+});
+
+test('Recent pins persist, retain default EMC alongside history and protect entries from eviction', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-recent-pins-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const defaultProject = {
+    id: 'emc-flyback-demo',
+    title: 'EMC Flyback',
+    description: 'Bundled project',
+    file: path.join(dir, 'emc-flyback.kicad_pro'),
+  };
+  const store = new RecentProjects(dir, atomicWrite, defaultProject);
+  assert.deepEqual((await store.list()).entries, [
+    {
+      id: defaultProject.id,
+      title: defaultProject.title,
+      description: defaultProject.file,
+      pinned: true,
+    },
+  ]);
+  await store.remember(defaultProject.file);
+  await store.setPinned(`default:${defaultProject.id}`, false);
+  const defaultNative = (await store.list()).entries[0];
+  assert.equal(defaultNative.description, defaultProject.file);
+  await store.setPinned(defaultNative.id, true);
+  assert.equal(
+    (await store.list()).entries[0].description,
+    defaultNative.description,
+    'Pinning the default preserves its displayed native address.',
+  );
+  assert.equal(
+    (await store.list()).entries.length,
+    1,
+    'Opening the pinned default does not duplicate it.',
+  );
+  const personal = path.join(dir, 'personal.kicad_pro');
+  await store.remember(personal);
+  const personalId = (await store.list()).entries[1].id;
+  await store.setPinned(personalId, true);
+  assert.equal(
+    (await store.list()).entries[1].description,
+    personal,
+    'Pinning preserves the displayed native address.',
+  );
+  await assert.rejects(store.remove(personalId), /Unpin/);
+  await assert.rejects(store.remove(`default:${defaultProject.id}`), /Unpin/);
+  for (let i = 0; i < 40; i++) await store.remember(path.join(dir, `${i}.kicad_pro`));
+  const reopened = new RecentProjects(dir, atomicWrite, defaultProject);
+  const list = await reopened.list();
+  assert.equal(list.entries.length, 32);
+  assert.equal(list.entries[0].id, defaultProject.id);
+  assert.equal(list.entries[1].id, personalId);
+  assert.equal(await reopened.resolve(personalId), personal);
+  await reopened.setPinned(personalId, false);
+  assert.equal(
+    (await reopened.list()).entries.find((entry: { id: string }) => entry.id === personalId)
+      ?.pinned,
+    false,
+  );
+  await reopened.remove(personalId);
+  await reopened.setPinned(`default:${defaultProject.id}`, false);
+  assert.equal(
+    (await new RecentProjects(dir, atomicWrite, defaultProject).list()).entries.some(
+      (entry: { id: string }) => entry.id === defaultProject.id,
+    ),
+    false,
+  );
+  await reopened.setPinned(`default:${defaultProject.id}`, true);
+  assert.equal((await reopened.list()).entries[0].id, defaultProject.id);
+  await assert.rejects(reopened.setPinned(personal, true), /no longer listed/);
+  await assert.rejects(reopened.setPinned(personalId, 'true'), /Invalid/);
+});
+
+test('Recent pin metadata rejects malformed files without overwriting them', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-recent-pins-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const store = new RecentProjects(dir, atomicWrite);
+  const project = path.join(dir, 'project.kicad_pro');
+  await store.remember(project);
+  const id = (await store.list()).entries[0].id;
+  const file = path.join(dir, 'recent-pins.json');
+  for (const content of [
+    '{broken',
+    JSON.stringify({ version: 1, files: [], defaultPinned: 1 }),
+    JSON.stringify({ version: 1, files: ['relative.kicad_pro'], defaultPinned: true }),
+    JSON.stringify({ version: 1, files: [], defaultPinned: true, extra: true }),
+  ]) {
+    await writeFile(file, content);
+    await assert.rejects(store.list());
+    await assert.rejects(store.setPinned(id, true));
+    assert.equal(await readFile(file, 'utf8'), content);
+  }
+  await writeFile(file, JSON.stringify({ version: 1, files: [], defaultPinned: true }));
+  await store.setPinned(id, true);
+  assert.equal((await store.list()).entries[0].pinned, true);
+});
+
+test('failed pin preference writes retain the previous list and remain retryable', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-recent-pins-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  let fail = false;
+  const store = new RecentProjects(dir, async (...args: Parameters<typeof atomicWrite>) => {
+    if (fail && args[0] === path.join(dir, 'recent-pins.json')) throw new Error('Disk unavailable');
+    return atomicWrite(...args);
+  });
+  await store.remember(path.join(dir, 'first.kicad_pro'));
+  const id = (await store.list()).entries[0].id;
+  await store.setPinned(id, true);
+  await store.remember(path.join(dir, 'second.kicad_pro'));
+  const before = await store.list();
+  fail = true;
+  await assert.rejects(store.setPinned(id, false), /Disk unavailable/);
+  assert.deepEqual(await store.list(), before);
+  fail = false;
+  await store.setPinned(id, false);
+  assert.equal((await store.list()).entries[0].id, id);
+  assert.equal((await store.list()).entries[0].pinned, false);
 });

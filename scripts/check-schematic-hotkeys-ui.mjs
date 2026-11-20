@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { readNativeFiles, readNativeProject } from './source-editor-test-helpers.mjs';
 import { openSchematicPanel } from './schematic-visualization-test-helpers.mjs';
 import { closeDisplayDrawer } from './visualization-test-helpers.mjs';
@@ -21,6 +22,7 @@ const { projectNativeFiles } = await tsImport('../lib/kicad-project.ts', import.
 const { fieldId, objectPosition } = await tsImport('../lib/schematic-edit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const { child, children, parseSExpr, val } = await tsImport('../lib/sexpr.ts', import.meta.url);
 
 // Full DesktopWorkspace, with in-memory recovery/native/API fixtures only.
@@ -127,16 +129,13 @@ const recovery = () => ({
       source,
       sourceDraft: null,
       dirty: false,
-      filename: null,
+      filename: 'project.kicad_pro',
       sessions: [{ id: 'hotkey-session', messages: [], draft: '' }],
       activeSessionId: 'hotkey-session',
     },
   ],
   activeDocumentId: documentId,
-  provider: 'codex',
-  effort: 'low',
-  approvalMode: 'review',
-  models: {},
+  ...defaultAgentPreferences,
 });
 const bundle = await build({
   stdin: {
@@ -189,7 +188,7 @@ const hasEndpoint = (circuit, p) =>
 const casePattern = process.argv[2] ? new RegExp(process.argv[2]) : null;
 let completed = 0;
 
-async function run(name, check, appearance = null) {
+async function run(name, check, appearance = defaultAppearance) {
   if (casePattern && !casePattern.test(name)) return;
   const page = await browser.newPage({ viewport: { width: 1600, height: 1040 } });
   page.setDefaultTimeout(12000);
@@ -217,6 +216,9 @@ async function run(name, check, appearance = null) {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       releaseFile: async () => {},
       setDirty: async (value) => {
         window.dirtyWrites.push(Boolean(value));
@@ -261,7 +263,16 @@ async function run(name, check, appearance = null) {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const button = (label) => page.getByRole('button', { name: label, exact: true });
   const canvas = page.getByTestId('schematic-canvas');
-  await canvas.waitFor();
+  await canvas.waitFor().catch(async (error) => {
+    const body = await page
+      .locator('body')
+      .innerText({ timeout: 2000 })
+      .catch(() => 'Unavailable');
+    throw new Error(
+      `${name}: Workspace did not mount a canvas. ${JSON.stringify({ errors: errors.slice(0, 8), body: body.slice(0, 2500) })}`,
+      { cause: error },
+    );
+  });
   try {
     await page.waitForFunction(
       () => document.querySelector('[data-testid="schematic-canvas"]')?.viewBox.baseVal.x !== 0,
@@ -327,7 +338,16 @@ async function run(name, check, appearance = null) {
     throw error;
   }
   await page.waitForFunction(() => window.dirtyWrites.length > 0);
-  await canvas.focus();
+  await canvas.focus().catch(async (error) => {
+    const body = await page
+      .locator('body')
+      .innerText({ timeout: 2000 })
+      .catch(() => 'Unavailable');
+    throw new Error(
+      `${name}: Workspace lost its canvas during setup. ${JSON.stringify({ errors: errors.slice(0, 8), body: body.slice(0, 2500) })}`,
+      { cause: error },
+    );
+  });
   const screen = (point) =>
     canvas.evaluate((svg, p) => {
       const at = new DOMPoint(p.x, p.y).matrixTransform(svg.getScreenCTM());

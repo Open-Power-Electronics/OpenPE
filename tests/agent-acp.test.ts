@@ -12,6 +12,8 @@ import { annotationFixture as annotation } from './fixtures/annotation';
 const providers = ['deepseek'] as const;
 type ACPProvider = (typeof providers)[number];
 const request = { prompt: 'Fixture question', context: { title: 'Fixture' }, history: [] };
+const firstModel = '["deepseek-official","deepseek-v4-flash"]';
+const secondModel = '["fixture-provider","vendor/second:v2"]';
 const png = annotation().image.dataUrl.split(',')[1];
 async function fixture(t: TestContext, provider: ACPProvider, mode: string) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-acp-test-'));
@@ -103,11 +105,11 @@ test('ACP model discovery reads provider session catalogs without submitting a p
     assert.deepEqual(
       result.models.map(({ id, label }: { id: string; label: string }) => ({ id, label })),
       [
-        { id: 'fixture-first', label: 'First' },
-        { id: 'fixture-second', label: 'Second' },
+        { id: firstModel, label: 'First' },
+        { id: secondModel, label: 'Second' },
       ],
     );
-    assert.equal(result.defaultModel, 'fixture-first');
+    assert.equal(result.defaultModel, firstModel);
     const methods = (await mock.records())
       .filter((entry) => entry.type === 'request')
       .map((entry) => entry.method);
@@ -124,7 +126,7 @@ test('ACP selected-model and image requests use explicit protocols without Claud
     const events: any[] = [];
     const result = await runAgent(
       provider,
-      { ...request, model: 'fixture-second', annotations: [annotation()] },
+      { ...request, model: secondModel, annotations: [annotation()] },
       mock.directory,
       (event: any) => events.push(event),
       new AbortController().signal,
@@ -145,7 +147,7 @@ test('ACP selected-model and image requests use explicit protocols without Claud
       false,
     );
     assert.ok(
-      events.some((event) => event.type === 'agent-info' && event.model === 'fixture-second'),
+      events.some((event) => event.type === 'agent-info' && event.model === secondModel),
     );
     const records = await mock.records();
     const methods = records
@@ -189,6 +191,7 @@ test('ACP unsupported model, effort and images fail before a prompt is sent', as
   for (const provider of providers)
     for (const [mode, change, message] of [
       ['catalog', { model: 'not-advertised' }, /not advertised/],
+      ['rejected-model', { model: secondModel }, /did not apply the selected model/],
       ['catalog', { effort: 'high' }, /configured reasoning effort/],
       ['no-images', { annotations: [annotation()] }, /does not advertise image support/],
     ] as const) {

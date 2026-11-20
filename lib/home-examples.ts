@@ -2,7 +2,7 @@ import manifest from '../resources/example-catalog/home-manifest.json';
 
 // Metadata only: complete projects remain lazy-loaded on preview/open.
 export const homeExamples = manifest.examples;
-export const homeRecent = manifest.recent;
+export const homeRecent = manifest.recent.map((entry) => ({ ...entry, pinned: true }));
 export const homeExampleCatalog = [...homeRecent, ...homeExamples];
 export type HomeExampleId = (typeof homeExampleCatalog)[number]['id'];
 

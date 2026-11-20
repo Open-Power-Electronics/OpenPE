@@ -8,7 +8,9 @@ import { compileCapabilitySchema } from '../api/capability-schema';
 import { ProjectCore } from '../core/project-core';
 import { registerProjectCapabilities } from '../core/register-project';
 import { createPart, emptyCircuit, pinPositions, uid, type Circuit } from '../lib/circuit';
-import { createProject } from '../lib/project';
+import { createLibraryPart, partFields, propertyValue } from '../lib/library';
+import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
+import { createProject, projectFromNativeFiles } from '../lib/project';
 import { projectNetGroups } from '../lib/project-net-groups';
 import { onWire, samePoint } from '../lib/wiring';
 import {
@@ -16,6 +18,8 @@ import {
   type WorkbenchCapabilityPorts,
 } from '../lib/workbench-capabilities';
 import { registerLibraryCapabilities } from '../lib/library-capabilities';
+import { prepareSchematicPackage } from '../lib/library-package';
+import { partSchematicSection, prepareSchematicSection } from '../lib/schematic-section';
 
 test('Core catalog distinguishes object and operation commands from infrastructure', async () => {
   const core = new ProjectCore(createProject(emptyCircuit()));
@@ -230,6 +234,131 @@ test('capability schemas reject unsupported keywords and enforce nested choices 
     assert.equal(check(value).valid, false);
 });
 
+test('library catalog queries share authenticated host search and preserve bounded results', async () => {
+  const core = new ProjectCore(createProject(emptyCircuit()));
+  const host = createCapabilityHost();
+  const previousWindow = (globalThis as any).window;
+  const previousFetch = globalThis.fetch;
+  const requests: URL[] = [];
+  const page = {
+    entries: [
+      { id: 'Device:R', name: 'R', library: 'Device', description: 'Resistor', keywords: 'R' },
+    ],
+    total: 145,
+    libraries: ['Device'],
+  };
+  const categories = {
+    categories: [
+      {
+        id: '1737',
+        name: 'Amplifiers',
+        children: [{ id: '1805', name: 'Zero Drift Amplifiers', children: [] }],
+      },
+    ],
+  };
+  (globalThis as any).window = {
+    openpe: { connection: async () => ({ base: 'http://127.0.0.1:1', token: 'fixture' }) },
+  };
+  globalThis.fetch = async (url, options) => {
+    const request = new URL(String(url));
+    requests.push(request);
+    assert.equal((options!.headers as Record<string, string>)['X-OpenPE-Token'], 'fixture');
+    assert.ok(options?.signal instanceof AbortSignal);
+    return new Response(JSON.stringify(request.searchParams.has('categories') ? categories : page));
+  };
+  const unregister = registerLibraryCapabilities(host, core);
+  try {
+    assert.deepEqual(
+      await host.query('library.search', {
+        kind: 'symbols',
+        query: 'R & resistor',
+        library: 'Device',
+        offset: 100,
+      }),
+      page,
+    );
+    assert.equal(requests[0].pathname, '/api/libraries/symbols');
+    assert.deepEqual(Object.fromEntries(requests[0].searchParams), {
+      q: 'R & resistor',
+      library: 'Device',
+      offset: '100',
+    });
+    await host.query('library.search', { kind: 'footprints' });
+    assert.equal(requests[1].pathname, '/api/libraries/footprints');
+    assert.deepEqual(Object.fromEntries(requests[1].searchParams), {
+      q: '',
+      library: '',
+      offset: '0',
+    });
+    const categoryCapability = host
+      .catalog()
+      .find((capability) => capability.id === 'library.categories');
+    assert.ok(categoryCapability);
+    assert.equal(categoryCapability.owner, 'host');
+    assert.equal(categoryCapability.kind, 'query');
+    assert.equal(categoryCapability.mutation, false);
+    assert.equal(categoryCapability.available, true);
+    assert.deepEqual(
+      await host.query(
+        'library.categories',
+        {
+          kind: 'symbols',
+          source: 'NextPCB',
+        },
+        { actor: 'agent', signal: new AbortController().signal },
+      ),
+      categories,
+    );
+    assert.equal(requests[2].pathname, '/api/libraries/symbols');
+    assert.deepEqual(Object.fromEntries(requests[2].searchParams), { categories: 'NextPCB' });
+    assert.deepEqual(
+      await host.query(
+        'library.search',
+        {
+          kind: 'symbols',
+          library: 'NextPCB',
+          category: '1805',
+          query: 'LM/358 & β',
+          offset: 100,
+        },
+        { actor: 'agent' },
+      ),
+      page,
+    );
+    assert.deepEqual(Object.fromEntries(requests[3].searchParams), {
+      q: 'LM/358 & β',
+      library: 'NextPCB',
+      category: '1805',
+      offset: '100',
+    });
+    await assert.rejects(
+      host.query('library.categories', {
+        kind: 'symbols',
+        source: 'NextPCB&foreign=1',
+      }),
+      /Invalid input for library.categories/,
+    );
+    await assert.rejects(
+      host.query('library.search', {
+        kind: 'symbols',
+        library: 'NextPCB',
+        category: '1'.repeat(11),
+      }),
+      /Invalid input for library.search/,
+    );
+    assert.equal(
+      requests.length,
+      4,
+      'Invalid capability arguments never enter the host transport.',
+    );
+    assert.equal(core.getSnapshot().undoDepth, 0);
+  } finally {
+    unregister();
+    globalThis.fetch = previousFetch;
+    (globalThis as any).window = previousWindow;
+  }
+});
+
 test('official library placement shares grid/reference rules and rejects a document changed while loading', async () => {
   const schematic = emptyCircuit();
   const existing = createPart(schematic, 'R', 0, 0);
@@ -255,12 +384,6 @@ test('official library placement shares grid/reference rules and rejects a docum
   };
   const unregister = registerLibraryCapabilities(host, core);
   try {
-    const curated = (await host.query('library.search', {
-      kind: 'symbols',
-      library: 'ti-dcdc',
-    })) as { entries: unknown[]; total: number };
-    assert.ok(curated.total > 0);
-    assert.equal(curated.entries.length, curated.total);
     const input = { schematicId: schematic.id, libraryId: existing.libId, x: 3, y: 6 };
     await host.execute('schematic.place', input, { actor: 'agent', expectedRevision: '0' });
     const placed = core.getSnapshot().project!.schematic.parts[1];
@@ -284,6 +407,234 @@ test('official library placement shares grid/reference rules and rejects a docum
     await assert.rejects(command, /changed/);
     assert.equal(core.getSnapshot().project!.schematic.parts.length, 2);
     assert.equal(core.getSnapshot().undoDepth, 1);
+  } finally {
+    unregister();
+    globalThis.fetch = previousFetch;
+    (globalThis as any).window = previousWindow;
+  }
+});
+
+test('host library placement retains native section intent and classifies unassigned symbols as Simulation for human and Agent callers', async () => {
+  let schematic = emptyCircuit();
+  const existing = createPart(schematic, 'R', 0, 0);
+  existing.excludeFromSimulation = true;
+  schematic.parts.push(existing);
+  const symbol = schematic.libraries[existing.libId];
+  children(symbol, 'property').find((node) => val(node) === 'Footprint')![2] =
+    quote('Fixture:TwoPin');
+  schematic = prepareSchematicSection(schematic, [existing.id], 'simulation');
+  const project = createProject(schematic);
+  const previousWindow = (globalThis as any).window;
+  const previousFetch = globalThis.fetch;
+  let requests = 0;
+  let loadedSymbol = symbol;
+  (globalThis as any).window = {
+    openpe: { connection: async () => ({ base: 'http://127.0.0.1:1', token: 'fixture' }) },
+  };
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /\/api\/libraries\/symbols\?id=Device%3AR$/);
+    assert.equal((options!.headers as Record<string, string>)['X-OpenPE-Token'], 'fixture');
+    requests++;
+    return Response.json({ id: existing.libId, symbol: loadedSymbol, units: 1 });
+  };
+  try {
+    for (const assigned of [true, false]) {
+      loadedSymbol = structuredClone(symbol);
+      children(loadedSymbol, 'property').find((node) => val(node) === 'Footprint')![2] = quote(
+        assigned ? 'Fixture:TwoPin' : '',
+      );
+      for (const actor of ['human', 'agent'] as const)
+        for (const section of [undefined, 'hardware', 'simulation'] as const) {
+          const core = new ProjectCore(project);
+          const host = createCapabilityHost({
+            revision: () => String(core.getSnapshot().revision),
+          });
+          const remove = registerLibraryCapabilities(host, core);
+          try {
+            const baseline = core.getNativeFiles();
+            const input = { schematicId: schematic.id, libraryId: existing.libId, x: 3, y: 6 };
+            const requestedBefore = requests;
+            await assert.rejects(
+              host.execute('schematic.place', { ...input, section: 'all' }, { actor }),
+              /Invalid input/,
+            );
+            assert.equal(
+              requests,
+              requestedBefore,
+              'View-only All cannot reach library transport.',
+            );
+            const result = (await host.execute(
+              'schematic.place',
+              { ...input, ...(section ? { section } : {}) },
+              { actor },
+            )) as { id: string; reference: string; revision: string };
+            const after = core.getSnapshot();
+            const placed = after.project!.schematic.parts.find((part) => part.id === result.id)!;
+            assert.equal(result.reference, 'R2');
+            assert.equal(result.revision, String(after.revision));
+            assert.equal(
+              partSchematicSection(placed),
+              !assigned || section === 'simulation' ? 'simulation' : 'hardware',
+            );
+            assert.equal(partFields(placed).Footprint ?? '', assigned ? 'Fixture:TwoPin' : '');
+            assert.equal(!!placed.excludeFromSimulation, false);
+            assert.equal(placed.x, 2.54);
+            assert.equal(placed.y, 6.35);
+            assert.equal(after.undoDepth, 1);
+            const preserved = after.project!.schematic.parts.find(
+              (part) => part.id === existing.id,
+            )!;
+            assert.equal(partSchematicSection(preserved), 'simulation');
+            assert.equal(preserved.excludeFromSimulation, true);
+            const native = core.getNativeFiles();
+            const reopened = projectFromNativeFiles(native);
+            const instance = reopened.schematic.parts.find((part) => part.id === result.id)!;
+            assert.equal(
+              val(child(instance.raw!, 'on_board')),
+              section === 'simulation' ? 'no' : 'yes',
+            );
+            assert.equal(!!instance.excludeFromSimulation, !!placed.excludeFromSimulation);
+            core.undo();
+            assert.deepEqual(core.getNativeFiles(), baseline);
+            core.redo();
+            assert.deepEqual(core.getNativeFiles(), native);
+          } finally {
+            remove();
+            host.dispose();
+          }
+        }
+    }
+    assert.equal(requests, 12);
+  } finally {
+    globalThis.fetch = previousFetch;
+    (globalThis as any).window = previousWindow;
+  }
+});
+
+test('NextPCB GUI and Agent placement preserve native symbol fields and undo to identical native files', async () => {
+  const id = 'NextPCB:9728_LM358';
+  const schematic = emptyCircuit();
+  const existing = createPart(schematic, 'R', 0, 0);
+  existing.ref = 'U1';
+  schematic.parts.push(existing);
+  // Synthetic native geometry exercises the online identity without vendoring a supplier asset.
+  const symbol = structuredClone(schematic.libraries[existing.libId]);
+  symbol[1] = quote(id);
+  for (const [name, value] of [
+    ['Reference', 'U'],
+    ['Value', 'LM358'],
+    ['Footprint', id],
+  ]) {
+    const property = children(symbol, 'property').find((node) => val(node) === name)!;
+    property[2] = quote(value);
+  }
+  symbol.push([
+    'property',
+    quote('Manufacturer'),
+    quote('Fixture Components'),
+    ['at', '0', '0', '0'],
+    ['effects', ['font', ['size', '1.27', '1.27']], ['hide', 'yes']],
+  ]);
+  const entry = {
+    id,
+    name: 'LM358',
+    library: 'NextPCB',
+    description: 'Synthetic native fixture',
+    keywords: 'amplifier',
+    footprint: id,
+  };
+  const detail = { ...entry, symbol, units: 1 };
+  const project = createProject(schematic);
+  const gui = new ProjectCore(project);
+  const agent = new ProjectCore(project);
+  const host = createCapabilityHost({ revision: () => String(agent.getSnapshot().revision) });
+  const previousWindow = (globalThis as any).window;
+  const previousFetch = globalThis.fetch;
+  (globalThis as any).window = {
+    openpe: { connection: async () => ({ base: 'http://127.0.0.1:1', token: 'fixture' }) },
+  };
+  globalThis.fetch = async (url, options) => {
+    const request = new URL(String(url));
+    assert.equal((options!.headers as Record<string, string>)['X-OpenPE-Token'], 'fixture');
+    if (request.pathname === '/api/library-package') {
+      assert.deepEqual(JSON.parse(String(options!.body)), { id });
+      return Response.json({
+        id,
+        projectAssets: true,
+        footprint: parseSExpr('(footprint "9728_LM358" (layer "F.Cu"))'),
+      });
+    }
+    assert.equal(request.pathname, '/api/libraries/symbols');
+    if (request.searchParams.has('id')) {
+      assert.equal(request.searchParams.get('id'), id);
+      return Response.json(detail);
+    }
+    assert.equal(request.searchParams.get('library'), 'NextPCB');
+    assert.equal(request.searchParams.get('q'), 'LM358');
+    return Response.json({ entries: [entry], total: 1, libraries: ['NextPCB'] });
+  };
+  const unregister = registerLibraryCapabilities(host, agent);
+  try {
+    const baseline = agent.getNativeFiles();
+    const search = (await host.query('library.search', {
+      kind: 'symbols',
+      library: 'NextPCB',
+      query: 'LM358',
+    })) as { entries: { id: string }[] };
+    assert.equal(search.entries[0].id, id);
+    const loaded = (await host.query('library.detail', { kind: 'symbols', id })) as typeof detail;
+    const humanSheet = structuredClone(gui.getSnapshot().project!.schematic);
+    const humanPart = createLibraryPart(humanSheet, loaded.symbol, 3, 6, 1);
+    humanSheet.libraries[id] = loaded.symbol;
+    humanSheet.parts.push(humanPart);
+    const nativeFiles = await prepareSchematicPackage(
+      gui.getSnapshot().project!,
+      id,
+      new AbortController().signal,
+    );
+    gui.replaceSchematic(humanSheet, nativeFiles);
+    const placed = (await host.execute(
+      'schematic.place',
+      {
+        schematicId: schematic.id,
+        libraryId: id,
+        x: 3,
+        y: 6,
+      },
+      { actor: 'agent' },
+    )) as { id: string; reference: string };
+    assert.equal(placed.reference, 'U2');
+    const part = agent.getSnapshot().project!.schematic.parts[1];
+    assert.equal(partFields(part).Footprint, id);
+    assert.equal(partFields(part).Manufacturer, 'Fixture Components');
+    assert.equal(part.x, 2.54);
+    assert.equal(part.y, 6.35);
+    const native = agent.getNativeFiles();
+    assert.ok(native.files.some((file) => file.name === 'footprints/NextPCB.pretty/9728_LM358.kicad_mod'));
+    assert.equal(
+      JSON.stringify(native).replaceAll(placed.id, humanPart.id),
+      JSON.stringify(gui.getNativeFiles()),
+      'GUI and Agent export the same complete native files, allowing only their newly allocated component UUID.',
+    );
+    const sheet = parseSExpr(native.files.find((file) => file.name.endsWith('.kicad_sch'))!.source);
+    const embedded = children(child(sheet, 'lib_symbols')!, 'symbol').find(
+      (node) => val(node) === id,
+    )!;
+    assert.ok(embedded);
+    assert.equal(propertyValue(embedded, 'Footprint'), id);
+    assert.equal(propertyValue(embedded, 'Manufacturer'), 'Fixture Components');
+    const instance = children(sheet, 'symbol').find(
+      (node) => val(child(node, 'uuid')) === placed.id,
+    )!;
+    assert.equal(val(child(instance, 'lib_id')), id);
+    assert.equal(propertyValue(instance, 'Reference'), 'U2');
+    assert.equal(propertyValue(instance, 'Value'), 'LM358');
+    assert.equal(agent.getSnapshot().undoDepth, 1);
+    assert.equal(gui.getSnapshot().undoDepth, 1);
+    assert.equal(agent.undo(), true);
+    assert.equal(gui.undo(), true);
+    assert.deepEqual(agent.getNativeFiles(), baseline);
+    assert.deepEqual(gui.getNativeFiles(), baseline);
   } finally {
     unregister();
     globalThis.fetch = previousFetch;

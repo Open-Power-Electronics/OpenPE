@@ -4,11 +4,16 @@ import { performance } from 'node:perf_hooks';
 import { piIsolationFlags } from './agent-provider-runtime.mjs';
 import { stopOwnedProcess } from './owned-process.mjs';
 import { createEventNormalizer } from './agent-events.mjs';
-import { validModelId } from './model-id.mjs';
-import { providerReasoningEfforts } from './agent-provider-format.mjs';
+import { providerReasoningEfforts, validModelId } from './agent-provider-format.mjs';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+function piModelId(model) {
+  if (!validModelId(model?.provider) || !validModelId(model?.id)) return;
+  const id = `${model.provider}/${model.id}`;
+  if (validModelId(id)) return id;
+}
 
 // Pi publishes its per-model native thinking-level map through the RPC catalog.
 // Unmapped ordinary levels use the provider's default mapping; xhigh/max require
@@ -221,13 +226,16 @@ export async function runPiAgent(request, prompt, launch, cwd, emit, signal, opt
             submitted = true;
             mark('readyMs');
             const state = event.data || {};
+            const model = piModelId(state.model);
+            if (request.model !== undefined && model !== request.model)
+              throw new Error('Pi did not apply the selected model.');
             if (request.effort !== undefined && state.thinkingLevel !== request.effort)
               throw new Error(
                 `Pi did not apply the configured reasoning effort (${request.effort}). Choose a supported level and retry.`,
               );
             emit({
               type: 'agent-info',
-              model: state.model?.id,
+              model,
               reasoningEffort: state.thinkingLevel,
             });
             mark('submittedMs');
@@ -304,18 +312,13 @@ export async function listPiModels(launch, cwd, signal, options = {}) {
             throw new Error('Pi returned more than 500 models. Narrow the CLI configuration.');
           const unique = new Map();
           for (const item of event.data.models) {
-            const id = `${item?.provider}/${item?.id}`;
-            if (
-              !validModelId(item?.id) ||
-              !validModelId(item?.provider) ||
-              !validModelId(id) ||
-              (Array.isArray(item.input) && !item.input.includes('text'))
-            )
-              continue;
+            const id = piModelId(item);
+            if (!id) continue;
             unique.set(id, {
               id,
               label: typeof item.name === 'string' ? item.name.slice(0, 100) : item.id,
               description: id,
+              ...(Array.isArray(item.input) && !item.input.includes('text') && { textInput: false }),
               efforts: piModelEfforts(item),
             });
           }
@@ -323,10 +326,7 @@ export async function listPiModels(launch, cwd, signal, options = {}) {
         }
         if (event.id === 'openpe-state') {
           stateReceived = true;
-          const model = event.data?.model;
-          const id = `${model?.provider}/${model?.id}`;
-          if (validModelId(model?.provider) && validModelId(model?.id) && validModelId(id))
-            defaultModel = id;
+          defaultModel = piModelId(event.data?.model) ?? null;
         }
         if (models && stateReceived) finish({ models, defaultModel });
       },

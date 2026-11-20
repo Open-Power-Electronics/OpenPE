@@ -2,12 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { lm2596AdjustableDerivedModel as model } from '../lib/ti-dcdc';
-import { deriveLm2596AdjustableModel, adaptLm2596Adjustable } from '../server/spice-lm2596-adj.mjs';
-import { adaptSpiceModels } from '../server/spice-model-adapters.mjs';
+import { lm2596AdjustableDerivedModel as model } from '../lib/reference-models';
+import {
+  deriveLm2596AdjustableModel,
+  adaptLm2596Adjustable,
+} from '../plugins/spice-simulation/host/spice-lm2596-adj.mjs';
+import { adaptSpiceModels } from '../plugins/spice-simulation/host/spice-model-adapters.mjs';
 import { createReferenceExample } from '../lib/reference-examples';
-import { buildSpiceDeck, defaultTransient, spiceNets } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  spiceNets,
+} from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import { partFields } from '../lib/library';
 import { exportKiCad, parseProject, serializeProject } from '../lib/project';
 import { children, parseSExpr, val } from '../lib/sexpr';

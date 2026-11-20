@@ -12,7 +12,7 @@ const document = (id: string): CloseDocument => ({
   ordinaryDraftRevision: null,
 });
 
-test("Don't save removes discarded projects from recovery before approving native quit", async () => {
+test('Discard removes unsaved projects from recovery before approving native quit', async () => {
   const documents = [document('A'), document('B')];
   documents[0].native.sourceDraft = '{invalid pending source';
   const review = new WorkspaceCloseReview();

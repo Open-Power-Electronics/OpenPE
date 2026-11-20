@@ -1,8 +1,7 @@
 import type { BoardLayer, Footprint, PCB } from '../lib/pcb';
-import { padCopperLayers } from '../lib/pcb-connectivity';
-import { pcbPadPaintLayer, type PCBDisplay } from '../lib/pcb-display';
+import { pcbPadDisplayLayers, pcbPadPaintLayer, type PCBDisplay } from '../lib/pcb-display';
 
-export type LayoutFootprintLayerPass = {
+type LayoutFootprintLayerPass = {
   id: string;
   footprint: Footprint;
   layer: BoardLayer;
@@ -32,8 +31,7 @@ export function layoutFootprintLayerPasses(
       for (const zone of footprint.zones ?? [])
         if (visible.has(zone.layer)) graphicLayers.add(zone.layer);
     for (const pad of footprint.pads) {
-      const padLayers =
-        pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, footprint, pad);
+      const padLayers = pcbPadDisplayLayers(board, footprint, pad);
       const owner = pcbPadPaintLayer(padLayers, display, paintOrder);
       if (owner) graphicLayers.add(owner);
     }

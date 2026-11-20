@@ -9,12 +9,12 @@ const bundle = await build({
     contents: `import React, {useState} from 'react';
       import {createRoot} from 'react-dom/client';
       import {useExampleList} from './components/useExampleList';
-      import {homeExampleCatalog} from './lib/home-examples';
+      import {homeExampleCatalog,homeRecent} from './lib/home-examples';
       import HomeProjectCard from './components/HomeProjectCard';
       import HomeProjectSection from './components/HomeProjectSection';
       import {switchingStageFixture} from './tests/fixtures/switching-stage';
       const listeners = new Set();
-      const fixture = window.fixture = {entries:[], initialized:false, fail:false, exampleFail:false, listeners,
+      const fixture = window.fixture = {entries:[...homeRecent], initialized:false, fail:false, exampleFail:false, listeners,
         refresh:()=>listeners.forEach(listener=>listener())};
       window.openpe = {
         listExamples:async()=>{
@@ -27,6 +27,12 @@ const bundle = await build({
         },
         previewRecent:async()=>switchingStageFixture(),
         removeRecent:async id=>{fixture.initialized=true;fixture.entries=fixture.entries.filter(entry=>entry.id!==id);fixture.refresh();},
+        pinRecent:async(id,pinned)=>{
+          const entry=fixture.entries.find(entry=>entry.id===id.replace(/^default:/,''));
+          if(id.startsWith('default:')&&!pinned) fixture.entries=fixture.entries.filter(item=>item!==entry);
+          else if(entry) {entry.pinned=pinned;fixture.entries=[...fixture.entries.filter(item=>item.pinned),...fixture.entries.filter(item=>!item.pinned)];}
+          fixture.refresh();
+        },
         onRecentChanged:callback=>{listeners.add(callback);return()=>listeners.delete(callback);},
       };
       function Fixture(){
@@ -87,7 +93,11 @@ try {
   await page
     .getByRole('button', { name: 'Open EMC Flyback example', exact: true })
     .click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+  assert.equal(
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).isDisabled(),
+    true,
+  );
+  await page.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
   await waitForAsync(page, () => document.querySelectorAll('#recent-heading h3').length === 0);
   await page.evaluate(() => window.fixture.refresh());
   assert.equal(await page.locator('#recent-heading h3').count(), 0);
@@ -105,7 +115,7 @@ try {
   assert.equal(
     await page.locator('#recent-heading h3').count(),
     1,
-    'Real history replaces the default.',
+    'Unpinned default does not replace real history.',
   );
   assert.equal(await page.locator('#recent-heading small').textContent(), 'C:/Personal.kicad_pro');
   assert.equal(await page.getByRole('button', { name: 'Open Personal', exact: true }).count(), 1);
@@ -147,6 +157,16 @@ try {
   const card = page.getByRole('button', { name: 'Open Latest.kicad_pcb', exact: true });
   await card.scrollIntoViewIfNeeded();
   await waitForAsync(page, () => document.querySelectorAll('#recent-heading svg use').length > 0);
+  await card.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin', exact: true }).click();
+  await waitForAsync(page, () => window.fixture.list.sections[0].examples[0]?.pinned === true);
+  assert.equal(await page.locator('#recent-heading small').textContent(), 'C:/Latest.kicad_pcb');
+  assert.equal(await card.locator('.home-example-pin').count(), 1);
+  await card.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
+  await waitForAsync(page, () => window.fixture.list.sections[0].examples[0]?.pinned === false);
+  assert.equal(await page.locator('#recent-heading small').textContent(), 'C:/Latest.kicad_pcb');
+  assert.equal(await card.locator('.home-example-pin').count(), 0);
   await card.focus();
   await page.keyboard.press('Shift+F10');
   const menu = page.getByRole('menu', { name: 'Recent project actions', exact: true });
@@ -160,7 +180,7 @@ try {
   await waitForAsync(page, () => document.querySelectorAll('#recent-heading h3').length === 0);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: initial EMC Flyback, real history replacement, live refresh, independent discovery failures, retry and inactive subscription cleanup.',
+    'PASS: default pinned EMC Flyback, Pin/Unpin, protected removal, live refresh, keyboard/IME, independent discovery failures and retry.',
   );
 } finally {
   await browser.close();

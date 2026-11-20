@@ -16,6 +16,10 @@ import { startAgentMCP } from '../server/agent-mcp.mjs';
 import { runAgent } from '../server/agents.mjs';
 import { startServer } from '../server/index.mjs';
 import { createCapabilityHost } from '../api/capabilities';
+import { ProjectCore } from '../core/project-core';
+import { registerLibraryCapabilities } from '../lib/library-capabilities';
+import { readLibraryDatasheet, readLibraryPrice } from '../lib/library-references';
+import { createProject } from '../lib/project';
 import {
   registerWorkbenchCapabilities,
   type WorkbenchCapabilityPorts,
@@ -75,6 +79,171 @@ test('full PDF reads text and actual diagram pixels from first and last pages', 
   assert.equal(first.image.width, 480);
   await assert.rejects(renderDatasheetPage(bytes, 1, false, 3, signal()), /page count/);
   await assert.rejects(renderDatasheetPage(bytes, 3, false, 2, signal()), /page/i);
+});
+
+test('chooser previews switch suppliers by exact part identity and isolate PDF bytes per source', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-library-datasheet-'));
+  const next = 'https://file.elecfans.com/web2/M00/27/D5/fixture.pdf';
+  const jlc = 'https://jlc-prod-smt.oss-eu-central-1.aliyuncs.com/smtDataManualFile/123-C123.pdf?signature=fixture';
+  const downloads: string[] = [];
+  const nextRecords = new Map([
+    ['Exact/Part', next.replace('https:', 'http:')],
+    ['Blocked', 'https://127.0.0.1/manual.pdf'],
+    ['NoPdf', 'https://www.ti.com/product/fixture'],
+    ['Redirect', next.replace('fixture', 'redirect')],
+    ['Large', next.replace('fixture', 'large')],
+    ['Retry', next.replace('fixture', 'retry')],
+    ['Cancel', next.replace('fixture', 'cancel')],
+  ]);
+  let retry = false;
+  let cancelStarted!: () => void;
+  let cancelObserved!: () => void;
+  const started = new Promise<void>((resolve) => (cancelStarted = resolve));
+  const cancelled = new Promise<void>((resolve) => (cancelObserved = resolve));
+  await mkdir(path.join(root, 'symbols'));
+  await mkdir(path.join(root, 'footprints'));
+  await writeFile(
+    path.join(root, 'symbols', 'Device.kicad_sym'),
+    [
+      '(kicad_symbol_lib (version 20241209)',
+      '(symbol "Fixture" (property "Reference" "U") (property "Value" "Fixture")',
+      '(property "MPN" "Exact/Part") (property "Manufacturer" "Fixture Devices"))',
+      '(symbol "Multiple" (property "Reference" "U") (property "Value" "Multiple")',
+      '(property "MPN" "Ambiguous")))',
+    ].join(' '),
+  );
+  const host = await startServer({
+    dataDir: path.join(root, 'app'),
+    libraryRoot: root,
+    nextpcbFetcher: async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).endsWith('/queryPage')) {
+        assert.match(body.desc, /^(Exact\/Part|Ambiguous)$/);
+        return Response.json({
+          code: 200000,
+          total: 2,
+          result: [
+            { manufacturer_id: '9729', manufacturer: 'Different Devices', mpn: body.desc },
+            { manufacturer_id: '9728', manufacturer: 'Fixture Devices', mpn: body.desc },
+          ],
+        });
+      }
+      assert.match(String(url), /\/productDetail$/);
+      const { manufacturer_id, mpn } = body;
+      assert.equal(manufacturer_id, '9728');
+      return Response.json({
+        code: 200000,
+        result: {
+          mfgId: 9728,
+          mpn: mpn === 'Mismatched' ? 'Different' : mpn,
+          mfg: 'Fixture Devices',
+          datasheet: nextRecords.get(mpn),
+        },
+      });
+    },
+    jlcpcbFetcher: async (url, init) => {
+      assert.match(String(url), /\/selectSmtComponentList\/v2$/);
+      const { keyword } = JSON.parse(String(init?.body));
+      const list = [
+        { componentCode: 'C124', componentModelEn: 'Exact/Part', componentBrandEn: 'Other Devices', dataManualFileAccessIdUrl: jlc },
+        { componentCode: 'C123', componentModelEn: 'Exact/Part', componentBrandEn: 'Fixture Devices', dataManualFileAccessIdUrl: jlc },
+      ];
+      assert.match(keyword, /^(C12[34]|Exact\/Part)$/);
+      return Response.json({ code: 200, data: { componentPageInfo: {
+        list, pageNum: 1, pageSize: 100, total: list.length,
+      } } });
+    },
+    datasheetFetcher: async (url, init) => {
+      downloads.push(String(url));
+      assert.equal(init?.redirect, 'error');
+      assert.equal(init?.credentials, 'omit');
+      if (String(url).includes('redirect'))
+        return Response.redirect('https://foreign.example/document.pdf');
+      if (String(url).includes('large'))
+        return new Response(bytes, { headers: { 'Content-Length': String(33 * 1024 * 1024) } });
+      if (String(url).includes('retry') && !retry) {
+        retry = true;
+        return new Response('<html>Temporary provider page</html>');
+      }
+      if (String(url).includes('cancel')) {
+        const requestSignal = init?.signal;
+        assert.ok(requestSignal);
+        cancelStarted();
+        return new Promise((_resolve, reject) => requestSignal.addEventListener('abort', () => {
+          cancelObserved();
+          reject(requestSignal.reason);
+        }, { once: true }));
+      }
+      return new Response(bytes);
+    },
+  });
+  const request = (body: object, token = host.token, requestSignal?: AbortSignal) =>
+    fetch(`${host.base}/api/library-datasheet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': token },
+      body: JSON.stringify(body),
+      signal: requestSignal,
+    });
+  const nextInput = { id: 'NextPCB:9728_Exact%2FPart', kind: 'symbols', source: 'huaqiu', page: 1 };
+  const withoutSource = { id: nextInput.id, kind: nextInput.kind, page: 1 };
+  try {
+    assert.equal((await request(nextInput, '')).status, 401);
+    assert.equal((await request({ ...nextInput, url: next })).status, 400);
+    assert.equal((await request({ ...nextInput, page: 0 })).status, 400);
+    assert.equal((await request({ ...nextInput, source: 'lcsc' })).status, 400);
+    assert.equal((await request(withoutSource)).status, 400);
+    assert.deepEqual(downloads, []);
+    for (const [page, source] of [[1, 'huaqiu'], [1, 'jlcpcb'], [2, 'huaqiu'], [2, 'jlcpcb']]) {
+      const response = await request({ id: 'Device:Fixture', kind: 'symbols', source, page });
+      assert.equal(response.status, 200, `${source} page ${page}`);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const preview = await response.json();
+      assert.deepEqual(Object.keys(preview).sort(), ['image', 'page', 'pageCount']);
+      assert.equal(preview.page, page);
+      assert.equal(preview.pageCount, 2);
+      assert.equal(preview.image.mimeType, 'image/png');
+      assert.match(preview.image.data, /^iVBORw0KGgo/);
+    }
+    assert.deepEqual(downloads, [next, jlc]);
+    for (const [id, kind, source, url] of [
+      [nextInput.id, 'symbols', 'huaqiu', next],
+      [nextInput.id, 'symbols', 'jlcpcb', jlc],
+      ['JLCPCB:C123', 'footprints', 'jlcpcb', jlc],
+      ['JLCPCB:C123', 'footprints', 'huaqiu', next],
+    ]) {
+      const response = await request({ id, kind, source, page: 1 });
+      assert.equal(response.status, 200, `${id} via ${source}`);
+      assert.equal((await response.json()).pageCount, 2);
+      assert.equal(downloads.at(-1), url);
+    }
+    const beforeEmpty = [...downloads];
+    for (const [id, source] of [
+      ['NextPCB:9728_Blocked', 'huaqiu'],
+      ['NextPCB:9728_NoPdf', 'huaqiu'],
+      ['Device:Multiple', 'huaqiu'],
+      ['JLCPCB:C124', 'jlcpcb'],
+    ]) {
+      const response = await request({ ...nextInput, id, source });
+      assert.equal(response.status, 200);
+      assert.equal(await response.json(), null);
+    }
+    assert.deepEqual(downloads, beforeEmpty);
+    for (const name of ['Mismatched', 'Redirect', 'Large', 'Retry']) {
+      assert.equal((await request({ ...nextInput, id: 'NextPCB:9728_' + name })).status, 422);
+    }
+    assert.equal((await request({ ...nextInput, id: 'NextPCB:9728_Retry' })).status, 200);
+    const controller = new AbortController();
+    const pending = assert.rejects(
+      request({ ...nextInput, id: 'NextPCB:9728_Cancel' }, host.token, controller.signal),
+      { name: 'AbortError' },
+    );
+    await started;
+    controller.abort();
+    await Promise.all([pending, cancelled]);
+  } finally {
+    await host.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('vendor downloads reject redirects, changed revisions, oversized responses and cancellation', async () => {
@@ -235,6 +404,10 @@ test('native tool and MCP results deliver actual PNG content without base64 in m
   const content = agentCapabilityContent('openpe_query', args, result);
   assert.equal(content.image, result.image.data);
   assert.equal(JSON.parse(content.text).image.data, undefined);
+  assert.deepEqual(
+    agentCapabilityContent('openpe_query', { name: 'library.datasheet.page' }, result),
+    content,
+  );
   assert.equal(
     agentCapabilityContent('openpe_query', { name: 'other.query' }, result).image,
     undefined,
@@ -286,6 +459,49 @@ test('native tool and MCP results deliver actual PNG content without base64 in m
     input.end();
     output.end();
   }
+});
+
+test('Agent library references use the same bounded catalog reads as the chooser', async (t) => {
+  const page = await renderDatasheetPage(bytes, 1, true, 2, signal(), { includeText: false });
+  const price = { source: 'lcsc' as const, currency: 'USD', checkedAt: 1, offers: [] };
+  const part = { id: 'JLCPCB:C123', kind: 'symbols' as const };
+  const quoteInput = { ...part, source: 'lcsc' as const };
+  const pageInput = { ...part, source: 'jlcpcb' as const, page: 1 };
+  t.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+    if (url === '/api/browser-preview/session') return Response.json({ token: 'f'.repeat(64) });
+    assert.ok(options.signal);
+    if (url === '/api/browser-preview/price') {
+      assert.deepEqual(JSON.parse(String(options.body)), quoteInput);
+      return Response.json(price);
+    }
+    assert.equal(url, '/api/browser-preview/datasheet');
+    assert.deepEqual(JSON.parse(String(options.body)), pageInput);
+    return Response.json(page);
+  });
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: {}, configurable: true });
+  const core = new ProjectCore(createProject());
+  const host = createCapabilityHost();
+  t.after(() => {
+    host.dispose();
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  });
+  registerLibraryCapabilities(host, core);
+  const before = core.getSnapshot();
+  const actor = { actor: 'agent' } as const;
+  assert.deepEqual(
+    await host.query('library.price', quoteInput, actor),
+    await readLibraryPrice(quoteInput, signal()),
+  );
+  assert.deepEqual(
+    await host.query('library.datasheet.page', pageInput, actor),
+    await readLibraryDatasheet(pageInput, signal()),
+  );
+  await assert.rejects(host.query('library.price', { ...quoteInput, source: 'jlcpcb' }, actor));
+  await assert.rejects(host.query('library.datasheet.page', { ...pageInput, page: 0 }, actor));
+  await assert.rejects(host.query('library.datasheet.page', { ...pageInput, url: 'invalid' }, actor));
+  assert.equal(core.getSnapshot(), before);
 });
 
 test('Codex protocol delivers the rendered PDF page as inputImage', async () => {

@@ -12,6 +12,7 @@ import {
 } from '../server/plugins.mjs';
 import { startServer } from '../server/index.mjs';
 import { setCodexPluginEnabled } from '../server/plugin-toggle.mjs';
+import { waitForProcessStopped } from '../scripts/process-test-helpers.mjs';
 
 const installed = {
   pluginId: 'docs@official',
@@ -352,7 +353,7 @@ test('plugin subprocess closes stdin, bounds output/time, and cancels its proces
   control.abort();
   await rejection;
   const pids = JSON.parse(await readFile(path.join(cwd, 'plugin-pids.json'), 'utf8'));
-  for (const pid of pids) assert.throws(() => process.kill(pid, 0));
+  for (const pid of pids) await waitForProcessStopped(pid);
 });
 
 test('plugin API enforces token, origin, bounded actions, concurrency and shutdown cancellation', async () => {

@@ -141,10 +141,15 @@ try {
   await page.addInitScript(() => {
     window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
   });
-  await page.route('http://localhost/**', (route) => {
+  await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/')
       return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
+    if (['/brand/openpe-mark.svg', '/brand/openpe-signal.svg'].includes(url.pathname))
+      return route.fulfill({
+        contentType: 'image/svg+xml',
+        body: await readFile(`public${url.pathname}`),
+      });
     if (url.pathname === '/api/libraries/footprints') {
       footprintRequests++;
       if (failFootprints)
@@ -177,9 +182,55 @@ try {
     const text = await region(name).innerText();
     for (const label of expectedLabels) assert.ok(text.includes(label), `${name} uses ${label}`);
   }
+  async function checkNavigation(name) {
+    const comparison = region(name);
+    const drawings = comparison.locator('svg[role="img"]');
+    const first = drawings.nth(0);
+    const fitted = await first.getAttribute('viewBox');
+    const synchronized = async () => {
+      const view = await first.getAttribute('viewBox');
+      assert.equal(view, await drawings.nth(1).getAttribute('viewBox'));
+      return view;
+    };
+    const changed = async (previous) => {
+      await waitForAsync(
+        page,
+        ({ name, previous }) =>
+          document
+            .querySelector(`[aria-label="${name}"] svg[role="img"]`)
+            ?.getAttribute('viewBox') !== previous,
+        { name, previous },
+      );
+      return synchronized();
+    };
+    await comparison.getByRole('button', { name: 'Zoom in comparison', exact: true }).click();
+    const zoomed = await changed(fitted);
+    await first.focus();
+    for (const composition of [{ keyCode: 229 }, { isComposing: true }]) {
+      await first.dispatchEvent('keydown', { key: 'ArrowRight', ...composition });
+      assert.equal(await synchronized(), zoomed, `${name}: IME does not pan.`);
+    }
+    await first.press('ArrowRight');
+    const panned = await changed(zoomed);
+    await drawings.nth(1).dispatchEvent('wheel', { deltaY: -100 });
+    const wheeled = await changed(panned);
+    const bounds = await first.boundingBox();
+    const x = bounds.x + bounds.width / 2;
+    const y = bounds.y + bounds.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 30, y + 20, { steps: 3 });
+    const dragged = await changed(wheeled);
+    await page.mouse.up();
+    await page.mouse.move(x + 50, y + 40);
+    assert.equal(await synchronized(), dragged, `${name}: pointer release ends the pan.`);
+    await comparison.getByRole('button', { name: 'Fit comparison', exact: true }).click();
+    assert.equal(await synchronized(), fitted, `${name}: Fit restores the measured bounds.`);
+  }
   for (const name of ['Schematic', 'Layout', 'Model', 'Source'])
     assert.equal(await button(`${name} comparison`).count(), 1);
   await assertLabels('Schematic comparison');
+  await checkNavigation('Schematic comparison');
   await button('Layout comparison').click();
   const layout = region('Layout comparison');
   await layout.waitFor();
@@ -200,20 +251,7 @@ try {
   });
   const fitted = await drawings.nth(0).getAttribute('viewBox');
   assert.equal(fitted, await drawings.nth(1).getAttribute('viewBox'));
-  await layout.getByRole('button', { name: 'Zoom in comparison', exact: true }).click();
-  const zoomed = await drawings.nth(0).getAttribute('viewBox');
-  assert.notEqual(zoomed, fitted);
-  assert.equal(zoomed, await drawings.nth(1).getAttribute('viewBox'));
-  await drawings.nth(0).focus();
-  await drawings.nth(0).dispatchEvent('keydown', { key: 'ArrowRight', keyCode: 229 });
-  assert.equal(await drawings.nth(0).getAttribute('viewBox'), zoomed, 'IME does not pan.');
-  await drawings.nth(0).press('ArrowRight');
-  assert.notEqual(await drawings.nth(0).getAttribute('viewBox'), zoomed);
-  assert.equal(
-    await drawings.nth(0).getAttribute('viewBox'),
-    await drawings.nth(1).getAttribute('viewBox'),
-  );
-  await layout.getByRole('button', { name: 'Fit comparison', exact: true }).click();
+  await checkNavigation('Layout comparison');
   assert.equal(await drawings.nth(0).getAttribute('viewBox'), fitted);
   await page.screenshot({ path: 'test-results/history-layout-comparison.png' });
   await button('Model comparison').click();

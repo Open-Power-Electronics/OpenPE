@@ -16,7 +16,8 @@ export type AnnotationElement = {
     | 'track'
     | 'via'
     | 'graphic'
-    | 'zone';
+    | 'zone'
+    | 'solid';
   label: string;
   properties: Record<string, string>;
 };
@@ -257,11 +258,12 @@ export function validateAnnotations(
         (!uuid.test(e.id) &&
           (layout || !/^field\/[0-9a-f-]{36}\/(Reference|Value|Sim\.Params)$/i.test(e.id))) ||
         elements.has(e.id) ||
-        !(
-          layout
-            ? ['footprint', 'pad', 'track', 'via', 'graphic', 'zone']
-            : ['component', 'field', 'wire', 'label', 'junction', 'no-connect', 'text']
-        ).includes(String(e.kind)) ||
+        (!(a.target === 'object' && e.kind === 'solid') &&
+          !(
+            layout
+              ? ['footprint', 'pad', 'track', 'via', 'graphic', 'zone']
+              : ['component', 'field', 'wire', 'label', 'junction', 'no-connect', 'text']
+          ).includes(String(e.kind))) ||
         !text(e.label, 4096)
       )
         throw new Error('Invalid annotated element.');

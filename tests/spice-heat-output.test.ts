@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseWaveforms } from '../server/spice-waveforms.mjs';
-import { validatedSimulationResult } from '../lib/waveform';
-import type { SpiceDeck } from '../lib/spice';
+import { parseWaveforms } from '../plugins/spice-simulation/host/spice-waveforms.mjs';
+import { validatedSimulationResult } from '../plugins/spice-simulation/domain/waveform';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
@@ -13,7 +13,11 @@ import path from 'node:path';
 
 const solverPlatform = `${process.platform}-${process.arch}`;
 const ngspiceExecutable =
-  solverPlatform === 'win32-x64' ? 'ngspice_con.exe' : solverPlatform === 'darwin-arm64' ? 'ngspice' : '';
+  solverPlatform === 'win32-x64'
+    ? 'ngspice_con.exe'
+    : solverPlatform === 'darwin-arm64'
+      ? 'ngspice'
+      : '';
 
 const deck: SpiceDeck = {
   netlist: '',
@@ -102,7 +106,7 @@ test(
       ) as unknown as typeof childProcess.execFile;
       syncBuiltinESMExports();
       const { findSimulationResult, prepareSimulation } = await import(
-        new URL('../server/spice.mjs?heat-identity', import.meta.url).href
+        new URL('../plugins/spice-simulation/host/spice.mjs?heat-identity', import.meta.url).href
       );
       const keys: string[] = [];
       const files = {

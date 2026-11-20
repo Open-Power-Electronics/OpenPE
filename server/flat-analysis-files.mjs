@@ -1,3 +1,4 @@
+import { isPluginProjectDirectory } from './plugin-project-format.cjs';
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, realpath, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -69,9 +70,9 @@ async function regularFile(file) {
 
 async function privateDirectory(directory, type) {
   const kind = path.basename(directory);
-  if (!['spice', 'thermal'].includes(kind)) throw new Error('Invalid analysis directory.');
-  await regularDirectory(path.dirname(directory));
-  const temporary = path.join(path.dirname(directory), `.${kind}-${type}-${randomUUID()}-backups`);
+  if (!isPluginProjectDirectory(kind)) throw new Error('Invalid analysis directory.');
+  await regularDirectory(directory);
+  const temporary = path.join(directory, `.${type}-${randomUUID()}-backups`);
   await mkdir(temporary);
   await regularDirectory(temporary);
   return temporary;
@@ -83,9 +84,8 @@ export const createAnalysisStaging = (directory) => privateDirectory(directory, 
 export async function discardAnalysisStaging(directory, allowedNames) {
   if (!(await missing(directory))) return;
   if (
-    !/^\.(?:spice|thermal)-(?:pending|previous)-[a-f0-9-]{36}-backups$/.test(
-      path.basename(directory),
-    )
+    !/^\.(?:pending|previous)-[a-f0-9-]{36}-backups$/.test(path.basename(directory)) ||
+    !isPluginProjectDirectory(path.basename(path.dirname(directory)))
   )
     throw new Error('Invalid private analysis folder.');
   if (!Array.isArray(allowedNames) || !allowedNames.every(safeName))
@@ -130,9 +130,8 @@ export async function publishAnalysisFiles({
     !named(previousNames) ||
     !named(nextNames) ||
     !nextNames.includes(manifestName) ||
-    path.dirname(staging) !== path.dirname(directory) ||
-    !path.basename(staging).startsWith(`.${path.basename(directory)}-pending-`) ||
-    !path.basename(staging).endsWith('-backups')
+    path.dirname(staging) !== directory ||
+    !/^\.pending-[a-f0-9-]{36}-backups$/.test(path.basename(staging))
   )
     throw new Error('Invalid flat analysis publication.');
   const inspect = async () => {

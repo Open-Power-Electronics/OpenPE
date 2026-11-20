@@ -244,44 +244,8 @@ export async function emcProjectAssets(project) {
       selected.set(model.path.slice('${KIPRJMOD}/'.length), relative);
     }
   }
-  if (!selected.size) return [];
   const assets = [];
   for (const [file, relative] of selected)
     assets.push({ file, bytes: await readAsset(models.get(relative)) });
-  for (const entry of manifest.licenses)
-    assets.push({
-      file: `licenses/emc-flyback-demo/${entry.file === 'LICENSE' ? 'LICENSE' : 'MODEL-SOURCES.md'}`,
-      bytes: await readAsset(entry),
-    });
-  if ([...selected.values()].some((relative) => models.get(relative).supplemental)) {
-    for (const entry of supplementalLicenses)
-      assets.push({
-        file: `licenses/emc-flyback-demo/manufacturer/${entry.file}`,
-        bytes: await readAsset(entry, supplementalRoot),
-      });
-    const provenance = {
-      version: 1,
-      models: Object.fromEntries(
-        [...models]
-          .filter(([, entry]) => entry.supplemental)
-          .map(([relative, { supplemental: _supplemental, ...entry }]) => [relative, entry]),
-      ),
-      licenses: supplementalLicenses,
-    };
-    assets.push({
-      file: 'licenses/emc-flyback-demo/manufacturer/manifest.json',
-      bytes: Buffer.from(JSON.stringify(provenance, null, 2) + '\n'),
-    });
-  }
-  assets.push({
-    file: 'licenses/emc-flyback-demo/KICAD-LICENSE.md',
-    bytes: await readAsset(manifest.kicadLicense, kicadLicenseRoot),
-  });
-  const notice =
-    'EMC Flyback demonstration, pinned from ChengminLi/AI-PCB-layout.\nSource commit: e1b9a64ac9ac306647fa30094932fb792d17e373\nSource: https://github.com/ChengminLi/AI-PCB-layout/tree/main/examples/emc-flyback-demo\nUpstream STEP bytes are copied unchanged. L2 and T1 are OpenPE analytical bodies L_8040_Shielded.step and T_EFD25_SMD.step; no third-party license applies to those two files. Project models use CC BY 4.0. Copied KiCad library models use CC BY-SA 4.0 with the KiCad library exception. See LICENSE, MODEL-SOURCES.md and KICAD-LICENSE.md.\nThe remaining manufacturer reference is the marked WE-CMB derivative. Its terms accompany that model in manufacturer/.\n';
-  assets.push({
-    file: 'licenses/emc-flyback-demo/NOTICE.txt',
-    bytes: Buffer.from(notice),
-  });
   return assets;
 }

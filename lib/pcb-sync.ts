@@ -1,20 +1,22 @@
 import { pinPositions, uid, type Circuit, type Part, type Point } from './circuit';
 import { partFields, unitGraphics } from './library';
 import { child, children, val, type SExpr } from './sexpr';
-import { invalidatePCBFill, type PCB, type Footprint } from './pcb';
+import { invalidatePCBFill, type PCB, type Footprint, type Pad } from './pcb';
 import { createEmptyPCB, createPCBFootprint, flipPCBFootprint, pcbBounds } from './pcb-layout';
 import { isOwnedCircuit, isOwnedPCB } from './immutable-project';
+import { parasiticPhysicalModels } from './parasitic-model';
+import { padApertureLayers, padHasElectricalPin } from './pcb-pad-role';
 
 type Pin = { key: string; ref: string; number: string; index: number };
-export type SchematicNet = { name: string; pins: string[] };
-export type PCBUpdate = {
+type SchematicNet = { name: string; pins: string[] };
+type PCBUpdate = {
   board: PCB;
   added: number;
   replaced: number;
   changed: boolean;
   warnings: string[];
 };
-export type FootprintSource = { id: string; footprint: SExpr };
+export type FootprintSource = { id: string; footprint: SExpr; projectAssets?: true };
 export type EmbeddedFootprintAssignment = { libraryId: string; assignment: string };
 type EmbeddedAssignments = ReadonlyMap<string, EmbeddedFootprintAssignment>;
 export const pcbPinKey = (ref: string, number: string) => JSON.stringify([ref, number]);
@@ -40,7 +42,10 @@ export function schematicPCBNets(circuit: Circuit): SchematicNet[] {
   return nets;
 }
 
-function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
+function computeSchematicPCBNets(
+  circuit: Circuit,
+  conductorModels: ReturnType<typeof parasiticPhysicalModels> = [],
+): SchematicNet[] {
   if (circuit.parts.length > 2000 || circuit.wires.length > 10000)
     fail('PCB update supports at most 2,000 symbols and 10,000 wires.');
   const points: Point[] = [],
@@ -62,6 +67,13 @@ function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
     parents[root(a)] = root(b);
   };
   const names: { name: string; index: number }[] = [];
+  // An explicitly declared extracted conductor is finite R/L in the schematic
+  // and SPICE, but remains the same piece of copper for PCB synchronization.
+  // Ordinary virtual passives never receive this physical-only equivalence.
+  const conductorParts = new Set(conductorModels.flatMap((model) => model.parts.map((p) => p.id)));
+  const conductorAliases = new Set(
+    conductorModels.flatMap((model) => [model.startLabel, model.endLabel]),
+  );
   const wires = circuit.wires.map((w) => {
     const a = add(w.a),
       b = add(w.b);
@@ -75,6 +87,7 @@ function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
     const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, 'pin'));
     const positions = pinPositions(part, library);
     const power = Boolean(child(library, 'power'));
+    const modelPins: number[] = [];
     definitions.forEach((pin, i) => {
       const index = add(positions[i]),
         number = val(child(pin, 'number'));
@@ -82,7 +95,8 @@ function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
       const previous = physical.get(pinKey);
       if (previous !== undefined) join(index, previous);
       physical.set(pinKey, index);
-      pins.push({ key: pinKey, ref: part.ref, number, index });
+      if (conductorParts.has(part.id)) modelPins.push(index);
+      else pins.push({ key: pinKey, ref: part.ref, number, index });
       // KiCad power symbols use Value; hidden power-input pins use their name.
       if (power && definitions.length === 1 && val(pin) === 'power_in')
         names.push({ name: part.value, index });
@@ -93,6 +107,7 @@ function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
       )
         names.push({ name: val(child(pin, 'name')), index });
     });
+    if (modelPins.length === 2) join(modelPins[0], modelPins[1]);
   }
   circuit.labels.forEach((l) => names.push({ name: l.text, index: add(l) }));
   circuit.junctions.forEach(add);
@@ -176,6 +191,7 @@ function computeSchematicPCBNets(circuit: Circuit): SchematicNet[] {
   });
   const groupNames = new Map<number, Set<string>>();
   names.forEach((n) => {
+    if (conductorAliases.has(n.name)) return;
     const r = root(n.index);
     if (!groupNames.has(r)) groupNames.set(r, new Set());
     groupNames.get(r)!.add(n.name);
@@ -229,6 +245,29 @@ function componentGroups(circuit: Circuit) {
     return included[0];
   });
 }
+
+/** Symbols eligible for board packages, independently of simulation participation.
+ * Keep unassigned instances here: their pins still contribute physical net names. */
+export function pcbIncludedParts(circuit: Circuit): Part[] {
+  return componentGroups(circuit).flat();
+}
+
+/** Resolve all schematic connections before projecting onto board-included pins.
+ * Virtual sources, power symbols and labels can join/name physical nets, while
+ * an isolated simulation-only island has no corresponding PCB net. */
+export function schematicPCBPhysicalNets(circuit: Circuit, board?: PCB): SchematicNet[] {
+  const models = parasiticPhysicalModels(circuit, board);
+  const pins = new Set(
+    pcbIncludedParts(circuit).flatMap((part) =>
+      unitGraphics(circuit.libraries[part.libId], part.unit || 1).flatMap((unit) =>
+        children(unit, 'pin').map((pin) => pcbPinKey(part.ref, val(child(pin, 'number')))),
+      ),
+    ),
+  );
+  return (models.length ? computeSchematicPCBNets(circuit, models) : schematicPCBNets(circuit))
+    .map((net) => ({ ...net, pins: net.pins.filter((pin) => pins.has(pin)) }))
+    .filter((net) => net.pins.length > 0);
+}
 function assignment(parts: Part[]) {
   const assigned = [
     ...new Set(parts.map((p) => (partFields(p).Footprint || '').trim()).filter(Boolean)),
@@ -275,14 +314,23 @@ export function updatePCBFromSchematic(
   sources: ReadonlyMap<string, FootprintSource>,
   embedded?: EmbeddedAssignments,
 ): PCBUpdate {
-  const schematicNets = schematicPCBNets(circuit);
+  const schematicNets = schematicPCBPhysicalNets(circuit, current);
   pcbUpdateFootprintIds(circuit, current, embedded);
   const board = current || createEmptyPCB(),
     warnings: string[] = [];
   let added = 0,
     replaced = 0;
   let cursor: number | undefined;
-  const footprints = [...board.footprints];
+  const sourceParts = new Map(circuit.parts.map((part) => [part.id, part]));
+  const excludedFootprints = new Set(
+    board.footprints
+      .filter((footprint) => {
+        const part = sourceParts.get(footprint.symbolId ?? '');
+        return part && val(child(part.raw ?? [], 'on_board')) === 'no';
+      })
+      .map((footprint) => footprint.id),
+  );
+  const footprints = board.footprints.filter((footprint) => !excludedFootprints.has(footprint.id));
   for (const parts of componentGroups(circuit)) {
     const part = parts[0],
       id = assignment(parts);
@@ -309,7 +357,12 @@ export function updatePCBFromSchematic(
     if (old) {
       if (old.side === 'back') next = flipPCBFootprint(next);
       const ids = new Map<string, string[]>();
-      old.pads.forEach((p) => ids.set(p.number, [...(ids.get(p.number) || []), p.id]));
+      const padKey = (pad: Pad) =>
+        `${padApertureLayers(pad)?.toSorted().join(',') ?? (padHasElectricalPin(pad) ? 'electrical' : 'mechanical')}:${pad.number}`;
+      for (const pad of old.pads) {
+        const key = padKey(pad);
+        ids.set(key, [...(ids.get(key) ?? []), pad.id]);
+      }
       next = {
         ...old,
         ...next,
@@ -317,7 +370,7 @@ export function updatePCBFromSchematic(
         x: old.x,
         y: old.y,
         rotation: old.rotation,
-        pads: next.pads.map((p) => ({ ...p, id: ids.get(p.number)?.shift() || p.id })),
+        pads: next.pads.map((p) => ({ ...p, id: ids.get(padKey(p))?.shift() ?? p.id })),
       };
       footprints[index] = next;
       replaced++;
@@ -342,6 +395,7 @@ export function updatePCBFromSchematic(
   const targets = new Map<string, Set<number | null>>();
   board.footprints.forEach((f) =>
     f.pads.forEach((p) => {
+      if (excludedFootprints.has(f.id)) return;
       const part = parts.get(f.symbolId || '');
       if (!p.netId || !part) return;
       const target = pinNet.get(pcbPinKey(part.ref, p.number)) ?? null;
@@ -394,6 +448,7 @@ export function updatePCBFromSchematic(
       const pads = retainArray(
         f.pads,
         f.pads.map((pad) => {
+          if (!padHasElectricalPin(pad)) return pad;
           const index = pinNet.get(pcbPinKey(part.ref, pad.number));
           const netId = index === undefined ? null : nets[index].id;
           return pad.netId === netId ? pad : { ...pad, netId };

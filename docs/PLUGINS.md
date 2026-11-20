@@ -1,26 +1,122 @@
 # Plugin design specification
 
-OpenPE manages bundled workbench features and installed Codex/Claude Code
-plugins through separate bounded adapters. The capability registry is not a
-runtime extension loader or online catalog. [API.md](API.md) defines schemas,
+OpenPE supports built-in workbench features and locally installed JavaScript
+plugins through a shared manifest and capability lifecycle. Codex/Claude Code
+provider plugins use separate adapters. [API.md](API.md) defines schemas,
 [CORE.md](CORE.md) defines shared execution/review, and
 [DESIGN.md](../DESIGN.md) defines the shared editor and control system. This
 specification owns plugin presentation, lifecycle and provider integration.
 
+## Plugin packages and SDK
+
+Each built-in plugin has an independent root:
+
+| Directory                    | Feature                                                      |
+| ---------------------------- | ------------------------------------------------------------ |
+| `plugins/spice-simulation/`  | SPICE compiler, waveforms, UI and native solver adapters     |
+| `plugins/layout-thermal/`    | Thermal model, field UI, mesh and solver adapters            |
+| `plugins/pe-layout-skill/`   | Guidance capability, verified upstream resources and service |
+| `plugins/layout-parasitics/` | Pure network analysis, labelled study preparation and panel capabilities |
+| `plugins/emc-analysis/` | Pure PCB review/check geometry, manual review/report contracts and panel queries |
+
+Each root owns `manifest.json` and its `domain/`, `renderer/`, `host/`,
+`electron/` or `resources/` directories as needed. Core native simulation fields,
+shared controls, project grants and result-file persistence remain host/Core
+infrastructure. `plugins/runtime/` owns manifest validation, capability scopes,
+local packages and sandbox execution. The architecture checker enforces each
+subdirectory's original browser/domain/host boundary.
+
+Built-in manifests are explicitly imported by `plugins/catalog.mjs`; custom
+artwork is registered in `plugins/renderer.tsx`. Add the feature's bounded host
+and renderer ports as needed. `createPluginScope` permits only manifest-declared
+capabilities owned by that plugin, retains schema/revision/review checks and
+cancels active requests on disable/disposal.
+
+### Project data directories
+
+A plugin's project data belongs beside the `.kicad_pro`, inside the directory
+named by its built-in manifest's `projectDirectory`:
+
+| Plugin            | Project files                                                          |
+| ----------------- | ---------------------------------------------------------------------- |
+| SPICE Simulation  | `spice-simulation/<native-stem>.*` for completed results               |
+| Layout Thermal    | `layout-thermal/<native-stem>.*` for completed results                 |
+| PE Layout Skill   | `pe-layout-skill/` when project-owned data is needed; currently none   |
+| Layout Parasitics | No private project data; explicit study creation adds components to an existing native schematic |
+| EMC Analysis | No project data; intent, review, checklist and exceptions stay in the panel session; explicit report downloads are separate artifacts |
+
+The shared `plugins/runtime/project-data.mjs` maps plugin identities to these
+names. Local plugin identities use `name@publisher` to avoid publisher collisions;
+the current JavaScript sandbox adds no filesystem/storage permission. Installation
+packages, bundled resources and application-wide plugin enablement remain app
+infrastructure. Empty project directories are not created for stateless plugins.
+This layout does not make session-only settings persistent.
+
+Shared model assets belong in the project's root `models/` directory, including
+simulation `.lib` files and 3D models. They are project resources available across
+plugins; manifests cannot reserve the shared `models/`, `footprints/` or
+`symbols/` directories for plugin data. Native model sidecars follow normal Source/Save/history preservation.
+Solver results and private publication/rollback folders stay inside their owning
+plugin directory, outside native design/recovery/undo. Native discovery skips
+plugin data directories. Home packaging includes shared models and excludes
+generated results. All writes retain their live project-grant, link and integrity
+checks. Examples use the same layout and retain original model bytes.
+
+### Install a local plugin
+
+In desktop Plugins, choose **Install plugin from file**, select an
+`.openpe-plugin` package and review its author, version and permissions in the
+native confirmation. Installation copies the reviewed package into app data at
+`plugins/<id>/package.json`. Disable/uninstall cancels active workers. Uninstall
+removes that package; reinstall requires the original file. Replacement requires
+uninstall and a fresh permission approval. Browser development exposes the five
+built-in features; local installation/execution requires desktop.
+
+A version-1 package is UTF-8 JSON with `format: "openpe-plugin"`, `version: 1`,
+`manifest` and JavaScript `source`. The manifest contract is
+[`api/plugins.ts`](../api/plugins.ts). Runtime is `javascript`, entry is
+`main.js`, and command IDs use
+`extension.<publisher_with_underscores>.<name_with_underscores>.<command>` for
+`name@publisher`. Input schemas use the bounded capability subset, excluding
+regular expressions. Unknown fields, API versions and permissions are rejected.
+
+Use the complete [Project Summary package](examples/project-summary.openpe-plugin)
+as a working example. Source calls `registerPlugin({ handler(input, context) {
+return result; } })`; each declared command names a synchronous handler. Commands
+appear in plugin details and the originating project's GUI/Agent capability
+catalog as read-only queries. Returned JSON does not apply design edits.
+
+Permissions are explicit: `[]` supplies command inputs only; `['project.read']`
+also supplies `{project}` from that project's current `project.get` query at
+invocation. No other project, filesystem handle, service token or credential is
+passed. Each invocation starts a fresh QuickJS WebAssembly context in a dedicated
+worker, without Node, browser, module, filesystem or network APIs. Packages do
+not load npm dependencies or custom HTML. JavaScript execution is bounded to
+32 MiB/2 seconds, with a 5-second worker deadline, 1 MiB source, 2 MiB result,
+12 MiB combined input and four concurrent runs per plugin/eight globally.
+
+The host validates packages/schemas before installation, binds execution to the
+installed SHA-256, and preserves invalid files on errors. That hash identifies
+installed bytes; it does not authenticate a publisher. Package installation
+uses a native picker, never a renderer-supplied path/source or Agent tool.
+
 ## Bundled plugin surfaces
 
-| Plugin | Catalog ID | Workbench entry | Output |
-| --- | --- | --- | --- |
-| [SPICE Simulation](SIMULATION.md) | `spice-simulation@openpe` | Schematic Plugins toolbar group and component SPICE Properties | Transient waveforms and probe readouts |
-| [Layout Thermal](THERMAL.md) | `pcb-thermal@openpe` | Layout Plugins toolbar group | Board temperature map, probes and image export |
-| [PE Layout Skill](#pe-layout-skill) | `ai-pcb-layout@openpe` | Plugin details and scoped Agent guidance | Verified bundled workflow and references |
-| [Layout Parasitics](LAYOUT.md#layout-parasitics) | `layout-parasitics@openpe` | Layout Plugins toolbar group | Estimated two-terminal DC resistance, shortest modeled path and partial inductance |
+| Plugin                                           | Catalog ID                 | Workbench entry                                                | Output                                                                             |
+| ------------------------------------------------ | -------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [SPICE Simulation](SIMULATION.md)                | `spice-simulation@openpe`  | Schematic Plugins toolbar group and component SPICE Properties | Transient waveforms and probe readouts                                             |
+| [Layout Thermal](THERMAL.md)                     | `pcb-thermal@openpe`       | Layout Plugins toolbar group                                   | Board temperature map, probes and image export                                     |
+| [PE Layout Skill](#pe-layout-skill)              | `ai-pcb-layout@openpe`     | Plugin details and scoped Agent guidance                       | Verified bundled workflow and references                                           |
+| [Layout Parasitics](LAYOUT.md#layout-parasitics) | `layout-parasitics@openpe` | Layout Plugins toolbar group                                   | Two-terminal DC resistance, shortest-path partial inductance and labelled schematic studies |
+| [EMC Analysis](EMC.md) | `emc-analysis@openpe` | Layout Plugins toolbar group | Explicit intent, geometric findings, locating, manual review/exceptions and HTML/JSON reports |
 
 Toolbar groups appear when an installed and enabled plugin contributes an
 action. Use the shared [toolbar order and spacing](../DESIGN.md#toolbars-and-tool-settings).
 The shared PluginLogo uses 17 px in toolbars and 64 px in details, with a
 4-unit outline on its 64-unit viewBox. Layout Parasitics depicts two plated
 pad rings joined by parallel traces, with one trace in signal green.
+EMC Analysis depicts two pairs of signal-green wavefronts radiating from a
+single point.
 
 ## Page and categories
 
@@ -41,8 +137,9 @@ Enable/disable acts immediately; Uninstall requires confirmation. Keep confirmed
 rows and empty states during refresh/mutations, with per-provider loading and
 actionable errors. Catalog warnings use Refresh's accessible description.
 
-Use the Blocks icon after Open project in the rail. The Plugins sidebar is
-228 px wide and narrows to 200 px in compact windows. Show counts beside
+Use the Blocks icon after Open project in the rail. The Plugins sidebar takes 19% of the page within 148–228 px.
+The catalog uses two columns and switches to one when its content is narrower
+than 552 px. Show counts beside
 category names. Preserve projects, drafts, conversations and the Home brief
 through navigation. Keep provider choice in the category list.
 
@@ -63,6 +160,12 @@ footers fixed around a scrolling settings body. Layout dock replacement,
 resizing and sidebar restoration follow the
 [editor dock contract](../DESIGN.md#analysis-dock).
 
+EMC Analysis keeps its header and Check/Recheck/Retry footer fixed. Setup,
+Findings and Checklist share the scrolling body. Setup declares native intent
+and user budgets; findings group/filter with evidence, remediation and locating;
+manual decisions and justified exceptions stay bound to the current report.
+Opening can seed the single net named by current track/via selections.
+
 Use Properties surfaces, 10 px exposed corners and 8/12 px body insets for
 SPICE and Thermal. Settings rows have 4 px gaps and 64% value columns with a
 112 px minimum. Action footers have a surface background, soft top divider,
@@ -73,24 +176,29 @@ Wrapping feedback can expand the footer.
 Footer actions use 14 px icons in square targets matching the adjacent Grid
 button's height at each text size. Keep resting backgrounds transparent and
 retain hover and keyboard-focus feedback, accessible action names and hover
-titles. Use Play for Run, Square for Stop, a circular arrow for Reset and a
-ruler for Measure. Measure shows a spinner while pending. The Parasitics
-footer keeps its live picking status to the left of Reset and Measure. Its
-canvas interaction follows [Layout Parasitics](../DESIGN.md#layout-parasitics).
+titles. Use Play for Run, Square for Stop and a circular arrow for Reset.
+Parasitics automatically measures a valid terminal pair, with a pending spinner
+beside Results. Its footer offers Add parasitic components and Clear selected
+terminals, using a document with an inward arrow and an eraser respectively.
+Canvas interaction follows [Layout Parasitics](../DESIGN.md#layout-parasitics).
 
 ## Shared capability interface
 
-Human controls and scoped Codex/Claude tools use the same per-project host.
-DeepSeek/Pi use context/proposals. Cursor uses the service-hosted SDK with the same scoped tools as Codex/Claude.
+Human controls and scoped Codex, Claude Code and Cursor tools use the same
+per-project host. DeepSeek/Pi use context/proposals. See [Agent tools](API.md#agent-tools)
+for provider transports.
 
-| Capability                           | Contract                                                                                                 |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `workbench.plugins.list` / `.change` | Read confirmed bundled catalog; change a fixed allowlisted ID using install/uninstall/enable/disable     |
-| `provider.plugins.list` / `.change`  | Read one provider's installed entries; mutate an explicit qualified ID after service policy/scope checks |
-| `pcbDesign.guide`                    | Read a fixed, verified workflow/reference when enabled                                                   |
-| `parasitics.measure`                | [Two-terminal PCB DC resistance, route length and partial inductance](LAYOUT.md#layout-parasitics)     |
-| `simulation.*`                       | [SPICE settings, runs, probes and waveforms](SIMULATION.md#shared-simulation-capabilities)               |
-| `thermal.*`                          | [Layout Thermal settings, runs, probes and images](THERMAL.md#interface)                                 |
+| Capability                           | Contract                                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `workbench.plugins.list` / `.change` | Read the confirmed catalog; change a discovered ID using install/uninstall/enable/disable. Local installation uses the native picker |
+| `provider.plugins.list` / `.change`  | Read one provider's installed entries; mutate an explicit qualified ID after service policy/scope checks                             |
+| `pcbDesign.guide`                    | Read a fixed, verified workflow/reference when enabled                                                                               |
+| `parasitics.measure`                 | [Two-terminal PCB DC resistance, route length and partial inductance](LAYOUT.md#layout-parasitics)                                   |
+| `parasitics.createStudy`             | Append labelled R/L components to an explicitly identified existing schematic through shared current-board preparation and a Core transaction |
+| `emc.inspectLayout` | Read-only selected-net routing evidence against a user segment-length budget; no regulatory assessment |
+| `emc.reviewLayout` | Read-only intent-driven geometric review with explicit evidence, confidence, remediation and per-check coverage; no regulatory assessment |
+| `simulation.*`                       | [SPICE settings, runs, probes and waveforms](SIMULATION.md#shared-simulation-capabilities)                                           |
+| `thermal.*`                          | [Layout Thermal settings, runs, probes and images](THERMAL.md#interface)                                                             |
 
 Discover exact schemas and live availability with `capabilities.list`. Review
 queues immutable arguments. Apply/Auto use the same validation and recheck
@@ -102,12 +210,15 @@ project aborts its owned work but cannot undo completed external writes. See
 
 ## Bundled workbench lifecycle
 
-Bundled plugins start installed and enabled. Install activates packaged
+[Raw KiCad mode](ARCHITECTURE.md#raw-kicad-chat) suspends the workbench and blocks bundled, local and provider plugin operations for the duration of the mode. Plugin installation and enablement settings are retained.
+
+Built-in plugins start installed and enabled. Their Install action activates packaged
 resources without downloading code or running provider CLIs. Uninstalled
 entries remain in Marketplace.
 
-`server/workbench-plugin-catalog.json` fixes the catalog.
-In `dev:web`, all four bundled plugins start installed and enabled. The
+`plugins/catalog.mjs` validates the built-in manifests. Installed local packages
+extend the catalog without rebuilding OpenPE.
+In `dev:web`, all five bundled plugins start installed and enabled. The
 development host keeps Marketplace changes in process memory and resets them
 on restart. Layout Parasitics uses the renderer, PE Layout Skill serves bundled
 guidance, and the solver plugins use the bundled runtimes. SPICE and manual
@@ -117,10 +228,14 @@ desktop. Native project result operations require the desktop host.
 
 `server/workbench-plugins.mjs` atomically persists flags in
 `workbench-plugins-v1.json`, separate from projects, recovery and provider
-receipts. Saved state must include each of the four current catalog entries
+receipts. Saved state must include each built-in catalog entry
 exactly once with explicit installation and enabled flags. Missing files
 initialize the bundled defaults. Partial, obsolete or malformed files are
 preserved and fail closed.
+
+The current catalog requires an explicit `emc-analysis@openpe` row as well as the
+other four entries. A settings file missing it prevents catalog access and plugin
+execution; it is preserved without adding inferred flags or resetting choices.
 
 | Action              | Effect                                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -137,22 +252,27 @@ service-owned lifecycle state; stale responses cannot restore disabled UI.
 SPICE and Layout Thermal cancellation remain independent. Their run/restore and panel
 retention rules belong in [Simulation](SIMULATION.md) and [Layout Thermal](THERMAL.md).
 Disabling or uninstalling Layout Parasitics removes its Layout action, closes
-its dock and makes its query unavailable. See the
+its dock and makes its measurement query and study-creation command unavailable.
+Previously added study components remain native project content. See the
 [measurement scope](LAYOUT.md#layout-parasitics).
+
+Disabling or uninstalling EMC Analysis closes its dock and cancels its scoped
+queries. It has no project files or solver resources to remove.
+[EMC Analysis](EMC.md) owns measurements, evidence limits and reference licensing.
 
 ### PE Layout Skill
 
 The [power-pcb-design workflow](https://github.com/ChengminLi/AI-PCB-layout), by
 Chengmin Li and Xiao Yang, is bundled unchanged at
 `e1b9a64ac9ac306647fa30094932fb792d17e373` under CC BY 4.0.
-`server/pcb-design/manifest.json` pins it and ten references with SHA-256 hashes.
+`plugins/pe-layout-skill/resources/manifest.json` pins it and ten references with SHA-256 hashes.
 Packaged notices appear in About OpenPE; runtime performs no download or global
 Agent configuration change.
 
 The enabled plugin's details offer an icon-only Read workflow action. It opens
 the verified workflow in a read-only dialog through the shared guidance path.
 
-Enabled Codex/Claude turns receive service-owned instructions to read
+Enabled Codex/Claude/Cursor turns receive service-owned instructions to read
 `pcbDesign.guide` and relevant references. DeepSeek/Pi receive the workflow as
 context only. The service overrides renderer-supplied instructions and rejects unknown IDs,
 extra keys and paths/URLs; each document is verified and limited to 64 KiB.
@@ -187,7 +307,7 @@ OpenPE never reads other tools' credential files, edits provider configuration
 files directly, or approves interactive CLI requests. A Cursor API key is the
 documented exception: Settings stores it through Electron `safeStorage` as
 `cursor-credential.bin` in the OpenPE data directory, and the service alone
-passes it to `@cursor/sdk`. POSIX creation uses mode 0600. On Windows the file
+passes it to `@cursor/sdk`. POSIX creation uses mode 0600. Linux requires a Secret Service or KWallet keyring; the `basic_text` backend is rejected before encrypting or decrypting credentials. On Windows the file
 remains in the per-user OpenPE data directory under `%APPDATA%`, which inherits
 that profile's user-only ACL; OpenPE does not call `icacls`. Windows ACL
 inheritance is unverified. A failed rename surfaces a non-ENOENT error from
@@ -218,7 +338,8 @@ work before restarting.
 Authenticated loopback plugin routes reject arbitrary paths, commands,
 executables, URLs and catalog selectors. `/api/plugins` reads provider plus
 optional `refresh=true`; writes accept provider, fixed action and qualified ID.
-`/api/workbench-plugins` accepts only fixed catalog IDs/actions.
+`/api/workbench-plugins` accepts only discovered catalog IDs/actions; local
+installation remains a separate native operation.
 
 Provider processes use argument arrays, closed stdin, 4 MB combined output and a
 60-second deadline; Codex switch RPCs use 15 seconds. One operation runs per
@@ -239,17 +360,21 @@ render as images.
 
 ## Verification
 
-| Check                                                                            | Scope                                                                              |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `tests/workbench-plugins.test.ts`, `tests/workbench-plugin-capabilities.test.ts` | Persistence, shared lifecycle, service cancellation and Layout Parasitics query gates |
-| `tests/pcb-design-plugin.test.ts`                                                | Bundled hashes, trusted instructions, incomplete catalogs and turn cancellation    |
-| `tests/plugins.test.ts`                                                          | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency |
-| `tests/browser-previews.test.ts`, `tests/browser-previews-bridge.test.ts`           | Browser authentication, fixed plugin endpoints and desktop-only project grants     |
-| `node scripts/check-thermal-workbench-ui.mjs --parasitics-dock`                  | Endpoints, measurement, fixed footer status, reset and dock switching             |
-| `tests/chat.test.ts`, `tests/agent-cursor.test.ts`, `tests/cursor-credential.test.ts` | Model discovery, Cursor SDK isolation, credential ciphertext, and cancellation |
-| `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                 | Schemas, review/revisions, cancellation and synthetic scoped transports            |
-| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands, model-specific effort selection and Cursor catalog parameters |
-| `node scripts/e2e-plugins.mjs`                                                   | Opt-in desktop checks with fixtures; no real installs                              |
+| Check                                                                                                                  | Scope                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/workbench-plugins.test.ts`, `tests/workbench-plugin-capabilities.test.ts`                                       | Persistence, shared lifecycle, service cancellation and Layout Parasitics query/creation gates                                   |
+| `tests/layout-parasitics-study.test.ts`                                                                              | Same-schematic labelled study preparation, two-decimal native Values, full-precision measurement results, model limits, preservation and whole-project undo |
+| `tests/runtime-plugins.test.ts`, `tests/runtime-plugin-integration.test.ts`                                            | Local package validation, native approval, QuickJS isolation/limits, JSON transport, scoped discovery and lifecycle cancellation |
+| `tests/pcb-design-plugin.test.ts`                                                                                      | Bundled hashes, trusted instructions, incomplete catalogs and turn cancellation                                                  |
+| `tests/plugins.test.ts`                                                                                                | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency                                               |
+| `tests/browser-previews.test.ts`, `tests/browser-previews-bridge.test.ts`                                              | Browser authentication, fixed plugin endpoints and desktop-only project grants                                                   |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-dock`                                                        | Endpoints, automatic measurement, clear selection and dock switching                                                             |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-study`                                                       | Actual Workbench/Core compact additions, added-object selection, PCB/other native-file preservation and one GUI undo with mocked services |
+| `node scripts/check-layout-parasitics-panel-ui.mjs`                                                                    | Automatic measurement and study creation, delayed-response cancellation, invalid inputs, retry, duplicate prevention and IME guards |
+| `tests/chat.test.ts`, `tests/agent-cursor.test.ts`, `tests/cursor-credential.test.ts`                                  | Model discovery, Cursor SDK isolation, credential ciphertext, and cancellation                                                   |
+| `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                                                       | Schemas, review/revisions, cancellation and synthetic scoped transports                                                          |
+| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands, model-specific effort selection and Cursor catalog parameters                   |
+| `node scripts/e2e-plugins.mjs`                                                                                         | Opt-in desktop checks with fixtures; no real installs                                                                            |
 
 Mock tests do not establish installed-provider compatibility or authentication.
 Documentation changes need static checks; real provider mutations and desktop

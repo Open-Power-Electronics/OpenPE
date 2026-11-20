@@ -11,13 +11,14 @@ import {
 import {
   pcbDisplayForLayer,
   pcbFootprintBodyBounds,
-  pcbReadableTextAngle,
+  pcbFootprintTextRotation,
+  pcbPadDisplayLayers,
   type PCBDisplay,
 } from './pcb-display';
 import { pcbArc } from './pcb-geometry';
 import { findPCBGraphic, footprintPoint, padPosition, type PCBSelection } from './pcb-layout';
-import { padCopperLayers } from './pcb-connectivity';
 import { filledCopperPolygons, padPolygon, type Polygon } from './pcb-polygons';
+import { padReach } from './pcb-custom-pad';
 import { isOwnedPCB } from './immutable-project';
 import { pcbStrokeText } from './pcb-stroke-text';
 
@@ -189,11 +190,7 @@ function pointObjects(board: PCB) {
   return result;
 }
 
-function pointPadLayers(board: PCB, owner: Footprint, pad: Footprint['pads'][number]) {
-  return pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad);
-}
-
-/** Pad inspection uses the same visible copper geometry and margin as point selection. */
+/** Pad inspection uses the same visible pad geometry and margin as point selection. */
 export function selectPCBPadPoint(
   board: PCB,
   layers: PCBDisplay,
@@ -208,12 +205,9 @@ export function selectPCBPadPoint(
     for (const pad of owner.pads) {
       if (pad.locked && filters.locked === false) continue;
       const center = padPosition(owner, pad);
-      if (
-        Math.hypot(at.x - center.x, at.y - center.y) >
-        Math.hypot(pad.size.x, pad.size.y) / 2 + tolerance + epsilon
-      )
+      if (Math.hypot(at.x - center.x, at.y - center.y) > padReach(pad) + tolerance + epsilon)
         continue;
-      if (!pointPadLayers(board, owner, pad).some((layer) => layers[layer as BoardLayer])) continue;
+      if (!pcbPadDisplayLayers(board, owner, pad).some((layer) => layers[layer])) continue;
       const { outer } = padPolygon(owner, pad);
       if (
         inContour(at, outer) ||
@@ -359,7 +353,7 @@ function resolvedFootprintText(
   return {
     ...text,
     value,
-    rotation: pcbReadableTextAngle(text.rotation + owner.rotation) - owner.rotation,
+    rotation: pcbFootprintTextRotation(text.rotation, owner.rotation, graphic.keepUpright),
   };
 }
 
@@ -783,7 +777,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       )
         continue;
       const { owner, pad } = found;
-      const padLayers = pointPadLayers(board, owner, pad);
+      const padLayers = pcbPadDisplayLayers(board, owner, pad);
       if (!padLayers.some((layer) => layers[layer as BoardLayer])) continue;
       const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
         center = padPosition(owner, pad);
@@ -937,32 +931,20 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
           : Infinity,
         transform = (p: Point) => footprintPoint(owner, p);
       for (const pad of owner.pads) {
-        if (
-          pad.type === 'np_thru_hole'
-            ? !layers['Edge.Cuts']
-            : !padCopperLayers(board, owner, pad).some((layer) => layers[layer as keyof PCBDisplay])
-        )
-          continue;
+        const padLayers = pcbPadDisplayLayers(board, owner, pad);
+        if (!padLayers.some((layer) => layers[layer])) continue;
         const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
           center = padPosition(owner, pad);
         accept(candidate, {
           ...score,
           local: Math.hypot(at.x - center.x, at.y - center.y),
           area,
-          priority: priority(
-            pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
-          ),
-          layerRank: layerRank(
-            pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
-          ),
+          priority: priority(padLayers),
+          layerRank: layerRank(padLayers),
         });
       }
       for (const graphic of owner.graphics)
-        if (
-          layers[graphic.layer] &&
-          graphic.kind !== 'text' &&
-          graphic.kind !== 'dimension'
-        )
+        if (layers[graphic.layer] && graphic.kind !== 'text' && graphic.kind !== 'dimension')
           accept(candidate, {
             ...graphicScore(graphic, transform),
             area,

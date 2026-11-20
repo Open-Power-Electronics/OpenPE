@@ -9,7 +9,10 @@ import {
   parseProject,
   projectFromNativeFiles,
 } from '../server/project-format.mjs';
-import { buildSpiceDeck, defaultTransient } from '../server/spice-format.mjs';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+} from '../plugins/spice-simulation/host/spice-format.mjs';
 import native from '../electron/native-project.cjs';
 
 // Explicitly authorized isolated desktop check. Only its own temporary project

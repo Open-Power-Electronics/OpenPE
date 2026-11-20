@@ -1,13 +1,16 @@
+import { createReferenceExample } from '../lib/reference-examples';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ProjectCore } from '../core/project-core';
-import { createExample } from '../lib/examples';
 import { createHomeExample } from '../lib/create-home-example';
-import { createReferenceExample } from '../lib/reference-examples';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import { partFields } from '../lib/library';
 import { prepareSimulationModelSelection } from '../lib/model-resource-preparation';
-import { buildSpiceDeck, defaultTransient, simulationSupportError } from '../lib/spice';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  simulationSupportError,
+} from '../plugins/spice-simulation/domain/spice';
 import { parseProject, projectFromNativeFiles, serializeProject } from '../lib/project';
 import type { KiCadProjectFiles } from '../lib/kicad-project';
 import {
@@ -20,13 +23,13 @@ import {
   reviewedSimulationPins,
 } from '../lib/simulation-model-source';
 import { parseProject as serviceParse } from '../server/project-format.mjs';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 
 test('choosing another passive model changes the solver device in all bounded compilers', () => {
   const emc = createHomeExample('emc-flyback-demo').schematic;
   for (const circuit of [
     switchingStageFixture(),
-    createExample('kicad-buck').schematic,
+    createReferenceExample('reference-lm2598-to220-7-buck').schematic,
     createReferenceExample('reference-lm2596-to220-5-buck').schematic,
     emc,
   ]) {
@@ -109,15 +112,23 @@ test('a two-pin connector can switch passive models and return to Unassigned wit
 
 test('current native bindings remain unchanged while an explicit mode is independent of the retained file', () => {
   assert.equal(simulationModelSource({}), 'basic');
-  assert.equal(simulationModelSource({ 'Sim.Library': 'circuits/vendor.lib' }), 'external');
+  assert.equal(simulationModelSource({ 'Sim.Library': 'models/vendor.lib' }), 'external');
   assert.equal(
-    simulationModelSource({ 'OpenPE.ModelSource': 'basic', 'Sim.Library': 'circuits/vendor.lib' }),
+    simulationModelSource({
+      'OpenPE.ModelSource': 'basic',
+      'Sim.Library': 'models/vendor.lib',
+    }),
     'basic',
   );
   assert.equal(simulationModelSource({ 'OpenPE.ModelSource': 'external' }), 'external');
   assert.throws(() => simulationModelSource({ 'OpenPE.ModelSource': 'auto' }), /basic or external/);
-  const part = createExample('kicad-buck').schematic.parts.find((p) => p.ref === 'C101')!;
-  const pending = { 'OpenPE.ModelSource': 'external', 'Sim.Library': 'circuits/vendor.lib' };
+  const part = createReferenceExample('reference-lm2598-to220-7-buck').schematic.parts.find(
+    (p) => p.ref === 'C1',
+  )!;
+  const pending = {
+    'OpenPE.ModelSource': 'external',
+    'Sim.Library': 'models/vendor.lib',
+  };
   assert.doesNotThrow(() => effectiveSimulationModelFields(part, pending));
   assert.throws(() => assertSimulationModelConfiguration(part, pending), /file and model name/);
   const fields = partFields(part),
@@ -125,19 +136,13 @@ test('current native bindings remain unchanged while an explicit mode is indepen
   assert.deepEqual(effectiveSimulationModelFields(part, fields), fields);
   assert.deepEqual(fields, before);
   for (const [libId, device] of [
-    ['Simulation_SPICE:NPN', 'NPN'],
-    ['Simulation_SPICE:PNP', 'PNP'],
-    ['Simulation_SPICE:NMOS', 'NMOS'],
     ['Transistor_FET:IRF540N', 'NMOS'],
     ['Transistor_FET:IRF520N', 'NMOS'],
     ['Device:C_Polarized', 'C'],
   ])
     assert.equal(reviewedSimulationDevice({ libId }), device);
   assert.equal(reviewedSimulationDevice({ libId: 'Unreviewed:ThreePin' }), null);
-  const mos = createExample('kicad-buck').schematic.parts.find(
-    (part) => part.libId === 'Transistor_FET:IRF540N',
-  )!;
-  assert.equal(reviewedSimulationPins(mos), partFields(mos)['Sim.Pins']);
+  assert.equal(reviewedSimulationPins({ libId: 'Transistor_FET:IRF540N' }), '1=D 2=G 3=S');
   assert.equal(reviewedSimulationPins({ libId: 'Transistor_FET:IRF520N' }), '1=G 2=D 3=S');
   assert.equal(reviewedSimulationPins({ libId: 'Unreviewed:ThreePin' }), null);
 });
@@ -212,7 +217,7 @@ test('explicit intrinsic selection ignores inactive external bindings in every s
   const emc = createHomeExample('emc-flyback-demo').schematic;
   const circuits = [
     switchingStageFixture(),
-    createExample('kicad-buck').schematic,
+    createReferenceExample('reference-lm2598-to220-7-buck').schematic,
     createReferenceExample('reference-lm2596-to220-5-buck').schematic,
     emc,
   ];
@@ -282,7 +287,6 @@ test('complex ICs cannot select an invented basic model and current catalog bind
 test('complete external bindings never fall back to intrinsic or fixed derivative models', () => {
   const cases = [
     { circuit: switchingStageFixture(), ref: '', name: 'EXTERNAL' },
-    { circuit: createExample('kicad-buck').schematic, ref: 'Q1', name: 'IRF540N' },
     {
       circuit: createReferenceExample('reference-lm2596-to220-5-buck').schematic,
       ref: '',

@@ -1,5 +1,6 @@
 import { readNativeFiles } from './source-editor-test-helpers.mjs';
 import { _electron as electron } from 'playwright';
+import { electronTestLaunch } from './electron-test-launch.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,9 +9,9 @@ const runDirectory = path.join(root, 'test-results', `sessions-${Date.now()}`);
 const designDirectory = path.join(runDirectory, 'design');
 await mkdir(designDirectory, { recursive: true });
 const designFile = path.join(designDirectory, 'rectifier.kicad_sch');
-await copyFile(path.join(root, 'tests/fixtures/kicad/kicad-rectifier.kicad_sch'), designFile);
+await copyFile(path.join(root, 'examples/lm2596-to220-5-buck/lm2596-to220-5-buck.kicad_sch'), designFile);
 const application = await electron.launch({
-  args: ['.'],
+  ...electronTestLaunch(),
   env: {
     ...process.env,
     OPENPE_TEST: '1',

@@ -276,7 +276,7 @@ async function openFootprintChooser(page) {
   await dialog.waitFor({ state: 'visible' });
   await page.waitForFunction(() =>
     [...document.querySelectorAll('dialog button')].some(
-      (button) => button.textContent === 'Place footprint' && !button.disabled,
+      (button) => button.textContent === 'Place' && !button.disabled,
     ),
   );
   return dialog;
@@ -805,7 +805,7 @@ try {
         );
         assert.equal(await dialog.isVisible(), true);
         assert.equal(
-          await dialog.getByRole('button', { name: 'Place footprint', exact: true }).isDisabled(),
+          await dialog.getByRole('button', { name: 'Place', exact: true }).isDisabled(),
           true,
         );
         await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
@@ -850,7 +850,7 @@ try {
           next.board.thickness,
         );
         assert.equal(await dialog.isVisible(), true);
-        await dialog.getByRole('button', { name: 'Place footprint', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Place', exact: true }).click();
         await dialog.waitFor({ state: 'detached' });
         assert.equal(await canvas.locator('.is-placement').count(), 1);
         assert.deepEqual(await snapshot(), { board: next.board, commits: 0 });
@@ -872,7 +872,7 @@ try {
       'creation continuity: cancelling an unchanged chooser retains the exact rotated placement',
       async ({ page, canvas, snapshot }) => {
         const dialog = await openFootprintChooser(page);
-        await dialog.getByRole('button', { name: 'Place footprint', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Place', exact: true }).click();
         const preview = canvas.locator('.layout-footprint.is-placement');
         await preview.waitFor();
         await waitForCanvasFocus(page);

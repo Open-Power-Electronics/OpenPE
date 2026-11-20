@@ -8,7 +8,11 @@ import { projectFromNativeFiles, projectNativeFiles } from '../lib/project';
 import { displayPartValue, partFields } from '../lib/library';
 import { preparePartProperties, simulationSourceProperties } from '../lib/part-properties';
 import { prepareSourceConversion } from '../lib/simulation-source-conversion';
-import { buildSpiceDeck, defaultTransient, spiceNets } from '../lib/spice';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  spiceNets,
+} from '../plugins/spice-simulation/domain/spice';
 import { schematicPCBNets, pcbPinKey } from '../lib/pcb-sync';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
 import { onWire, samePoint } from '../lib/wiring';

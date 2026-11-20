@@ -63,6 +63,9 @@ const compiled = await build({
       export default function draw(input){
         const {copperLayers,layers,copperZones,copperPaths,fillPreview,fillPreviewZones,boardSurface,pattern,zoneOwners,zoneOutlinePaths,selectionPaint,highlightNets,placed,netNames}=input;
         const motionBoard=placed;
+        const nativeZones=placed.zones;
+        ${statement('  const selectionZones = useMemo(')}
+        ${statement('  const lockedFootprintZones = useMemo(')}
         const showFootprintMotion=false;
         const footprintMotionIds=null;
         const visibleLayer=(name)=>Boolean(layers[name]);
@@ -144,7 +147,11 @@ function fixture() {
     ),
     selectionPaint: {},
     highlightNets: new Set<string>(),
-    placed: { zones, tracks: [{ id: 'T', layer: 'F.Cu', netId: 'N', start: { x: 0, y: 0 } }] },
+    placed: {
+      zones,
+      tracks: [{ id: 'T', layer: 'F.Cu', netId: 'N', start: { x: 0, y: 0 } }],
+      footprints: [],
+    },
     netNames: new Map([['N', 'Net']]),
   };
 }

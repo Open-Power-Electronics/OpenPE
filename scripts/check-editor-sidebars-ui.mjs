@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -12,6 +13,7 @@ import {
   assertToolbarSidebarPlacement,
 } from './visualization-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 import { checkComponentDeletePlacement } from './schematic-panel-test-helpers.mjs';
 
@@ -20,7 +22,7 @@ const { partFields } = await tsImport('../lib/library.ts', import.meta.url);
 
 // Isolated workspace: real editor gestures and native Source, mocked local services.
 // No Electron, user files, provider calls or solver processes.
-const fixture = parseProject(await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8'));
+const fixture = parseProject(formatTestProjectSource());
 for (const footprint of fixture.pcb.footprints) {
   const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId);
   (part.fields ??= {}).Footprint = footprint.libraryId;
@@ -127,6 +129,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -541,8 +546,8 @@ try {
       await actions
         .locator('button:visible')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-      mode === 'Source' ? ['List', 'Git'] : ['List', 'Git', 'Toggle right sidebar'],
-      'List and Git precede dock visibility; Rule remains in the footer.',
+      ['Draw component', 'List', 'Git', ...(mode === 'Source' ? [] : ['Toggle right sidebar'])],
+      'Draw component, List and Git precede dock visibility; Rule remains in the footer.',
     );
   };
   const assertWindowActions = async (toolbar, plugin) => {
@@ -561,7 +566,7 @@ try {
       0,
     );
     const placement = await pluginGroup.evaluate((element) => {
-      const style = getComputedStyle(element);
+      const style = getComputedStyle(element.firstElementChild);
       return {
         leftGroup:
           element.classList.contains('editor-plugin-actions') &&
@@ -569,8 +574,10 @@ try {
         followsEditing:
           element.previousElementSibling?.getAttribute('aria-label') === 'Edit and history',
         drawingToolbar: Boolean(element.closest('.editor-drawing-region .editor-toolbar')),
-        separator: parseFloat(style.borderLeftWidth),
-        inset: parseFloat(style.paddingLeft),
+        separator: parseFloat(
+          getComputedStyle(element.firstElementChild, '::before').borderLeftWidth,
+        ),
+        inset: parseFloat(style.marginLeft),
       };
     });
     assert.equal(
@@ -1170,10 +1177,11 @@ try {
     await footprintDialog
       .getByRole('textbox', { name: 'Search footprints', exact: true })
       .fill(detail.name);
+    await footprintDialog.getByRole('button', { name: 'Search', exact: true }).click();
     await footprintDialog
       .locator(`.library-results button[aria-description="${detail.id}"]`)
       .click();
-    await footprintDialog.getByRole('button', { name: 'Assign footprint', exact: true }).click();
+    await footprintDialog.getByRole('button', { name: 'Assign', exact: true }).click();
     await footprintDialog.waitFor({ state: 'hidden' });
   };
   await choosePackage(replacementPackage);

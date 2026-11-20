@@ -6,7 +6,7 @@ import {
 } from '../lib/model-cad';
 import { setModelCadPose } from './model-cad-mesh';
 
-export type ModelCadEdgePath = { edge: ModelCadSelectableEdge; points: THREE.Vector3[] };
+type ModelCadEdgePath = { edge: ModelCadSelectableEdge; points: THREE.Vector3[] };
 type Viewport = { width: number; height: number };
 type ScreenPoint = { x: number; y: number };
 const circleSegments = 64;

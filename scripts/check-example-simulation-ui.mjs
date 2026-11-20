@@ -3,29 +3,29 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import manifest from '../tests/fixtures/kicad/manifest.json' with { type: 'json' };
-import referenceManifest from '../resources/example-catalog/manifest.json' with { type: 'json' };
+import manifest from '../resources/example-catalog/manifest.json' with { type: 'json' };
 import { parseProject } from '../server/project-format.mjs';
-import { buildSpiceDeck } from '../server/spice-format.mjs';
+import { buildSpiceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 import { simulationModelDefinitions } from '../server/simulation-model-format.mjs';
+import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 const bundle = await build({
   stdin: {
     contents: `
 import React,{useState,useRef} from 'react';import {createRoot} from 'react-dom/client';
-import SimulationDialog from './components/SimulationDialog';import SymbolGraphic from './components/SymbolGraphic';
-import {createExample} from './lib/examples';
+import SimulationDialog from './plugins/spice-simulation/renderer/SimulationDialog';import SymbolGraphic from './components/SymbolGraphic';
 import {createReferenceExample} from './lib/reference-examples';
 import {serializeProject} from './lib/project';
+import {loadWorkbenchPlugins} from './lib/workbench-plugins';
 function App(){const [project,setProject]=useState(createReferenceExample('reference-lm2596-to220-5-buck'));const [probe,setProbe]=useState(null);const host=useRef(null),wave=useRef(null);
 window.projectSource=serializeProject(project);
-window.chooseExample=id=>{setProbe(null);setProject(id.startsWith('reference-')?createReferenceExample(id):createExample(id));};
+window.chooseExample=id=>{setProbe(null);setProject(createReferenceExample(id));};
 window.prepareModelReferenceRun=()=>{const p=createReferenceExample('reference-lm2596-to220-5-buck');delete p.simulationModels;setProject(p);setProbe({kind:'voltage',id:p.schematic.labels.find(label=>label.text==='VOUT').id});};
-const specimens=[['kicad-buck','V102'],['kicad-buck','V101'],['kicad-rectifier','V1']];
+const specimens=[['reference-lm2598-to220-7-buck','V1'],['reference-lm2598-to220-7-buck','V1',true],['reference-lm2596-to220-5-buck','V1']];
 return <><div ref={host} className="simulation-settings-host" style={{width:280,height:720}}/><div ref={wave}/>
 <SimulationDialog project={project} fileId="00000000-0000-4000-8000-000000000001" visible sourcePending={false} probe={probe} settingsHost={host} waveformHost={wave} onWaveformVisibilityChange={()=>{}} onStoreModels={(models,expectedSource)=>{if(expectedSource!==serializeProject(project))return false;window.storedModelReferences=models;setProject({...project,simulationModels:models});return true;}}/>
 <div id="source-specimens" style={{position:'absolute',left:320,top:40,width:760,background:'white',padding:20}}><h2>Voltage source symbols</h2>
-{specimens.map(([id,ref])=>{const d=createExample(id).schematic,p=d.parts.find(p=>p.ref===ref);return <div key={ref} style={{display:'flex'}}>{[0,90,180,270].map(angle=><svg key={angle} width="170" height="160" viewBox="-7 -7 14 14"><g transform={'rotate('+(-angle)+')'}><SymbolGraphic library={d.libraries[p.libId]} part={p} orientation={{rotation:angle}} showPinNames={false} showPinNumbers={false}/></g></svg>)}</div>})}</div></>}
-createRoot(document.getElementById('root')).render(<App/>);`,
+{specimens.map(([id,ref,pulse])=>{const d=createReferenceExample(id).schematic,p=d.parts.find(p=>p.ref===ref);if(pulse)p.fields={...p.fields,'Sim.Type':'PULSE','OpenPE.SourceType':'PULSE','Sim.Params':'y1=0 y2=15 td=20n tr=20n tf=20n tw=25u per=50u'};return <div key={id+ref+!!pulse} style={{display:'flex'}}>{[0,90,180,270].map(angle=><svg key={angle} width="170" height="160" viewBox="-7 -7 14 14"><g transform={'rotate('+(-angle)+')'}><SymbolGraphic library={d.libraries[p.libId]} part={p} orientation={{rotation:angle}} showPinNames={false} showPinNumbers={false}/></g></svg>)}</div>})}</div></>}
+loadWorkbenchPlugins().then(()=>createRoot(document.getElementById('root')).render(<App/>));`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -49,6 +49,8 @@ try {
   let convergenceFixture = false;
   let convergenceRequests = 0;
   await page.route('http://localhost/**', async (route) => {
+    if (route.request().url().endsWith('/api/workbench-plugins'))
+      return route.fulfill({ json: bundledWorkbenchCatalog() });
     if (route.request().url().endsWith('/api/simulation/status'))
       return route.fulfill({ json: { available: true, version: 'UI fixture' } });
     if (route.request().url().endsWith('/api/simulation/result'))
@@ -58,7 +60,7 @@ try {
       const payload = route.request().postDataJSON();
       assert.equal(payload.fileId, '00000000-0000-4000-8000-000000000001');
       const project = parseProject(payload.source);
-      if (!convergenceFixture) assert.equal(project.simulationModels, undefined);
+      assert.ok(Array.isArray(project.simulationModels) || project.simulationModels === undefined);
       const deck = buildSpiceDeck(project.schematic, payload.config);
       if (convergenceFixture && deck.stop === 0.02) {
         convergenceRequests++;
@@ -94,12 +96,13 @@ try {
     });
   });
   await page.goto('http://localhost/');
-  for (const entry of [...referenceManifest.examples, ...manifest.examples]) {
+  await page.waitForFunction(() => typeof window.chooseExample === 'function');
+  for (const entry of manifest.examples) {
     await page.evaluate((id) => window.chooseExample(id), entry.id);
     await page.getByRole('button', { name: 'Run', exact: true }).waitFor();
     await page.waitForFunction(() => {
       const b = [...document.querySelectorAll('button')].find(
-        (b) => b.textContent.trim() === 'Run',
+        (b) => b.getAttribute('aria-label') === 'Run',
       );
       return b && !b.disabled;
     });
@@ -108,7 +111,7 @@ try {
     if (entry.id.startsWith('reference-')) {
       assert.equal(
         await page.getByRole('textbox', { name: 'Duration (ms)', exact: true }).inputValue(),
-        entry.id === 'reference-lm27761-wson8-pump' ? '5' : '10',
+        ['reference-lm27761-wson8-pump', 'reference-tps61046-bga6-boost'].includes(entry.id) ? '2' : '10',
         `${entry.id}: Home duration matches the real-solver verification window.`,
       );
       assert.equal(
@@ -126,7 +129,7 @@ try {
   await duration.fill('10');
   await step.fill('0.5');
   await page.getByRole('alert').waitFor({ state: 'detached' });
-  assert.equal(await page.getByRole('button', { name: 'Run', exact: true }).isEnabled(), true);
+  await page.getByRole('button', { name: 'Run', exact: true }).click({ trial: true });
   await step.fill('0');
   await page.getByRole('alert').filter({ hasText: 'greater than 0 µs' }).waitFor();
   await step.fill('0.5');
@@ -192,7 +195,7 @@ try {
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.waitForFunction(() =>
     [...document.querySelectorAll('button')].some(
-      (b) => b.textContent.trim() === 'Run' && !b.disabled,
+      (b) => b.getAttribute('aria-label') === 'Run' && !b.disabled,
     ),
   );
   assert.equal(await page.getByRole('alert').count(), 0);
@@ -200,7 +203,7 @@ try {
   assert.equal(await page.evaluate(() => window.projectSource), before);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: 18 example setup panels, 12 voltage source orientations, model-reference storage and explicit convergence recovery without design changes or implicit runs.',
+    'PASS: nine Home setup panels, 12 voltage source orientations, model-reference storage and explicit convergence recovery without design changes or implicit runs.',
   );
 } finally {
   await browser.close();

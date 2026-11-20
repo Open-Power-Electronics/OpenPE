@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -16,7 +17,7 @@ import {
 
 // Isolated renderer regression: no Electron, Git, providers or native filesystem access.
 await mkdir('test-results', { recursive: true });
-let fixture = parseProject(await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8'));
+let fixture = parseProject(formatTestProjectSource());
 for (const footprint of fixture.pcb.footprints) {
   const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId);
   (part.fields ??= {}).Footprint = footprint.libraryId;

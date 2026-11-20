@@ -500,6 +500,7 @@ export default function RuleCheckPanel({
                     icon={<Plus size={15} aria-hidden="true" />}
                     showChevron={false}
                     popupClassName={styles.addQuickLimitMenu}
+                    popupMatchWidth="content"
                     onClosedEscape={onClose}
                     disabled={limitsLocked || !availableQuickLimits.length}
                     options={availableQuickLimits.map((key) => ({

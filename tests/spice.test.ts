@@ -6,9 +6,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { emptyCircuit, createPart, pinPositions, uid } from '../lib/circuit';
 import { createProject, serializeProject } from '../lib/project';
-import { buildSpiceDeck, defaultTransient, passiveValue, spiceNets } from '../lib/spice';
-import { validatedSimulationResult, waveformIndices } from '../lib/waveform';
-import { parseWaveforms, runSimulation } from '../server/spice.mjs';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  passiveValue,
+  spiceNets,
+} from '../plugins/spice-simulation/domain/spice';
+import {
+  validatedSimulationResult,
+  waveformIndices,
+} from '../plugins/spice-simulation/domain/waveform';
+import { parseWaveforms, runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
 import { startServer } from '../server/index.mjs';
 import { child, children } from '../lib/sexpr';
 import { unitGraphics } from '../lib/library';

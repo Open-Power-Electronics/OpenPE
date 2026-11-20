@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicThermalFailure } from '../server/thermal-errors.mjs';
+import { publicThermalFailure } from '../plugins/layout-thermal/host/thermal-errors.mjs';
 
 const privateLog = 'PRIVATE_THERMAL_SENTINEL\n.subckt PRIVATE_MODEL 1 2\nC:/private/solver.log';
 

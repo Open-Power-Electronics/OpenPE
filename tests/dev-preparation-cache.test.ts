@@ -218,17 +218,17 @@ test('Home solver results never enter development preparation fingerprints', asy
     await writeFile(target, text);
   };
   await put('emc-flyback.kicad_pro', 'native input');
-  await put('spice/run/waveforms.txt', 'saved waveform');
-  await put('thermal/run/thermal.vtu', 'saved field');
+  await put('spice-simulation/run/waveforms.txt', 'saved waveform');
+  await put('layout-thermal/run/thermal.vtu', 'saved field');
   assert.equal(await f.run({ paths }), false);
   const cached = await readFile(f.cache, 'utf8');
-  await put('spice/run/waveforms.txt', 'changed saved waveform');
-  await put('spice/another-run/results.json', 'new saved result');
-  await put('thermal/new-run/mesh.nodes', 'new mesh');
+  await put('spice-simulation/run/waveforms.txt', 'changed saved waveform');
+  await put('spice-simulation/another-run/results.json', 'new saved result');
+  await put('layout-thermal/new-run/mesh.nodes', 'new mesh');
   assert.equal(await f.run({ paths }), true);
   assert.equal(await readFile(f.cache, 'utf8'), cached);
   assert.equal(f.count(), 1);
-  for (const kind of ['spice', 'thermal']) {
+  for (const kind of ['spice-simulation', 'layout-thermal']) {
     const target = path.resolve(project, kind);
     assert.equal(path.dirname(target), project);
     assert.ok(!(await lstat(target)).isSymbolicLink());
@@ -257,7 +257,7 @@ test('first-time models and circuits outputs remain cacheable while native footp
   const f = await fixture(t);
   const project = path.join(f.root, 'examples/lm2596-to220-5-buck');
   const model = path.join(project, 'models/pinned.step');
-  const circuit = path.join(project, 'circuits/pinned.lib');
+  const circuit = path.join(project, 'models/pinned.lib');
   const footprint = path.join(project, 'footprints/custom.pretty/custom.kicad_mod');
   await mkdir(path.dirname(footprint), { recursive: true });
   await writeFile(path.join(project, 'lm2596-to220-5-buck.kicad_pro'), 'native input');
@@ -292,6 +292,21 @@ test('first-time models and circuits outputs remain cacheable while native footp
   assert.equal(preparations, 4);
 });
 
+test('shared pinned model edits during preparation cannot certify a stale cache', async (t) => {
+  const f = await fixture(t);
+  const model = path.join(f.root, 'examples/project/emc-flyback/models/EMC_flyback_control.lib');
+  await mkdir(path.dirname(model), { recursive: true });
+  await writeFile(model, 'original model');
+  await withDevPreparationCache({
+    root: f.root,
+    logger: { status: () => {}, error: () => {} },
+    prepare: async () => {
+      await writeFile(model, 'changed source model');
+    },
+  });
+  await assert.rejects(readFile(f.cache), { code: 'ENOENT' });
+});
+
 test('generated formats are cacheable while pinned inputs stay distinct from discovered projects', async (t) => {
   const f = await fixture(t);
   const put = async (relative: string, text: string) => {
@@ -300,7 +315,7 @@ test('generated formats are cacheable while pinned inputs stay distinct from dis
     await writeFile(file, text);
   };
   const font = 'resources/third-party-source/newstroke-10.0.0/newstroke_font.cpp';
-  const model = 'examples/project/emc-flyback/circuits/EMC_flyback_control.lib';
+  const model = 'examples/project/emc-flyback/models/EMC_flyback_control.lib';
   await put(font, 'pinned font');
   await put(model, 'pinned EMC model');
   await mkdir(path.join(f.root, 'lib'));
@@ -425,11 +440,11 @@ async function observeInputReads(t: TestContext, root: string, shouldFail = () =
       );
       return originalStat();
     }) as typeof handle.stat;
-    const originalStream = handle.createReadStream.bind(handle);
-    handle.createReadStream = (options) => {
-      if (shouldFail()) throw new Error('Fixture streaming failure.');
-      return originalStream(options);
-    };
+    const originalRead = handle.read.bind(handle);
+    handle.read = ((...readArgs: unknown[]) => {
+      if (shouldFail()) throw new Error('Fixture input read failure.');
+      return Reflect.apply(originalRead, handle, readArgs);
+    }) as typeof handle.read;
     return handle;
   });
   syncBuiltinESMExports();
@@ -450,7 +465,7 @@ test('parallel fingerprints bound input handles and retain cache identity across
   assert.equal(await f.run({ paths: paths.toReversed() }), true);
   assert.equal(await readFile(f.cache, 'utf8'), cached);
   assert.equal(f.count(), 1);
-  assert.ok(reads.peak() > 1 && reads.peak() <= 4, 'At most four file streams overlap.');
+  assert.ok(reads.peak() > 1 && reads.peak() <= 4, 'At most four input files are open.');
   assert.equal(reads.active.size, 0);
 });
 
@@ -459,7 +474,7 @@ test('failed parallel fingerprints drain input handles and leave preparation ret
   let failing = true;
   const reads = await observeInputReads(t, f.root, () => failing);
   const paths = ['inputs', 'generated.txt'];
-  await assert.rejects(f.run({ paths }), /Fixture streaming failure/);
+  await assert.rejects(f.run({ paths }), /Fixture input read failure/);
   assert.equal(reads.active.size, 0, 'Every in-flight file is closed before failure returns.');
   assert.equal(f.count(), 0);
   await assert.rejects(readFile(f.cache), { code: 'ENOENT' });
@@ -468,4 +483,21 @@ test('failed parallel fingerprints drain input handles and leave preparation ret
   assert.equal(await f.run({ paths }), true);
   assert.equal(reads.active.size, 0);
   assert.ok(reads.peak() <= 4);
+});
+
+test('cancelling a fingerprint drains in-flight reads without starting new work', async (t) => {
+  const f = await fixture(t);
+  let started = 0;
+  const reads = await observeInputReads(t, f.root, () => {
+    started++;
+    return false;
+  });
+  assert.equal(
+    await f.run({ paths: ['inputs', 'generated.txt'], cancelled: () => started > 0 }),
+    false,
+  );
+  assert.ok(started > 0 && started <= 4);
+  assert.equal(reads.active.size, 0);
+  assert.equal(f.count(), 0);
+  await assert.rejects(readFile(f.cache), { code: 'ENOENT' });
 });

@@ -16,6 +16,7 @@ import { createPCBInteractiveDrag } from '../lib/pcb-interactive-drag';
 import { createPCBRouter } from '../lib/pcb-routing';
 import { createPCBViaValidator } from '../lib/pcb-via-routing';
 import { fillCopperZone, fillCopperZones } from '../lib/pcb-polygons';
+import type { PCBFillRuleContext } from '../lib/pcb-clearance-sources';
 import type { CoreDefinition } from './project-core';
 import propertySchemas from './layout-property-schemas.json';
 import {
@@ -32,6 +33,8 @@ import {
 } from '../lib/pcb-outline-resize';
 import { assertPCBLockedEdits, setPCBLocked } from '../lib/pcb-lock';
 import { preparePCBRegionFillet } from '../lib/pcb-region-fillet';
+import { layoutGridSpacingOptions } from '../lib/layout-grid';
+import { suggestPCBPlacement } from '../lib/pcb-placement-suggestion';
 
 // Property inputs derive from the same shapes as the full document validator.
 // null explicitly clears an optional override; omission retains it.
@@ -74,6 +77,14 @@ const selection = {
   ),
 };
 const clearance = { type: 'number', minimum: 0.05, maximum: 20 };
+const placementInput = {
+  footprintIds: { type: 'array', items: identity, minItems: 2, maxItems: 8, uniqueItems: true },
+  spacing: { enum: [...layoutGridSpacingOptions] },
+};
+const placementPose = object(
+  { id: identity, x: coordinate, y: coordinate, rotation: { type: 'number' } },
+  ['id', 'x', 'y', 'rotation'],
+);
 const via = object(
   {
     diameter: { type: 'number', exclusiveMinimum: 0, maximum: 20 },
@@ -111,6 +122,12 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
     ['kind', 'id'],
   ),
   definition(
+    'layout.placement.preview',
+    'Preview the same bounded placement suggestion as the Layout marquee. Pass the returned poses with the original inputs to layout.placement.apply.',
+    placementInput,
+    ['footprintIds', 'spacing'],
+  ),
+  definition(
     'layout.route.preview',
     'Plan one bounded Walk Around route using all board obstacles without changing the document.',
     {
@@ -127,6 +144,15 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
   ),
 ];
 export const layoutCommandDefinitions: CoreDefinition[] = [
+  operationCommand(
+    'layout.placement.apply',
+    'Apply an exact layout.placement.preview suggestion in one undo edit. The current board must still produce every supplied pose.',
+    {
+      ...placementInput,
+      poses: { type: 'array', items: placementPose, minItems: 1, maxItems: 8, uniqueItems: true },
+    },
+    ['footprintIds', 'spacing', 'poses'],
+  ),
   objectCommand(
     'layout.region.fillet',
     'Round every convex corner of one board zone or polygon graphic using native polygon vertices within 0.01 mm of circular fillets. Preserves cutouts and commits one undo edit.',
@@ -304,7 +330,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'layout.pad.properties',
-    'Edit pad geometry and fabrication overrides with the shared Properties preparation. Identity, pin nets, type and layers stay unchanged. null clears an optional override.',
+    'Edit pad geometry and fabrication overrides with the shared Properties preparation. Custom pads retain their polygon and shape; size describes their anchor. Identity, pin nets, type and layers stay unchanged. null clears an optional override.',
     {
       padId: identity,
       changes: object(
@@ -315,6 +341,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
           'type',
           'layers',
           'unconnected',
+          'outline',
           'locked',
         ]),
       ),
@@ -377,9 +404,11 @@ function checkSelection(board: PCB, selection: PCBSelection[]) {
     zone: board.zones,
   };
   for (const selected of selection)
-    if (selected.kind === 'graphic'
-      ? !findPCBGraphic(board, selected.id)
-      : !items[selected.kind].some((item) => item.id === selected.id))
+    if (
+      selected.kind === 'graphic'
+        ? !findPCBGraphic(board, selected.id)
+        : !items[selected.kind].some((item) => item.id === selected.id)
+    )
       throw new Error(
         'A selected board object no longer exists. Query the current board and try again.',
       );
@@ -398,8 +427,21 @@ function freshIds<T>(value: T): T {
 }
 const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 0.000001;
 
+function preparePlacement(board: PCB, footprintIds: string[], spacing: number) {
+  const selection = footprintIds.map((id) => ({ kind: 'footprint' as const, id }));
+  checkSelection(board, selection);
+  const suggestion = suggestPCBPlacement(board, selection, undefined, spacing);
+  if (!suggestion) return null;
+  const poses = suggestion.board.footprints
+    .filter(({ id }) => suggestion.offsets.has(id))
+    .map(({ id, x, y, rotation }) => ({ id, x, y, rotation }));
+  return { board: suggestion.board, poses };
+}
+
 export function queryLayout(board: PCB | null | undefined, id: string, args: Record<string, any>) {
   checkBoard(board, args.boardId);
+  if (id === 'layout.placement.preview')
+    return { poses: preparePlacement(board, args.footprintIds, args.spacing)?.poses ?? [] };
   if (id === 'layout.object') {
     const items = {
       footprint: board.footprints,
@@ -409,9 +451,10 @@ export function queryLayout(board: PCB | null | undefined, id: string, args: Rec
       graphic: board.graphics,
       zone: board.zones,
     };
-    const item = args.kind === 'graphic'
-      ? findPCBGraphic(board, args.id)?.graphic
-      : items[args.kind as keyof typeof items].find((item) => item.id === args.id);
+    const item =
+      args.kind === 'graphic'
+        ? findPCBGraphic(board, args.id)?.graphic
+        : items[args.kind as keyof typeof items].find((item) => item.id === args.id);
     if (!item) throw new Error('This board object no longer exists.');
     return structuredClone(item);
   }
@@ -442,12 +485,28 @@ export function executeLayout(
   board: PCB | null | undefined,
   id: string,
   args: Record<string, any>,
+  fillRules?: PCBFillRuleContext,
 ): { board: PCB; result?: Record<string, unknown> } {
   checkBoard(board, args.boardId);
   if (args.selection) checkSelection(board, args.selection);
   let next = board;
   let result: Record<string, unknown> | undefined;
   switch (id) {
+    case 'layout.placement.apply': {
+      const suggestion = preparePlacement(board, args.footprintIds, args.spacing);
+      if (
+        !suggestion ||
+        suggestion.poses.length !== args.poses.length ||
+        suggestion.poses.some(({ id, x, y, rotation }, index) => {
+          const pose = args.poses[index];
+          return pose.id !== id || pose.x !== x || pose.y !== y || pose.rotation !== rotation;
+        })
+      )
+        throw new Error('The placement suggestion changed. Preview it again before applying.');
+      next = suggestion.board;
+      result = { poses: suggestion.poses };
+      break;
+    }
     case 'layout.region.fillet':
       next = preparePCBRegionFillet(board, { kind: args.kind, id: args.id }, args.radius);
       break;
@@ -494,7 +553,10 @@ export function executeLayout(
         const ownedText = item.kind === 'graphic' ? findPCBGraphic(board, item.id) : undefined;
         if (ownedText?.owner) {
           const { owner, graphic } = ownedText;
-          if (graphic.text?.property || selected.some((item) => item.kind === 'footprint' && item.id === owner.id))
+          if (
+            graphic.text?.property ||
+            selected.some((item) => item.kind === 'footprint' && item.id === owner.id)
+          )
             continue;
           const copy = freshIds(graphic);
           next.footprints = next.footprints.map((f) =>
@@ -664,8 +726,8 @@ export function executeLayout(
     }
     case 'layout.fill':
       next = args.zoneId
-        ? fillCopperZone(board, args.zoneId, args.clearance)
-        : fillCopperZones(board, args.clearance);
+        ? fillCopperZone(board, args.zoneId, args.clearance, fillRules)
+        : fillCopperZones(board, args.clearance, fillRules);
       break;
     case 'layout.net': {
       const name = args.name.trim();

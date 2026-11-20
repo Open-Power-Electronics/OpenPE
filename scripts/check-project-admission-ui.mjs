@@ -4,6 +4,7 @@ import path from 'node:path';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { parseProject, projectNativeFiles } from '../server/project-format.mjs';
 import { readNativeFiles } from './source-editor-test-helpers.mjs';
 
@@ -11,6 +12,11 @@ import { readNativeFiles } from './source-editor-test-helpers.mjs';
 // adapters. No desktop profile, provider, solver or project file is touched.
 const source = await readFile('lib/emc-flyback-example.json', 'utf8');
 const native = projectNativeFiles(parseProject(source), 'project.kicad_pro');
+// Source tree display order is presentation; compare exact filenames and bytes.
+const byName = (bundle) => ({
+  ...bundle,
+  files: [...bundle.files].sort((a, b) => a.name.localeCompare(b.name)),
+});
 const id = '00000000-0000-4000-8000-000000000023';
 const bundle = await build({
   stdin: {
@@ -83,7 +89,12 @@ const browser = await chromium.launch({
   headless: true,
 });
 const errors = [];
-const preferences = { provider: 'codex', effort: 'low', approvalMode: 'review', models: {} };
+const preferences = {
+  provider: 'codex',
+  effort: 'low',
+  approvalMode: 'review',
+  models: { ...defaultAgentPreferences.models },
+};
 async function mount(recover) {
   const page = await browser.newPage({ viewport: { width: 1480, height: 920 } });
   page.setDefaultTimeout(45000);
@@ -101,6 +112,21 @@ async function mount(recover) {
         },
         connection: async () => ({ base: 'http://localhost', token: 'test' }),
         newFile: async () => crypto.randomUUID(),
+        listExamples: async () => ({ entries: [], warnings: [] }),
+        listRecent: async () => ({
+          initialized: true,
+          entries: [
+            {
+              id: 'emc-flyback-demo',
+              title: 'EMC Flyback',
+              description: '/fixture/examples/project/emc-flyback/emc-flyback.kicad_pro',
+              pinned: true,
+            },
+          ],
+          warnings: [],
+        }),
+        onRecentChanged: () => () => {},
+        projectDirectory: async () => ({ entries: [], truncated: false }),
         releaseFile: async () => {},
         setDirty: async () => {},
         onCloseRequested: () => () => {},
@@ -174,7 +200,7 @@ try {
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   const opened = await readNativeFiles(page);
-  assert.deepEqual(opened, native);
+  assert.deepEqual(byName(opened), byName(native));
   await page.getByRole('button', { name: 'Schematic', exact: true }).click();
   await page.getByTestId('symbol-hit-R1').click();
   await canvas.focus();

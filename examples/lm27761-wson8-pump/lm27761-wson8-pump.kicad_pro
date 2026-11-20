@@ -5,6 +5,6 @@
   },
   "text_variables": {
     "OPENPE_PROJECT_NAME": "LM27761 Charge Pump",
-    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM27761.lib\"]"
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM27761.lib\"]"
   }
 }

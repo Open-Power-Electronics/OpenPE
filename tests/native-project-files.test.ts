@@ -49,16 +49,24 @@ test('selecting one project file reads bounded sibling sources; schematic entry 
     await writeFile(path.join(directory, 'models', 'body.step'), 'binary model is not text source');
     await mkdir(path.join(directory, 'history.git'));
     await writeFile(path.join(directory, 'history.git', 'ignored.lib'), 'private');
-    const savedRun = path.join(directory, 'spice', 'circuit', 'a'.repeat(64));
+    const savedRun = path.join(directory, 'spice-simulation');
     await mkdir(savedRun, { recursive: true });
     await writeFile(path.join(savedRun, 'circuit.cir'), '* private execution deck');
     await writeFile(path.join(savedRun, 'example-model-0.lib'), '.subckt private 1 2\n.ends\n');
     await writeFile(path.join(savedRun, 'waveforms.raw'), Buffer.from([0, 1, 2]));
-    const savedThermal = path.join(directory, 'thermal', 'circuit', 'b'.repeat(64));
+    const savedThermal = path.join(directory, 'layout-thermal');
     await mkdir(savedThermal, { recursive: true });
     await writeFile(path.join(savedThermal, 'process.cir'), '* private thermal execution artifact');
     await writeFile(path.join(savedThermal, 'input.json'), '{"private":"thermal model"}');
     await writeFile(path.join(savedThermal, 'field.vtu'), '<VTKFile/>');
+    const portable = {
+      name: 'models/shared.lib',
+      source: '.subckt portable 1 2\n.ends\n',
+    };
+    await mkdir(path.join(savedRun, 'models'));
+    await writeFile(path.join(savedRun, 'models', 'obsolete.lib'), '* not a shared project model');
+    await writeFile(path.join(directory, portable.name), portable.source);
+    expected.files.push(portable);
     expected.files.push({ name: 'models/amplifier.lib', source: '.subckt amplifier 1 2\n.ends\n' });
     const loaded = await readNativeProject(path.join(directory, expected.entry));
     assert.equal(loaded.entry, expected.entry);
@@ -86,6 +94,12 @@ test('native source names reject traversal, aliases, duplicate case and non-engi
     'circuit.openpe.json',
     '.git/circuit.kicad_sch',
     'spice/circuit/circuit.cir',
+    'spice-simulation/circuit.cir',
+    'spice-simulation/model.lib',
+    'layout-thermal/input.kicad_sch',
+    'pe-layout-skill/input.kicad_sch',
+    'layout-parasitics/input.lib',
+    'custom@example/input.kicad_sch',
     'upstream/input.kicad_sch',
   ]) {
     assert.throws(

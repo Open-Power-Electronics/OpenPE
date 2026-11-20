@@ -9,7 +9,8 @@ import FootprintIdentity from './FootprintIdentity';
 import FootprintModels from './FootprintModels';
 import { NumberField, TextField } from './LayoutPropertyFields';
 import Select from './Select';
-import { PropertyActionRow } from './PropertyTabs';
+import { PropertyTab, PropertyTabs } from './PropertyTabs';
+import { SlidersHorizontal } from 'lucide-react';
 import { preparePCBFootprintProperties, type PCBFootprintProperties } from '@/lib/pcb-properties';
 export type ComponentPropertiesProps = {
   footprint: Footprint;
@@ -65,6 +66,7 @@ export default function ComponentProperties({
   const assignmentFields = (
     <>
       <FootprintModels
+        key={footprint.id}
         footprint={footprint}
         active={active}
         fileId={fileId}
@@ -127,6 +129,7 @@ export default function ComponentProperties({
             part={part}
             circuit={schematic}
             fileId={fileId}
+            projectSource={projectSource}
             getRevision={getRevision}
             spiceAvailable={spiceAvailable}
             tabAction={tabAction}
@@ -145,25 +148,28 @@ export default function ComponentProperties({
       ) : (
         <>
           {showIdentity && <FootprintIdentity footprint={footprint} actions={actions} />}
-          <PropertyActionRow action={tabAction} />
-          <div className="layout-property-section">
-            <div className="property-primary layout-property-primary">
-              <TextField
-                {...field}
-                label="Reference"
-                value={footprint.reference ?? ''}
-                onCommit={(reference) => update({ reference })}
-              />
-              <TextField
-                {...field}
-                label="Value"
-                value={footprint.value ?? ''}
-                onCommit={(value) => update({ value })}
-              />
-            </div>
-          </div>
-          {assignmentFields}
-          {geometryFields}
+          <PropertyTabs locked={locked} action={tabAction}>
+            <PropertyTab label="General" icon={SlidersHorizontal}>
+              <div className="layout-property-section">
+                <div className="property-primary layout-property-primary">
+                  <TextField
+                    {...field}
+                    label="Reference"
+                    value={footprint.reference ?? ''}
+                    onCommit={(reference) => update({ reference })}
+                  />
+                  <TextField
+                    {...field}
+                    label="Value"
+                    value={footprint.value ?? ''}
+                    onCommit={(value) => update({ value })}
+                  />
+                </div>
+              </div>
+              {assignmentFields}
+              {geometryFields}
+            </PropertyTab>
+          </PropertyTabs>
         </>
       )}
     </>

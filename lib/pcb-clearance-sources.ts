@@ -2,18 +2,18 @@ import type { Project } from './project';
 import { validPCBDesignRuleLimit } from './design-rule-checks';
 import { parseSExpr, val, type SExpr } from './sexpr';
 
-export type ClearanceSource = {
+type ClearanceSource = {
   key: string;
   label: string;
   clearance: number;
 };
 
-type RuleOperand = {
+export type PCBRuleOperand = {
   netClass: string;
   type: string;
   intersectsCourtyard: (reference: string) => boolean;
 };
-type Condition = (a: RuleOperand, b: RuleOperand) => boolean;
+type Condition = (a: PCBRuleOperand, b: PCBRuleOperand) => boolean;
 type ClearanceRule = ClearanceSource & { condition: string; matches: Condition };
 
 // KiCad 10 expressions used by the supported clearance subset. Compile to
@@ -50,7 +50,7 @@ function compileCondition(source: string): Condition {
     }
     const side = tokens[i++];
     if (side !== 'A' && side !== 'B') throw invalid();
-    const operand = (a: RuleOperand, b: RuleOperand) => (side === 'A' ? a : b);
+    const operand = (a: PCBRuleOperand, b: PCBRuleOperand) => (side === 'A' ? a : b);
     expect('.');
     const member = tokens[i++];
     if (member === 'intersectsCourtyard') {
@@ -83,6 +83,17 @@ function compileCondition(source: string): Condition {
 
 export function readPCBDesignRuleSources(project: Pick<Project, 'pcb' | 'nativeFiles'>) {
   const { pcb, nativeFiles } = project;
+  const projectSource = nativeFiles?.files.find(({ name }) => name === nativeFiles.entry)?.source;
+  const rulesFile = nativeFiles?.entry.replace(/\.kicad_pro$/i, '.kicad_dru');
+  const rulesSource = nativeFiles?.files.find(({ name }) => name === rulesFile)?.source;
+  return readPCBDesignRuleSourceTexts(pcb, projectSource, rulesSource);
+}
+
+export function readPCBDesignRuleSourceTexts(
+  pcb: Project['pcb'],
+  projectSource?: string,
+  rulesSource?: string,
+) {
   const netNames = new Map(pcb?.nets.map(({ id, name }) => [id, name]));
   const zones: ClearanceSource[] = [];
   for (const zone of [
@@ -101,7 +112,6 @@ export function readPCBDesignRuleSources(project: Pick<Project, 'pcb' | 'nativeF
   const classes = new Map<string, ClearanceSource>();
   const assignments = new Map<string, string>();
   const rules: ClearanceRule[] = [];
-  const projectSource = nativeFiles?.files.find(({ name }) => name === nativeFiles.entry)?.source;
   try {
     const projectSettings = projectSource === undefined ? undefined : JSON.parse(projectSource);
     const settings = projectSettings?.net_settings;
@@ -147,8 +157,6 @@ export function readPCBDesignRuleSources(project: Pick<Project, 'pcb' | 'nativeF
   if (projectSource !== undefined && !classes.has('Default'))
     classes.set('Default', { key: 'class:Default', label: 'Default', clearance: 0.2 });
 
-  const rulesFile = nativeFiles?.entry.replace(/\.kicad_pro$/i, '.kicad_dru');
-  const rulesSource = nativeFiles?.files.find(({ name }) => name === rulesFile)?.source;
   if (rulesSource !== undefined) {
     try {
       const nodes = parseSExpr(`(${rulesSource.replace(/^\s*#[^\r\n]*/gm, '')})`, 131072);
@@ -224,3 +232,69 @@ export function readPCBDesignRuleSources(project: Pick<Project, 'pcb' | 'nativeF
 }
 
 export type PCBDesignRuleSources = ReturnType<typeof readPCBDesignRuleSources>;
+
+/** Pure, serializable rule texts for a pour/worker, without unrelated native files. */
+export type PCBFillRuleContext = { projectSource?: string; rulesSource?: string };
+
+export function pcbFillRuleContext(project: Pick<Project, 'nativeFiles'>): PCBFillRuleContext {
+  const files = project.nativeFiles;
+  const source = files?.files.find(({ name }) => name === files.entry)?.source;
+  const rulesName = files?.entry.replace(/\.kicad_pro$/i, '.kicad_dru');
+  const rulesSource = files?.files.find(({ name }) => name === rulesName)?.source;
+  if (source === undefined) return { rulesSource };
+  const settings = JSON.parse(source);
+  const rules = settings.board?.design_settings?.rules;
+  const net = settings.net_settings;
+  // CAD, solver bindings and other project metadata cannot invalidate copper.
+  const projectSource = JSON.stringify({
+    board: {
+      design_settings: {
+        rules: Object.fromEntries(
+          ['min_clearance', 'min_copper_edge_clearance', 'min_hole_clearance']
+            .filter((key) => rules && Object.hasOwn(rules, key))
+            .map((key) => [key, rules[key]]),
+        ),
+      },
+    },
+    net_settings:
+      net && typeof net === 'object' && !Array.isArray(net)
+        ? {
+            classes: Array.isArray(net.classes)
+              ? net.classes.map((entry: unknown) =>
+                  entry && typeof entry === 'object' && !Array.isArray(entry)
+                    ? {
+                        name: (entry as Record<string, unknown>).name,
+                        clearance: (entry as Record<string, unknown>).clearance,
+                      }
+                    : entry,
+                )
+              : net.classes,
+            netclass_patterns: net.netclass_patterns,
+            netclass_assignments: net.netclass_assignments,
+          }
+        : net,
+  });
+  return { projectSource, rulesSource };
+}
+
+export function samePCBFillRules(a?: PCBFillRuleContext, b?: PCBFillRuleContext): boolean {
+  return a?.projectSource === b?.projectSource && a?.rulesSource === b?.rulesSource;
+}
+
+export function pcbRuleNetClass(sources: PCBDesignRuleSources | undefined, netId: string | null) {
+  const name = netId ? sources?.netNames.get(netId) : undefined;
+  return (name && sources?.assignments.get(name)) || 'Default';
+}
+
+/** Callers supply reverse-precedence, enabled rules; conditions try both orders. */
+export function matchingPCBClearanceRule(
+  rules: readonly ClearanceRule[],
+  a: PCBRuleOperand,
+  b: PCBRuleOperand,
+  visit: () => void = () => {},
+) {
+  for (const rule of rules) {
+    visit();
+    if (rule.matches(a, b) || rule.matches(b, a)) return rule;
+  }
+}

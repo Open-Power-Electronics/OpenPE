@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { adaptLm25017, lm25017Latch } from '../server/spice-lm25017.mjs';
-import { runSimulation } from '../server/spice.mjs';
-import type { SpiceDeck } from '../lib/spice';
+import { adaptLm25017, lm25017Latch } from '../plugins/spice-simulation/host/spice-lm25017.mjs';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
 
 const id = 'reference-lm25017';
 const deck = (): SpiceDeck => ({
@@ -15,7 +15,7 @@ const deck = (): SpiceDeck => ({
   assumptions: [],
 });
 test('controller state closure preserves original model, external circuit and timing components', async () => {
-  const bytes = await readFile('examples/lm25017-wson8-flybuck/circuits/LM25017.lib');
+  const bytes = await readFile('examples/lm25017-wson8-flybuck/models/LM25017.lib');
   const before = Buffer.from(bytes),
     input = deck(),
     snapshot = structuredClone(input);
@@ -35,7 +35,7 @@ test('controller state closure preserves original model, external circuit and ti
   assert.equal(result.compatibility, 'psa');
 });
 test('state closure rejects changed bytes, malformed calls, duplicate identities and reapplication', async () => {
-  const bytes = await readFile('examples/lm25017-wson8-flybuck/circuits/LM25017.lib');
+  const bytes = await readFile('examples/lm25017-wson8-flybuck/models/LM25017.lib');
   const models = new Map([[id, bytes]]);
   assert.throws(() => adaptLm25017(deck(), new Map()), /SHA-256/);
   assert.throws(

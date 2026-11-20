@@ -8,6 +8,35 @@ import {
 export { child, children, num, val, quote, parseSExpr } from './sexpr';
 export { createProject, validateProject } from './project';
 
+export const librarySources = ['KiCad', 'NextPCB', 'JLCPCB'] as const;
+export type LibrarySource = (typeof librarySources)[number];
+
+export function isOnlineLibrary(source: string): source is 'NextPCB' | 'JLCPCB' {
+  return source === 'NextPCB' || source === 'JLCPCB';
+}
+
+export function catalogSource(library: string): LibrarySource {
+  return isOnlineLibrary(library) ? library : 'KiCad';
+}
+
+export function onlineFootprintLibrary(id: string) {
+  const separator = id.indexOf(':');
+  const library = id.slice(0, separator);
+  return separator > 0 && isOnlineLibrary(library) ? library : undefined;
+}
+
+export function footprintSearchTerm(id: string) {
+  const library = onlineFootprintLibrary(id);
+  const name = id.slice(id.indexOf(':') + 1);
+  const nextpcb = library === 'NextPCB' && /^[1-9]\d{0,18}_(.+)$/.exec(name);
+  if (!nextpcb) return library === 'JLCPCB' ? name : id;
+  try {
+    return decodeURIComponent(nextpcb[1]);
+  } catch {
+    return '';
+  }
+}
+
 export type LibraryEntry = {
   id: string;
   name: string;
@@ -15,8 +44,93 @@ export type LibraryEntry = {
   description: string;
   keywords: string;
   footprint?: string;
+  manufacturer?: string;
+  package?: string;
+  footprintPreview?: 'unavailable' | '2d' | '2d-and-3d';
+  attribution?: { source: string; homepages: string[]; notice: string };
 };
-export type SymbolDetail = LibraryEntry & { symbol: SExpr; units: number; error?: string };
+export type SymbolDetail = LibraryEntry & {
+  symbol: SExpr;
+  units: number;
+  error?: string;
+  warning?: string;
+};
+
+export const libraryPriceSources = ['lcsc', 'huaqiu'] as const;
+export type LibraryPriceSource = (typeof libraryPriceSources)[number];
+
+export function isLibraryPriceSource(value: unknown): value is LibraryPriceSource {
+  return libraryPriceSources.some((source) => source === value);
+}
+
+export const libraryDatasheetSources = ['huaqiu', 'jlcpcb'] as const;
+export type LibraryDatasheetSource = (typeof libraryDatasheetSources)[number];
+
+export function isLibraryDatasheetSource(value: unknown): value is LibraryDatasheetSource {
+  return libraryDatasheetSources.some((source) => source === value);
+}
+
+export type LibraryPrice = {
+  source: LibraryPriceSource;
+  currency: 'USD';
+  checkedAt: number;
+  offers: {
+    sku: string;
+    manufacturer: string | null;
+    stock?: number;
+    tiers: { quantity: number; unitPrice: number }[];
+  }[];
+};
+
+export function isLibraryAssetUnavailable(
+  error: unknown,
+): error is Error & { code: 'OPENPE_LIBRARY_ASSET_UNAVAILABLE' } {
+  return (
+    error instanceof Error && 'code' in error && error.code === 'OPENPE_LIBRARY_ASSET_UNAVAILABLE'
+  );
+}
+
+export function libraryPackageQuery(query: string) {
+  const value = query.trim();
+  const explicit = /^package:(.*)$/i.exec(value)?.[1].trim();
+  return explicit ?? (libraryPackageCodeKind(value) ? value : undefined);
+}
+
+const chipPackageSizes = new Set([
+  '01005',
+  '0201',
+  '0402',
+  '0603',
+  '0805',
+  '1008',
+  '1206',
+  '1210',
+  '1812',
+  '2010',
+  '2220',
+  '2512',
+]);
+
+const namedPackageCode =
+  /^(?:SOT|TSOT|SOD|TO|SOIC|SOP|SSOP|TSSOP|MSOP|QSOP|DIP|QFN|DFN|QFP|TQFP|LQFP|BGA|LGA|SMD)(?:[- ]?\d{1,4}){1,3}[A-Z]?$/i;
+
+export function libraryPackageCodeKind(value: string) {
+  if (chipPackageSizes.has(value)) return 'chip';
+  if (namedPackageCode.test(value)) return 'named';
+}
+
+export function matchesLibraryPackage(value: string | undefined, query: string) {
+  if (chipPackageSizes.has(query)) return value?.match(/\d+/)?.[0] === query;
+  const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const term = normalize(query);
+  return term !== '' && normalize(value ?? '').includes(term);
+}
+
+export function matchesNativeFootprintPackage(id: string | undefined, query: string) {
+  if (!chipPackageSizes.has(query)) return matchesLibraryPackage(id, query);
+  const name = id?.split(':').at(-1);
+  return name?.match(/(?:^|[_-])(\d{4,6})(?=$|[_-])/)?.[1] === query;
+}
 
 /** Rank the complete catalog before pagination; never change the stored catalog order. */
 export function searchLibrary(entries: LibraryEntry[], query: string, library = '') {
@@ -34,7 +148,7 @@ export function searchLibrary(entries: LibraryEntry[], query: string, library = 
     if (library && entry.library !== library) continue;
     const id = entry.id.toLowerCase();
     const name = entry.name.toLowerCase();
-    const keywords = entry.keywords.toLowerCase();
+    const keywords = `${entry.keywords} ${entry.package ?? ''} ${entry.footprint ?? ''}`.toLowerCase();
     const description = entry.description.toLowerCase();
     const libraryName = entry.library.toLowerCase();
     const searchable = `${id} ${name} ${description} ${keywords}`;

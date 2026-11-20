@@ -10,8 +10,8 @@ export type ExternalModelDeclaration = {
   pins: string[];
 };
 
-export type SymbolModelPin = { number: string; name: string };
-export type ExternalModelBinding = {
+type SymbolModelPin = { number: string; name: string };
+type ExternalModelBinding = {
   kind: 'model' | 'subcircuit';
   terminals: string[];
   symbolPins: SymbolModelPin[];

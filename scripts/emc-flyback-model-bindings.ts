@@ -38,7 +38,7 @@ export function prepareEmcFlybackModelBindings(circuit: Circuit) {
     const part = parts[0];
     part.fields = {
       ...part.fields,
-      'Sim.Library': `circuits/${library}.lib`,
+      'Sim.Library': `models/${library}.lib`,
       'Sim.Name': name,
       'Sim.Device': device,
       ...(type ? { 'Sim.Type': type } : {}),

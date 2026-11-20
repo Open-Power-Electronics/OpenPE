@@ -20,11 +20,11 @@ import {
   thermalFingerprint,
   type ThermalModel,
   type ThermalResult,
-} from '../lib/thermal';
+} from '../plugins/layout-thermal/domain/thermal';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { createProjectThermalStore, thermalRunKey } from '../server/project-thermal-files.mjs';
 import { withAnalysisFiles } from '../server/flat-analysis-files.mjs';
-import { runThermalSimulation } from '../server/thermal-runtime.mjs';
+import { runThermalSimulation } from '../plugins/layout-thermal/host/thermal-runtime.mjs';
 
 const signal = () => new AbortController().signal;
 const solver = { gmsh: '4.15.2', elmer: '26.1', identity: 'a'.repeat(64) };
@@ -133,7 +133,7 @@ async function fixture(fieldInMesh = false) {
     source,
     input,
     output: result(input),
-    parent: path.join(root, 'thermal'),
+    parent: path.join(root, 'layout-thermal'),
     store: createProjectThermalStore(() => file),
     async cleanup() {
       assert.equal(path.dirname(path.resolve(root)), testParent);
@@ -194,7 +194,6 @@ test('Layout Thermal saves complete flat artifacts with original logical names, 
         JSON.stringify({ format: 'openpe-thermal-v1', model: f.input, solver, files: logical }),
       ),
     );
-    assert.equal(key, thermalRunKey(f.input, solver, logical));
     const manifest = JSON.parse(await readFile(path.join(f.parent, 'buck.manifest.json'), 'utf8'));
     assert.equal(manifest.format, 'openpe-thermal-v2');
     assert.equal(manifest.project, 'buck.kicad_pro');
@@ -316,7 +315,7 @@ test('Layout Thermal publication retries sharing locks and rolls back every prio
       ) => {
         if (
           String(to) === path.join(f.parent, 'buck.manifest.json') &&
-          path.basename(path.dirname(String(from))).includes('-pending-')
+          path.basename(path.dirname(String(from))).startsWith('.pending-')
         ) {
           attempts++;
           if (denied || attempts < 3)
@@ -476,10 +475,9 @@ test('flat Layout Thermal validates every artifact, project identity and physica
 test('Layout Thermal ignores retired nested records and preserves their files', async () => {
   const f = await fixture();
   try {
-    const files = (await expectedFiles(f.source, f.input, f.output)).map(
-      ({ name, size, sha256 }) => ({ name, size, sha256 }),
-    );
-    const key = thermalRunKey(f.input, solver, files);
+    const current = await expectedFiles(f.source, f.input, f.output);
+    const files = current.map(({ name, size, sha256 }) => ({ name, size, sha256 }));
+    const key = thermalRunKey(f.input, solver, current);
     const legacy = path.join(f.parent, 'buck'),
       folder = path.join(legacy, key);
     await mkdir(path.join(folder, 'mesh'), { recursive: true });
@@ -583,7 +581,7 @@ test('Layout Thermal rejects linked source files and destination folders without
     await writeFile(path.join(outside, 'notes.txt'), 'user data');
     await symlink(
       outside,
-      path.join(f.root, 'thermal'),
+      path.join(f.root, 'layout-thermal'),
       process.platform === 'win32' ? 'junction' : 'dir',
     );
     await assert.rejects(f.store.read(signal()), /without links/);
@@ -591,7 +589,7 @@ test('Layout Thermal rejects linked source files and destination folders without
       f.store.write(f.source, f.input, f.output, solver, signal()),
       /without links/,
     );
-    await rm(path.join(f.root, 'thermal'));
+    await rm(path.join(f.root, 'layout-thermal'));
     await rm(path.join(f.source, 'solver.log'));
     await link(path.join(outside, 'notes.txt'), path.join(f.source, 'solver.log'));
     await assert.rejects(

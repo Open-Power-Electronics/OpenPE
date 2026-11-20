@@ -11,6 +11,6 @@ resources/third-party-source/newstroke-10.0.0/** -text
 examples/project/emc-flyback/circuits/EMC_flyback_control.lib -text
 resources/example-catalog/footprints/emc-flyback/** -text
 resources/example-catalog/footprints/models/** -text
-server/pcb-design/SKILL.md -text
-server/pcb-design/references/** -text
-server/pcb-design/LICENSE -text
+plugins/pe-layout-skill/resources/SKILL.md -text
+plugins/pe-layout-skill/resources/references/** -text
+plugins/pe-layout-skill/resources/LICENSE -text

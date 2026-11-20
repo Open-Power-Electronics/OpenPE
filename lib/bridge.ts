@@ -7,13 +7,15 @@ export type DiscoveredExample = {
   description: string;
   section: 'project' | 'examples';
 };
-export type RecentProject = { id: string; title: string; description: string };
+export type RecentProject = { id: string; title: string; description: string; pinned?: boolean };
+export type RawKiCadSelection = { id: string; names: string[] };
 export type SpiceModelDeclaration = {
   name: string;
   kind: 'model' | 'subcircuit';
   device?: string;
   pins: string[];
 };
+export type SpiceModelCatalog = { path: string; models: SpiceModelDeclaration[]; issues: string[] };
 import type {
   ProjectDirectoryListing,
   ProjectFilePreview,
@@ -25,7 +27,11 @@ declare global {
     openpe?: {
       readonly titleBarOverlay: boolean;
       readonly titleBarInset: boolean;
+      installPlugin(): Promise<{ id: string } | null>;
       connection(): Promise<{ base: string; token: string }>;
+      setRawKiCadMode(value: boolean): Promise<void>;
+      chooseRawKiCadFiles(): Promise<RawKiCadSelection | null>;
+      openLibraryHomepage(site: 'jlceda' | 'easyeda'): Promise<void>;
       cursorCredentialStatus(): Promise<{ configured: boolean; suffix?: string }>;
       cursorCredentialStore(key: string): Promise<{ configured: boolean; suffix?: string }>;
       cursorCredentialRemove(): Promise<{ configured: false }>;
@@ -42,6 +48,7 @@ declare global {
       >;
       listRecent(): Promise<{ initialized: boolean; entries: RecentProject[]; warnings: string[] }>;
       removeRecent(id: string): Promise<void>;
+      pinRecent(id: string, pinned: boolean): Promise<void>;
       previewRecent(id: string): Promise<Circuit>;
       onRecentChanged(callback: () => void): () => void;
       acceptOpen(openId: number): Promise<string>;
@@ -61,11 +68,11 @@ declare global {
       chooseSpiceModel(
         fileId: string,
         currentLibrary?: string,
-      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
+      ): Promise<SpiceModelCatalog | null>;
       inspectSpiceModel(
         fileId: string,
         library: string,
-      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
+      ): Promise<SpiceModelCatalog | null>;
       projectFilePreview(options: { fileId: string; id: string }): Promise<ProjectFilePreview>;
       projectFilePdf(options: { fileId: string; id: string }): Promise<ProjectFilePdf>;
       projectFileWrite(options: ProjectFileWrite): Promise<ProjectFilePreview>;
@@ -129,22 +136,35 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
   } else if (route === 'model-cad/preview' && options.method === 'POST') {
     endpoint = 'cad';
     body = options.body;
+  } else if (route === 'library-datasheet' && method === 'POST') {
+    endpoint = 'datasheet';
+    body = options.body;
   } else {
     const prefix = route.startsWith('libraries/footprints?')
       ? 'libraries/footprints?'
       : route.startsWith('library-model?')
         ? 'library-model?'
-        : null;
+        : route.startsWith('library-price?')
+          ? 'library-price?'
+          : null;
     if (!prefix || (options.method ?? 'GET') !== 'GET' || options.body !== undefined)
       throw unavailable();
     const query = new URLSearchParams(route.slice(prefix.length));
-    if (!query.has('id') || query.size !== (prefix === 'library-model?' ? 2 : 1))
-      throw unavailable();
+    const expectedSize = prefix === 'library-price?' ? 3 : prefix === 'library-model?' ? 2 : 1;
+    if (!query.has('id') || query.size !== expectedSize) throw unavailable();
     if (prefix === 'library-model?') {
       const index = query.get('index');
       if (index === null || !/^\d{1,2}$/.test(index)) throw unavailable();
       endpoint = 'model';
       body = JSON.stringify({ id: query.get('id'), index: Number(index) });
+    } else if (prefix === 'library-price?') {
+      if (!query.has('kind') || !query.has('source')) throw unavailable();
+      endpoint = 'price';
+      body = JSON.stringify({
+        id: query.get('id'),
+        kind: query.get('kind'),
+        source: query.get('source'),
+      });
     } else {
       endpoint = 'footprint';
       body = JSON.stringify({ id: query.get('id') });

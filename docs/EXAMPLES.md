@@ -7,8 +7,8 @@ boards if there is no schematic. Each opens through the same native reader as
 File Open, using its independent-sheet and primary-board rules.
 The [home manifest](../resources/example-catalog/home-manifest.json) supplies
 bundled display metadata and stable identities for the nine curated projects and
-the default EMC Flyback Recent entry. Desktop Recent replaces this default with
-actual opening/save history as defined in [Design](../DESIGN.md#home-projects-and-recovery).
+the default pinned EMC Flyback Recent entry. Desktop Recent keeps this shortcut
+alongside actual opening/save history until it is unpinned, as defined in [Design](../DESIGN.md#home-projects-and-recovery).
 Other discovered projects appear under Example regardless of their source root.
 
 Discovery inspects directory entries without reading project contents or
@@ -119,22 +119,22 @@ The nine Example projects show simulation source/load components to the right of
 Unassigned components render as Virtual; physical/virtual classification is
 independent of model support and Include in SPICE simulation.
 
-TI simulation models live in ignored `circuits/` sidecars. Their sources are pinned in
+TI simulation models live in ignored `models/` sidecars. Their sources are pinned in
 [reference-models-lock.json](../resources/reference-models-lock.json) and, for
-LM2596, [lib/ti-dcdc.ts](../lib/ti-dcdc.ts). The prepared Home subset ships as
+LM2596, [lib/reference-models.ts](../lib/reference-models.ts). The prepared Home subset ships as
 separate application resources under `simulation-examples/models`. EMC Flyback's
 four project-local SPICE libraries are tracked source assets. Preparation verifies
 their bytes against [the EMC model lock](../resources/emc-flyback-models-lock.json).
 [Simulation](SIMULATION.md#portable-models-and-bundled-solver) defines model
 references and resolution.
 
-Keep the KiCad files, library tables and required `circuits/`, `models/`,
+Keep the KiCad files, library tables and required `models/`,
 `footprints/` and `symbols/` assets together when moving a project. Custom
 libraries use `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`.
 Project rules use `<stem>.kicad_dru`. Save as renames these project-bound paths
 and updates library-table URIs while retaining `fp-lib-table`, `sym-lib-table`
 and internal library IDs. [Libraries](LIBRARIES.md#step-access-and-previews)
-owns pinned package/STEP delivery and asset cleanup.
+owns pinned package/STEP delivery.
 
 ## Regeneration and resource preparation
 
@@ -198,8 +198,8 @@ their respective resource directories described under [Original project director
 Private destination-bound Git history is initialized on example opening.
 
 Model preparation also updates canonical model references. Vendor model bytes
-stay outside Git. Use `npm run simulation:download-examples -- --fixtures` when
-preparing Home and internal KiCad/TI sidecars for the complete sweep.
+stay outside Git. Use `npm run simulation:download-examples` to prepare the Home sidecars for
+the complete sweep.
 
 ## Verification and simulation scope
 
@@ -212,15 +212,16 @@ explicit 1 W test input. The nine reference controllers also retain their review
 model bindings after reference changes or copying the symbol into a project-local
 library; altered model identities and electrical pins remain rejected. These
 checks do not run solvers or establish support for arbitrary upstream files.
+Custom-library preservation and renaming in `tests/example-native-libraries.test.ts`
+also use the actual native projects, independently of generated regression snapshots.
 
 The EMC electrical and thermal real-solver checks read
 `examples/project/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
 Electrical execution reads its colocated model files. Neither check substitutes
 the generated regression snapshot or a model download for those inputs.
 
-Documentation-only edits require static content, link and format checks. The
-following commands provide distinct verification when design/runtime changes
-require it; none launches Electron or an Agent provider.
+Use the focused checks below with the
+[engineering verification requirements](../AGENTS.md#verification-and-delivery).
 
 | Command                                                            | Scope                                                                                                                                                                             |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -229,11 +230,10 @@ require it; none launches Electron or an Agent provider.
 | `python scripts/check-reference-kicad.py --cli /path/to/kicad-cli` | Actual KiCad 10 connectivity, native geometry and SVG checks; run under KiCad's Python with `pcbnew`                                                                              |
 | `npm run simulation:check-examples -- reference`                   | Offline real bundled-ngspice sweep of actual canonical Home files, canonical/renderer/service deck parity, completion and output checks                                           |
 
-Prepare the bundled solver and sidecars before the real-solver sweep; it fails
-on missing resources instead of downloading them. Desktop integration/startup
-checks require an explicit user request. [verification.json](../resources/example-catalog/verification.json)
-records structural/connectivity checks under KiCad 10.0.1; it is not simulation,
-ERC or DRC evidence and does not validate subsequent changes.
+[SPICE verification](SIMULATION.md#verification-commands) covers offline sweep
+preparation and failure handling. The pinned
+[verification.json](../resources/example-catalog/verification.json) records
+structural and connectivity checks for the generated files under KiCad 10.0.1.
 
 Example generation requires a complete OpenPE ERC report with zero issues
 for the nine schematics under `examples/` and EMC Flyback under `examples/project/`. The native portability test
@@ -257,9 +257,9 @@ terms. See [the reference-circuit notice](../public/licenses/reference/NOTICE.tx
 [footprints/LICENSE.md](../resources/example-catalog/footprints/LICENSE.md) and About OpenPE > Third-party
 licenses. Preserve original model notices and all pinned source bytes/hashes.
 
-RC, KiCad and TI circuits are internal
-fixtures under `tests/fixtures/`, regenerated with `npm run fixtures:generate`. Other reference-circuit
-regression inputs and their originals live in `tests/fixtures/reference-retired`;
-PEBench inputs remain in `tests/fixtures/pebench`. Those collections are outside
-Home and application bundles. Recovery accepts only current catalog identities; retired example records are unsupported.
-Personal projects and their private histories are preserved.
+The native projects under `examples/` and its `project/` group are the sole
+maintained example collection. Tests use derived snapshots of these same Home
+projects and small programmatic fixtures; they do not maintain additional
+circuit catalogs. Recovery accepts only current catalog identities; retired
+example records are unsupported. Personal projects and their private histories
+are preserved.

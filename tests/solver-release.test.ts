@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { create } from 'tar';
+import { create, Header } from 'tar';
+import { gzipSync } from 'node:zlib';
 import {
   approvedReleaseRedirect,
   assertPinnedLocalArchive,
@@ -23,22 +24,45 @@ const name = 'fixture-1.tar.gz';
 test('solver release redirects allow GitHub asset hosts and reject every other host', () => {
   const release = `https://github.com/fleaxiao/OpenPE/releases/download/${tag}/${name}`;
   assert.equal(
-    approvedReleaseRedirect(release, 'https://objects.githubusercontent.com/github-production-release-asset/1'),
+    approvedReleaseRedirect(
+      release,
+      'https://objects.githubusercontent.com/github-production-release-asset/1',
+    ),
     true,
   );
   assert.equal(
-    approvedReleaseRedirect(release, 'https://release-assets.githubusercontent.com/github-production-release-asset/1'),
+    approvedReleaseRedirect(
+      release,
+      'https://release-assets.githubusercontent.com/github-production-release-asset/1',
+    ),
     true,
   );
-  assert.equal(approvedReleaseRedirect(release, 'https://github.com/fleaxiao/OpenPE/releases/download/x/y'), true);
-  assert.equal(approvedReleaseRedirect(release, 'https://codeload.github.com/fleaxiao/OpenPE/tar.gz/x'), false);
+  assert.equal(
+    approvedReleaseRedirect(release, 'https://github.com/fleaxiao/OpenPE/releases/download/x/y'),
+    true,
+  );
+  assert.equal(
+    approvedReleaseRedirect(release, 'https://codeload.github.com/fleaxiao/OpenPE/tar.gz/x'),
+    false,
+  );
   assert.equal(approvedReleaseRedirect(release, 'https://example.com/archive.tar.gz'), false);
-  assert.equal(approvedReleaseRedirect(release, 'http://objects.githubusercontent.com/archive'), false);
-  assert.equal(approvedReleaseRedirect('http://127.0.0.1:9/a/b', 'https://objects.githubusercontent.com/a'), false);
+  assert.equal(
+    approvedReleaseRedirect(release, 'http://objects.githubusercontent.com/archive'),
+    false,
+  );
+  assert.equal(
+    approvedReleaseRedirect('http://127.0.0.1:9/a/b', 'https://objects.githubusercontent.com/a'),
+    false,
+  );
   assert.throws(() => solverEntryPath('../secret'), /Invalid solver archive entry/);
 });
 
-async function listen(handler: (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => void) {
+async function listen(
+  handler: (
+    request: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse,
+  ) => void,
+) {
   const server = createServer(handler);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -46,7 +70,10 @@ async function listen(handler: (request: import('node:http').IncomingMessage, re
   return {
     server,
     origin: `http://127.0.0.1:${address.port}`,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      ),
   };
 }
 
@@ -128,7 +155,7 @@ test('solver release download verifies a local archive and follows only the appr
   }
 });
 
-test('solver archive extraction rejects an extra entry and a symlink', async () => {
+test('solver archive extraction rejects extra entries, symbolic links and hard links', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'openpe-solver-entry-'));
   try {
     await mkdir(path.join(root, 'bin'));
@@ -154,28 +181,27 @@ test('solver archive extraction rejects an extra entry and a symlink', async () 
       }),
       /Unexpected solver archive entry extra\.txt/,
     );
-    const linkRoot = path.join(root, 'linked');
-    await mkdir(linkRoot);
-    await symlink(path.join(root, 'bin', 'tool'), path.join(linkRoot, 'tool'));
-    const linked = path.join(root, 'link.tar.gz');
-    await create(
-      {
-        cwd: linkRoot,
-        file: linked,
-        portable: true,
-        gzip: true,
+    // Archive validation must reject a link entry before extraction. Construct
+    // the actual tar header without requiring host file-symlink privileges.
+    for (const type of ['SymbolicLink', 'Link'] as const) {
+      const linked = path.join(root, `${type}.tar.gz`);
+      const destination = path.join(root, `${type}-out`);
+      const header = new Header({
+        path: 'tool',
+        type,
+        linkpath: '../bin/tool',
+        size: 0,
+        mode: 0o777,
         mtime: new Date(SOLVER_ARCHIVE_EPOCH * 1000),
-      },
-      ['tool'],
-    );
-    await assert.rejects(
-      extractVerifiedArchive({
-        archive: linked,
-        destination: path.join(root, 'linked-out'),
-        files: { tool: hash },
-      }),
-      /Unexpected solver archive entry tool|not a regular file/,
-    );
+      });
+      header.encode();
+      await writeFile(linked, gzipSync(Buffer.concat([header.block!, Buffer.alloc(1024)])));
+      await assert.rejects(
+        extractVerifiedArchive({ archive: linked, destination, files: { tool: hash } }),
+        /Unexpected solver archive entry tool|not a regular file/,
+      );
+      await assert.rejects(lstat(destination), { code: 'ENOENT' });
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -187,10 +213,13 @@ test('a local solver archive must match the pin and must be a regular file', asy
     verify: true,
     archive: null,
   });
-  assert.deepEqual(parseSolverPrepareArgs(['node', 'prepare', '--archive', 'solver.tar.gz'], usage), {
-    verify: false,
-    archive: 'solver.tar.gz',
-  });
+  assert.deepEqual(
+    parseSolverPrepareArgs(['node', 'prepare', '--archive', 'solver.tar.gz'], usage),
+    {
+      verify: false,
+      archive: 'solver.tar.gz',
+    },
+  );
   assert.throws(
     () => parseSolverPrepareArgs(['node', 'prepare', '--verify', '--archive', 'a'], usage),
     /Usage/,
@@ -206,8 +235,18 @@ test('a local solver archive must match the pin and must be a regular file', asy
       await assertPinnedLocalArchive(file, { sha256: pinned.sha256, size: pinned.size }),
       path.resolve(file),
     );
+    const directory = path.join(root, 'not-an-archive');
+    await mkdir(directory);
+    await assert.rejects(
+      assertPinnedLocalArchive(directory, { sha256: pinned.sha256, size: pinned.size }),
+      /regular file/,
+    );
     const link = path.join(root, 'solver-link.tar.gz');
-    await symlink(file, link);
+    await symlink(
+      process.platform === 'win32' ? directory : file,
+      link,
+      process.platform === 'win32' ? 'junction' : 'file',
+    );
     await assert.rejects(
       assertPinnedLocalArchive(link, { sha256: pinned.sha256, size: pinned.size }),
       /regular file/,

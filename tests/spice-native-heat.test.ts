@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { SpiceDeck } from '../lib/spice';
-import { readNativeSpiceRows } from '../server/spice-raw.mjs';
-import { parseWaveforms, readNativeSpiceDissipation } from '../server/spice-waveforms.mjs';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
+import { readNativeSpiceRows } from '../plugins/spice-simulation/host/spice-raw.mjs';
+import {
+  parseWaveforms,
+  readNativeSpiceDissipation,
+} from '../plugins/spice-simulation/host/spice-waveforms.mjs';
 
 const deck: SpiceDeck = {
   netlist: '',

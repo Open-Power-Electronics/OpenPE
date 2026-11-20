@@ -1,6 +1,10 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { isUtf8 } = require('node:buffer');
+const {
+  isPluginProjectData,
+  isPluginProjectDirectory,
+} = require('../server/plugin-project-format.cjs');
 
 const maxFiles = 128;
 const maxFileBytes = 8_000_000;
@@ -33,6 +37,7 @@ const nativeName = (name) =>
   name.split('/').length <= maxDepth + 1 &&
   name.split('/').every(safeSegment) &&
   !name.split('/').slice(0, -1).some(privateDirectory) &&
+  !isPluginProjectData(name) &&
   (/\.kicad_(?:pro|sch|pcb|dru|wks|sym|mod|jobset)$/i.test(name) ||
     /\.(?:lib|cir|spice|dcm)$/i.test(name) ||
     ['sym-lib-table', 'fp-lib-table'].includes(path.posix.basename(name)));
@@ -40,8 +45,7 @@ const nativeName = (name) =>
 async function regularDirectory(directory) {
   const info = await fs.lstat(directory);
   // Ancestor symlinks are outside this folder. A link at the folder itself is rejected.
-  if (info.isSymbolicLink())
-    throw new Error('Linked KiCad project folders are not supported.');
+  if (info.isSymbolicLink()) throw new Error('Linked KiCad project folders are not supported.');
   if (!info.isDirectory()) throw new Error('The KiCad project location must be a regular folder.');
 }
 
@@ -183,6 +187,7 @@ async function readNativeProject(file) {
       if (!safeSegment(item.name) || privateDirectory(item.name)) continue;
       const location = path.join(current, item.name);
       const name = relative ? `${relative}/${item.name}` : item.name;
+      if (!relative && isPluginProjectDirectory(item.name)) continue;
       if (item.isDirectory()) {
         if (depth >= maxDepth)
           throw new Error('KiCad project source folders exceed the maximum depth of 8.');

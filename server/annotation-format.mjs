@@ -142,7 +142,7 @@ function validateAnnotations(value) {
     const elements = /* @__PURE__ */ new Set();
     for (const rawElement of a.elements) {
       const e = record(rawElement, ["id", "kind", "label", "properties"]);
-      if (!text(e.id, 64) || !uuid.test(e.id) && (layout || !/^field\/[0-9a-f-]{36}\/(Reference|Value|Sim\.Params)$/i.test(e.id)) || elements.has(e.id) || !(layout ? ["footprint", "pad", "track", "via", "graphic", "zone"] : ["component", "field", "wire", "label", "junction", "no-connect", "text"]).includes(String(e.kind)) || !text(e.label, 4096))
+      if (!text(e.id, 64) || !uuid.test(e.id) && (layout || !/^field\/[0-9a-f-]{36}\/(Reference|Value|Sim\.Params)$/i.test(e.id)) || elements.has(e.id) || !(a.target === "object" && e.kind === "solid") && !(layout ? ["footprint", "pad", "track", "via", "graphic", "zone"] : ["component", "field", "wire", "label", "junction", "no-connect", "text"]).includes(String(e.kind)) || !text(e.label, 4096))
         throw new Error("Invalid annotated element.");
       elements.add(e.id);
       const properties = record(e.properties);

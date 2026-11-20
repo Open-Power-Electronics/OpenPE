@@ -5,8 +5,8 @@ import {
   thermalResultSchema,
   type ThermalConfig,
   type ThermalResult,
-} from '../lib/thermal';
-import type { ThermalProbe, ThermalSurface } from '../lib/thermal-view';
+} from '../plugins/layout-thermal/domain/thermal';
+import type { ThermalProbe, ThermalSurface } from '../plugins/layout-thermal/domain/thermal-view';
 
 export type AgentThermalState = {
   boardId: string | null;

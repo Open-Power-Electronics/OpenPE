@@ -7,7 +7,7 @@ import { symbolBodyBounds } from './symbol-bounds';
 
 export type SelectionMode = 'replace' | 'add' | 'toggle' | 'subtract';
 export type SchematicSelectionBounds = { x: number; y: number; width: number; height: number };
-export type SelectionModifiers = { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean };
+type SelectionModifiers = { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean };
 
 export function selectionMode(modifiers: SelectionModifiers): SelectionMode {
   const control = isCommandModifier(modifiers);

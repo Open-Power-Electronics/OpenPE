@@ -3,9 +3,18 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, appendFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { appendSimulationSamples, readSimulationEvents } from '../lib/simulation-stream';
-import { waveformCursorIndex, validatedSimulationResult } from '../lib/waveform';
-import { createSpiceRawReader, liveSpiceNetlist } from '../server/spice-raw.mjs';
+import {
+  appendSimulationSamples,
+  readSimulationEvents,
+} from '../plugins/spice-simulation/renderer/simulation-stream';
+import {
+  waveformCursorIndex,
+  validatedSimulationResult,
+} from '../plugins/spice-simulation/domain/waveform';
+import {
+  createSpiceRawReader,
+  liveSpiceNetlist,
+} from '../plugins/spice-simulation/host/spice-raw.mjs';
 import { startServer } from '../server/index.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import {
@@ -13,7 +22,7 @@ import {
   defaultTransient,
   type SpiceDeck,
   type SimulationResult,
-} from '../lib/spice';
+} from '../plugins/spice-simulation/domain/spice';
 import { createProject, serializeProject } from '../lib/project';
 
 const deck: SpiceDeck = {

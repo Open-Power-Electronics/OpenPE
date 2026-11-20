@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Select from './Select';
 import Dialog from './Dialog';
+import WorkspaceLoading from './WorkspaceLoading';
 import { GitIcon, ModelIcon, SchematicIcon } from './EditorIcons';
 import ProjectFileComparison from './ProjectFileComparison';
 import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
@@ -465,7 +466,9 @@ export default function ProjectHistoryView({
                   };
                   return (
                     <div className="history-preview" key={mode} hidden={display !== mode}>
-                      <Suspense fallback={<p role="status">Loading {mode} comparison…</p>}>
+                      <Suspense
+                        fallback={<WorkspaceLoading panel label={`Loading ${mode} comparison`} />}
+                      >
                         {mode === 'model' ? (
                           <ModelComparison {...props} fileId={fileId} />
                         ) : (

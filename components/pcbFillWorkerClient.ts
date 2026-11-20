@@ -1,9 +1,11 @@
 import type { PCB } from '../lib/pcb';
+import { samePCBFillRules, type PCBFillRuleContext } from '../lib/pcb-clearance-sources';
 import type { PCBFillWorkerRequest, PCBFillWorkerResponse } from './pcbFillWorkerProtocol';
 
 export type PCBFillWorkerResult = PCBFillWorkerResponse & {
   basis: PCB;
   candidate: PCB;
+  rules?: PCBFillRuleContext;
   fatal?: true;
 };
 
@@ -14,7 +16,13 @@ export type PCBFillWorkerPort = {
   terminate(): void;
 };
 
-type Job = { basis: PCB; candidate: PCB; generation: number; requestId: number };
+type Job = {
+  basis: PCB;
+  candidate: PCB;
+  generation: number;
+  requestId: number;
+  rules?: PCBFillRuleContext;
+};
 
 /** Saved contours belong to the worker's one basis message, not every pose.
  * Reading their references to omit them never visits their vertices. */
@@ -40,6 +48,7 @@ export function createPCBFillWorkerClient(
   let generation = 0;
   let requestId = 0;
   let basis: PCB | null = null;
+  let rules: PCBFillRuleContext | undefined;
   let sentGeneration: number | null = null;
   let active: Job | null = null;
   let pending: Job | null = null;
@@ -71,7 +80,12 @@ export function createPCBFillWorkerClient(
     active = job;
     try {
       if (sentGeneration !== job.generation) {
-        worker.postMessage({ type: 'basis', generation: job.generation, board: job.basis });
+        worker.postMessage({
+          type: 'basis',
+          generation: job.generation,
+          board: job.basis,
+          ...(job.rules ? { rules: job.rules } : {}),
+        });
         sentGeneration = job.generation;
       }
       worker.postMessage({
@@ -99,17 +113,23 @@ export function createPCBFillWorkerClient(
     const finished = active;
     active = null;
     if (finished.generation === generation)
-      onResult({ ...data, basis: finished.basis, candidate: finished.candidate });
+      onResult({
+        ...data,
+        basis: finished.basis,
+        candidate: finished.candidate,
+        ...(finished.rules ? { rules: finished.rules } : {}),
+      });
     dispatch();
   };
   worker.onerror = (event) => fail(event.message || 'Copper fill worker stopped unexpectedly.');
 
   return {
     /** False means a fatal failure/disposal requires a fresh worker client. */
-    submit(nextBasis: PCB, candidate: PCB) {
+    submit(nextBasis: PCB, candidate: PCB, nextRules?: PCBFillRuleContext) {
       if (disposed) return false;
-      if (basis !== nextBasis) {
+      if (basis !== nextBasis || !samePCBFillRules(rules, nextRules)) {
         basis = nextBasis;
+        rules = nextRules ? { ...nextRules } : undefined;
         generation++;
         pending = null;
       }
@@ -119,7 +139,13 @@ export function createPCBFillWorkerClient(
         return true;
       }
       if (pending?.generation === generation && pending.candidate === candidate) return true;
-      latest = { basis: nextBasis, candidate, generation, requestId: ++requestId };
+      latest = {
+        basis: nextBasis,
+        candidate,
+        generation,
+        requestId: ++requestId,
+        ...(rules ? { rules } : {}),
+      };
       pending = latest;
       dispatch();
       return !disposed;

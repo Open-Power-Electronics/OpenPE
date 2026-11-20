@@ -1,13 +1,10 @@
+import { referenceExamples, createReferenceExample } from '../lib/reference-examples';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { referenceExamples, createReferenceExample } from '../lib/reference-examples';
-import { createExample, projectExamples } from '../lib/examples';
-import { createTiExample } from '../lib/ti-examples';
-import { tiDcdcParts } from '../lib/ti-dcdc';
 import { switchingStageFixture } from './fixtures/switching-stage';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
-import { transientOutputStep } from '../lib/spice-timing';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
+import { transientOutputStep } from '../plugins/spice-simulation/domain/spice-timing';
 
 test('output timing retains the requested step for integral ratios despite floating-point rounding', () => {
   for (const durationMs of [10, 50])
@@ -45,10 +42,10 @@ test('output timing stays finite, positive and bounded for short runs and overfl
   }
 });
 
-test('curated and vendor decks preserve displayed 10/50 ms timing with renderer/service parity', () => {
+test('curated Home decks preserve displayed 10/50 ms timing with renderer/service parity', () => {
   for (const d of [
     createReferenceExample('reference-lm25017-wson8-flybuck').schematic,
-    createTiExample(tiDcdcParts[0].id).schematic,
+    createReferenceExample('reference-lm27761-wson8-pump').schematic,
   ]) {
     for (const durationMs of [10, 50])
       for (const maximumStepUs of [0.2, 0.1]) {
@@ -74,8 +71,7 @@ test('curated and vendor decks preserve displayed 10/50 ms timing with renderer/
 test('renderer and service accept 10 ms / 0.5 µs for every supported example', () => {
   const circuits = [
     ...referenceExamples.map((example) => createReferenceExample(example.id).schematic),
-    ...projectExamples.map((example) => createExample(example.id).schematic),
-    ...tiDcdcParts.map((part) => createTiExample(part.id).schematic),
+    ...referenceExamples.map((example) => createReferenceExample(example.id).schematic),
     switchingStageFixture(),
   ];
   for (const d of circuits) {
@@ -90,9 +86,9 @@ test('renderer and service accept 10 ms / 0.5 µs for every supported example', 
 test('timing has no duration, step, interval-count, PWM-period or estimated-output limits', () => {
   const circuits = [
     createReferenceExample('reference-lm2596-to220-5-buck').schematic,
-    createExample('kicad-rectifier').schematic,
-    createExample('kicad-buck').schematic,
-    createTiExample(tiDcdcParts[0].id).schematic,
+    createReferenceExample('reference-lm2596-to220-5-buck').schematic,
+    createReferenceExample('reference-lm2598-to220-7-buck').schematic,
+    createReferenceExample('reference-lm27761-wson8-pump').schematic,
     switchingStageFixture(),
   ];
   for (const d of circuits) {

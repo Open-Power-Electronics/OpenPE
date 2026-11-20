@@ -16,7 +16,7 @@ import {
   defaultTransient,
   simulationSupportError,
   simulationSpiceNets,
-} from '../lib/spice';
+} from '../plugins/spice-simulation/domain/spice';
 import profile from '../lib/emc-flyback-simulation.json';
 import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
 import { prepareEmcFlybackModelBindings } from '../scripts/emc-flyback-model-bindings';
@@ -81,7 +81,7 @@ test('EMC Flyback model signatures and behavioural library bind the pinned sourc
     );
   }
   assert.deepEqual(
-    readFileSync('examples/project/emc-flyback/circuits/EMC_flyback_control.lib'),
+    readFileSync('examples/project/emc-flyback/models/EMC_flyback_control.lib'),
     readFileSync(
       'resources/example-catalog/sources/emc-flyback/simulation/EMC_flyback_control.lib',
     ),

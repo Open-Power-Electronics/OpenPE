@@ -25,16 +25,16 @@ import {
   defaultTransient,
   type SimulationResult,
   type SpiceDeck,
-} from '../lib/spice';
+} from '../plugins/spice-simulation/domain/spice';
 import { switchingStageFixture } from './fixtures/switching-stage';
-import { liveSpiceNetlist } from '../server/spice-raw.mjs';
+import { liveSpiceNetlist } from '../plugins/spice-simulation/host/spice-raw.mjs';
 import { withAnalysisFiles } from '../server/flat-analysis-files.mjs';
 
 const { FileGrants } = createRequire(import.meta.url)('../electron/file-grants.cjs');
 const signal = () => new AbortController().signal;
 const key = 'a'.repeat(64);
 const flat = (root: string, name: string, stem = 'buck') =>
-  path.join(root, 'spice', stem + '.' + name);
+  path.join(root, 'spice-simulation', stem + '.' + name);
 const deck: SpiceDeck = {
   netlist: '* test',
   stop: 1,
@@ -73,7 +73,7 @@ test('project SPICE records survive a fresh store, isolate projects, and preserv
       { identityVersion: 2, solverSha256: 'f'.repeat(64) },
     );
     assert.deepEqual(
-      (await readdir(path.join(root, 'spice'))).sort(),
+      (await readdir(path.join(root, 'spice-simulation'))).sort(),
       [
         'circuit.cir',
         'manifest.json',
@@ -208,7 +208,7 @@ test('saved settings reject corruption, unknown fields, linked decks and cancell
         }),
         /transient settings/,
       );
-    assert.equal((await readdir(root)).includes('spice'), false);
+    assert.equal((await readdir(root)).includes('spice-simulation'), false);
     await writeFile(path.join(source, 'circuit.cir'), '.tran 0.1 1 0 0.1\n');
     await store.write(key, source, result, signal(), deck, config, {
       identityVersion: 2,
@@ -376,7 +376,7 @@ test('SPICE storage rejects unsaved/revoked/moved grants and linked folders with
     await mkdir(outside);
     await symlink(
       outside,
-      path.join(root, 'spice'),
+      path.join(root, 'spice-simulation'),
       process.platform === 'win32' ? 'junction' : 'dir',
     );
     const linked = createProjectSpiceStore(() => file);
@@ -452,7 +452,7 @@ test('incomplete or cancelled SPICE writes never publish a completed record', as
       ),
       /regular/,
     );
-    assert.deepEqual(await readdir(path.join(root, 'spice')), []);
+    assert.deepEqual(await readdir(path.join(root, 'spice-simulation')), []);
     await assert.rejects(
       store.write(
         key,
@@ -465,7 +465,7 @@ test('incomplete or cancelled SPICE writes never publish a completed record', as
       ),
       /abort/i,
     );
-    assert.deepEqual(await readdir(path.join(root, 'spice')), []);
+    assert.deepEqual(await readdir(path.join(root, 'spice-simulation')), []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -479,7 +479,7 @@ test('cancelled queued SPICE lookups reject even when no saved directory exists'
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      const held = withAnalysisFiles(path.join(root, 'spice'), () => gate);
+      const held = withAnalysisFiles(path.join(root, 'spice-simulation'), () => gate);
       const controller = new AbortController();
       const store = createProjectSpiceStore(() => path.join(root, 'buck.kicad_pro'));
       const pending =
@@ -490,7 +490,7 @@ test('cancelled queued SPICE lookups reject even when no saved directory exists'
       release();
       await held;
       await assert.rejects(pending, /abort/i);
-      assert.equal((await readdir(root)).includes('spice'), false);
+      assert.equal((await readdir(root)).includes('spice-simulation'), false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -520,7 +520,7 @@ test('flat SPICE publication isolates projects in one folder and protects sideca
       { ...defaultTransient(switchingStageFixture()), stop: deck.stop },
       { identityVersion: 2, solverSha256: 'f'.repeat(64) },
     );
-    await writeFile(path.join(root, 'spice/notes.txt'), 'personal sidecar');
+    await writeFile(path.join(root, 'spice-simulation/notes.txt'), 'personal sidecar');
     const next = 'b'.repeat(64);
     await store.write(
       next,
@@ -534,9 +534,12 @@ test('flat SPICE publication isolates projects in one folder and protects sideca
     assert.equal(await store.read(key, deck, signal()), null);
     assert.deepEqual(await store.read(next, deck, signal()), result);
     assert.deepEqual(await other.read(key, deck, signal()), result);
-    assert.equal(await readFile(path.join(root, 'spice/notes.txt'), 'utf8'), 'personal sidecar');
+    assert.equal(
+      await readFile(path.join(root, 'spice-simulation/notes.txt'), 'utf8'),
+      'personal sidecar',
+    );
     assert.ok(
-      (await readdir(path.join(root, 'spice'), { withFileTypes: true })).every((entry) =>
+      (await readdir(path.join(root, 'spice-simulation'), { withFileTypes: true })).every((entry) =>
         entry.isFile(),
       ),
     );
@@ -579,24 +582,27 @@ test('retired nested SPICE records are ignored without reading or rewriting them
       { identityVersion: 2, solverSha256: 'f'.repeat(64) },
     );
     const manifest = JSON.parse(await readFile(flat(root, 'manifest.json'), 'utf8'));
-    const target = path.join(root, 'spice/buck', key);
+    const target = path.join(root, 'spice-simulation/buck', key);
     await mkdir(target, { recursive: true });
     for (const file of manifest.files)
-      await rename(path.join(root, 'spice', file.file), path.join(target, file.name));
+      await rename(path.join(root, 'spice-simulation', file.file), path.join(target, file.name));
     delete manifest.project;
     delete manifest.files;
     manifest.format = 'openpe-spice-v1';
     const bytes = JSON.stringify(manifest);
     await writeFile(path.join(target, 'manifest.json'), bytes);
     await rm(flat(root, 'manifest.json'));
-    const pointer = path.join(root, 'spice/buck/latest.json');
+    const pointer = path.join(root, 'spice-simulation/buck/latest.json');
     await writeFile(pointer, JSON.stringify({ format: 'openpe-spice-latest-v1', key }));
     assert.equal(await store.read(key, deck, signal()), null);
     assert.equal(await store.readSettings(signal()), null);
     await rm(pointer);
     assert.equal(await store.read(key, deck, signal()), null);
     assert.equal(await readFile(path.join(target, 'manifest.json'), 'utf8'), bytes);
-    assert.equal((await readdir(path.join(root, 'spice'))).includes('buck.manifest.json'), false);
+    assert.equal(
+      (await readdir(path.join(root, 'spice-simulation'))).includes('buck.manifest.json'),
+      false,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

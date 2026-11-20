@@ -117,6 +117,31 @@ test('worker results refill one current route gap and persist inherited native c
   assert.deepEqual(basis, before);
 });
 
+test('worker pours and immediate masks use the same native net-class clearance as commit', async () => {
+  const { preparePCBFillPreview } = await import('../components/pcbFillPreview');
+  const basis = fixture();
+  const rules = {
+    projectSource: JSON.stringify({
+      net_settings: {
+        classes: [{ name: 'Default', clearance: 0.7 }],
+        netclass_patterns: [],
+      },
+    }),
+  };
+  const moved = movePCBSelection(basis, { kind: 'track', id: basis.tracks[0].id }, { x: 0, y: 3 });
+  const process = createPCBFillWorkerProcessor();
+  process({ type: 'basis', generation: 1, board: basis, rules });
+  const result = filled(
+    process({ type: 'fill', generation: 1, requestId: 1, board: invalidatePCBFill(basis, moved) }),
+  );
+  const copper = filledCopperPolygons(result.board).get(basis.zones[0].id)!;
+  assert.equal(contains(copper, { x: 15, y: 13.85 }), false);
+  assert.equal(contains(copper, { x: 15, y: 13.95 }), true);
+  const mask = preparePCBFillPreview(basis, moved, rules);
+  assert.ok(mask.zones[0].blockers.some((blocker) => Math.abs(blocker.strokeWidth - 1.8) < 1e-9));
+  assert.deepEqual(result.board, fillCopperZones(moved, 0.0001, rules));
+});
+
 test('worker restores exact accepted contours for a stripped no-op and owns the posted basis', () => {
   const board = fixture();
   const before = structuredClone(board);

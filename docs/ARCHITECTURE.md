@@ -4,9 +4,9 @@
 
 The separate [architecture vision](../assets/vision.drawio) retains the original Page-2 concept and an adapted future direction. Its dashed goals do not define current capabilities; [assets/README.md](../assets/README.md) explains the two sheets.
 
-OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. SPICE Simulation, Layout Thermal, PE Layout Skill and Layout Parasitics are bundled in the application with independent lifecycle gates. The catalog is an allowlist of those bundled features.
+OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. SPICE Simulation, Layout Thermal, PE Layout Skill, Layout Parasitics and EMC Analysis are bundled in the application with independent lifecycle gates. Each feature owns its directory under `plugins/`; installed local JavaScript packages extend the shared catalog through the bounded QuickJS runtime.
 
-[Core](CORE.md) owns transactions; [API](API.md) owns executable schemas/transports; [Format](FORMAT.md) owns native content; [Design](../DESIGN.md) owns visual interaction. [README](../README.md) covers setup and [AGENTS](../AGENTS.md) defines engineering/check requirements. Feature contracts own their detailed algorithms and UI-independent limits.
+[Core](CORE.md) owns transactions; [API](API.md) owns executable schemas/transports; [Format](FORMAT.md) owns native content; [Design](../DESIGN.md) owns visual interaction. [Development](DEVELOPMENT.md) covers setup and [AGENTS](../AGENTS.md) defines engineering/check requirements. The [documentation index](README.md) routes feature workflows to their owning contracts.
 
 ## Architecture layers
 
@@ -19,13 +19,14 @@ flowchart TB
     GUI <--> API
     API --> Core[Core: ProjectCore]
     Core --> Domain[Pure domain models / geometry: lib]
-    GUI <--> CopperWorker[Renderer copper preview Worker]
+    GUI <-->|Board and native rule context| CopperWorker[Renderer copper preview Worker]
     CopperWorker --> Domain
     API --> Plugin[Plugin: SPICE / Layout Thermal / PCB guidance]
     API --> Parasitics[Plugin: Layout Parasitics]
+    API --> EMC[Plugin: EMC Analysis · intent / geometric review / reports]
     API --> Ports[Host adapters: files / Git / libraries / CAD preparation]
     Plugin --> Ports
-    Parasitics -->|Current accepted PCB| Core
+    Parasitics -->|Read PCB / commit native series| Core
     Ports --> Host[Electron / authenticated service]
     GUI -->|CAD preview HTTP| Host
     GUI -->|Recovery IPC / HTTP| Host
@@ -33,15 +34,15 @@ flowchart TB
 
 Arrows describe calls/responsibility, not processes. Core events and validated reads return through the shared host. Local GUI previews commit through the same transaction owner; the catalog advertises supported automation, not every pointer or camera movement.
 
-| Layer               | Implementation                                                                                                                   | Boundary                                                                        |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| GUI                 | `app/`, `components/`; DesktopWorkspace/Workbench                                                                                | Presentation, gestures, Source text history and retained editors and Git window |
-| Context Management  | `context/agent-*-context.ts`, `context/agent-presentation.ts`                                                                    | Bounded observed data/capture; no document mutations                            |
-| Agent               | Chat, provider catalog, `server/agents.mjs` and restricted adapters                                                              | Origin-bound process/stream/tool adaptation and reviews                         |
-| Uniform API         | `api/capabilities.ts`, `api/capability-schema.ts`                                                                                | Independent schemas, discovery, dispatch, cancellation/events                   |
-| Core                | `core/project-core.ts`, command registrations, pure `lib/` domain code                                                           | Immutable accepted document, drafts, revisions and whole-project undo           |
-| Plugin              | Feature capabilities/components, `lib/layout-parasitics.ts`, `server/spice*.mjs`, `server/thermal*.mjs`, `server/pcb-design.mjs` | Bundled feature lifecycle, analysis, guidance and private solver results        |
-| Host infrastructure | `electron/`, `server/` and named `lib/*-capabilities.ts` ports                                                                   | Grants, persistence, native dialogs, verified resources and process I/O         |
+| Layer               | Implementation                                                                              | Boundary                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GUI                 | `app/`, `components/`; DesktopWorkspace/Workbench                                           | Presentation, gestures, Source text history and retained editors and Git window |
+| Context Management  | `context/agent-*-context.ts`, `context/agent-presentation.ts`                               | Bounded observed data/capture; no document mutations                            |
+| Agent               | Chat, provider catalog, `server/agents.mjs` and restricted adapters                         | Origin-bound process/stream/tool adaptation and reviews                         |
+| Uniform API         | `api/capabilities.ts`, `api/capability-schema.ts`                                           | Independent schemas, discovery, dispatch, cancellation/events                   |
+| Core                | `core/project-core.ts`, command registrations, pure `lib/` domain code                      | Immutable accepted document, drafts, revisions and whole-project undo           |
+| Plugin              | `plugins/<name>/` manifests, pure domains, renderer contributions and bounded host adapters | Built-in features, isolated local JS extensions, lifecycle and analysis         |
+| Host infrastructure | `electron/`, `server/` and named `lib/*-capabilities.ts` ports                              | Grants, persistence, native dialogs, verified resources and process I/O         |
 
 ### Core abstraction levels
 
@@ -71,21 +72,22 @@ Sketch corner fillet/chamfer and Boolean extrusion use pure `lib/model-cad-sketc
 
 ## Repository management
 
-| Location                          | Responsibility                                            | Main contract                                         |
-| --------------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
-| `api/`                            | Framework-independent Uniform API                         | [API](API.md), [Core](CORE.md)                        |
-| `context/`                        | Agent observations and presentation capture               | [Core](CORE.md)                                       |
-| `core/`                           | Immutable document owner/commands                         | [Core](CORE.md)                                       |
-| `app/`, `components/`, `public/`  | Renderer, shared controls and product assets              | [Design](../DESIGN.md)                                |
-| `lib/`                            | Domain/geometry/format and explicitly named host adapters | [Format](FORMAT.md), [Layout](LAYOUT.md)              |
-| `server/`, `electron/`            | Service/native/providers/plugins/solvers/persistence      | [API](API.md) and feature contracts                   |
-| `examples/`, `examples/project/`  | Nine Example projects and the EMC Flyback Recent project  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
-| `resources/`                      | Shared catalog, pinned sources/assets and host resources  | [Examples](EXAMPLES.md), [Libraries](LIBRARIES.md)    |
-| `tests/`, `scripts/`              | Regressions, generators and opt-in integrations           | [Engineering](../AGENTS.md#verification-and-delivery) |
-| `assets/`, `docs/`, root Markdown | Architecture source, subsystem/design/setup contracts     | This map                                              |
-| `references/`                     | Research snapshots; never imported runtime styling        | [Reference boundaries](../references/README.md)       |
+| Location                          | Responsibility                                                            | Main contract                                         |
+| --------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `api/`                            | Framework-independent Uniform API                                         | [API](API.md), [Core](CORE.md)                        |
+| `context/`                        | Agent observations and presentation capture                               | [Core](CORE.md)                                       |
+| `core/`                           | Immutable document owner/commands                                         | [Core](CORE.md)                                       |
+| `app/`, `components/`, `public/`  | Renderer, shared controls and product assets                              | [Design](../DESIGN.md)                                |
+| `lib/`                            | Domain/geometry/format and explicitly named host adapters                 | [Format](FORMAT.md), [Layout](LAYOUT.md)              |
+| `plugins/`                        | Independent feature packages, shared manifest/scopes and local JS runtime | [Plugins](PLUGINS.md)                                 |
+| `server/`, `electron/`            | Service/native/providers/plugins/solvers/persistence                      | [API](API.md) and feature contracts                   |
+| `examples/`, `examples/project/`  | Nine Example projects and the EMC Flyback Recent project                  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
+| `resources/`                      | Shared catalog, pinned sources/assets and host resources                  | [Examples](EXAMPLES.md), [Libraries](LIBRARIES.md)    |
+| `tests/`, `scripts/`              | Regressions, generators and opt-in integrations                           | [Engineering](../AGENTS.md#verification-and-delivery) |
+| `assets/`, `docs/`, root Markdown | Architecture source, subsystem/design/setup contracts                     | This map                                              |
+| `references/`                     | Research snapshots; never imported runtime styling                        | [Reference boundaries](../references/README.md)       |
 
-`npm run check:architecture` checks imports/re-exports and transitive runtime dependencies, including generated modules. It rejects Node/service/native imports in the renderer, UI/I/O reachable from Core, reverse implementation dependencies from API, Context mutations and host imports of live renderer/engine code. Explicit exceptions document concrete ownership reasons. It runs before typecheck/tests/build.
+`npm run check:architecture` checks imports/re-exports and transitive runtime dependencies, including generated modules. It rejects Node/service/native imports in the renderer, UI/I/O reachable from Core, reverse implementation dependencies from API, Context mutations and host imports of live renderer/engine code. Plugin `domain/`, `renderer/`, `host/` and `electron/` sources retain the corresponding domain, GUI, service and native import rules. Hosts may import the shared pure manifest/catalog modules; plugin code never grants host authority. Explicit exceptions document concrete ownership reasons. It runs before typecheck/tests/build.
 
 Changes identify their layer, update the owning contract and regenerate formats from TypeScript. Update the diagram when ownership, execution or artifacts change. Import checks establish module boundaries, not electrical correctness or runtime security.
 
@@ -93,12 +95,18 @@ Changes identify their layer, update the owning contract and regenerate formats 
 
 - Electron starts the service and owns native dialogs, resource roots and live opaque project grants. It establishes application data under `OpenPE`, or the explicit `OPENPE_DATA_DIR` override, before applying the native OpenPE name. Former-brand directories and contracts have no migration or fallback.
 - The renderer is static-exported in packaged builds, or uses the local Next.js dev server. It imports no Node APIs; Electron keeps context isolation/sandboxing. Layout calculates gesture copper paths in a renderer Worker using pure shared fill geometry; this worker has no host, native file or document authority.
-- `window.openpe` is a narrow preload bridge. Native calls verify the originating main frame and resolve grants. Host filesystem destinations and grant IDs never enter projects or recovery; native model paths and portable relative references remain valid design metadata.
-- `electron/spice-model-picker.cjs` opens a single native SPICE file picker for a live project grant, including an unsaved project. The current library may supply a bounded display-only dialog location. Explicit local selection returns its path and bounded declaration metadata, with frame/grant and regular-file checks; it creates no general renderer file-read or solver authority. The same module automatically inspects project-relative libraries through a private bounded directory observation and the shared declaration scanner. The scanner hides helper dependencies and uses generated exact-hash public-entry metadata from canonical TI/reference records for pinned vendor libraries; absolute external references require native selection. This read returns metadata only and leaves Core, undo and native bytes unchanged. Properties applies the selected binding through Core. External references stay external through Save, recovery and history.
+- `window.openpe` is a narrow preload bridge. Native calls verify the originating main frame and resolve grants. Host filesystem destinations and grant IDs never enter projects or recovery; native model paths and portable relative references remain valid design metadata. The library chooser opens its two fixed attribution homepages in the system browser through a trusted main-frame action. [Electron bridge](API.md#electron-bridge) owns the selectors.
+- The centered SPICE chooser uses the plugin renderer and authenticated host routes for live TI product-page metadata and selected archive inspection. The SPICE host reuses the pinned model store, bounded in-memory ZIP reading and the shared declaration scanner. Staged library bytes become native sidecars through the existing Save writer. The renderer applies the declaration through ordinary Properties preparation.
+- `plugins/spice-simulation/electron/spice-model-picker.cjs` opens a single native SPICE file picker for a live project grant, including an unsaved project. The current library may supply a bounded display-only dialog location. Explicit local selection returns its path and bounded declaration metadata, with frame/grant and regular-file checks; it creates no general renderer file-read or solver authority. The same module automatically inspects project-relative libraries through a private bounded directory observation and the shared declaration scanner. The scanner hides helper dependencies and uses generated exact-hash public-entry metadata from canonical TI/reference records for pinned vendor libraries; absolute external references require native selection. This read returns metadata only and leaves Core, undo and native bytes unchanged. Properties applies the selected binding through Core. External references stay external through Save, recovery and history.
 - Express binds loopback and validates hosts/origins/request bounds. Renderer APIs/SSE/tool results require process authentication. The separate Agent bridge uses a scoped turn token; one-time result tokens also bind request/run/session/origin.
 - `server/datasheets.mjs` owns read-only pinned PDF page access through `/api/datasheets/page`. It verifies original bundled PDFs or fixed vendor downloads and retains two verified buffers in memory. `server/datasheet-worker.mjs` parses or rasterizes the requested page. Workbench binds live reads to the validated controller and rejects stale results. `context/agent-prompt-context.ts` derives the reference identity or reviewed parameter excerpt from the validated submission. [Datasheets](DATASHEETS.md#submission-and-on-demand-context) owns access and bounds.
-- `server/component-models.mjs` owns approved immutable local STEP bytes, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. Shared component Properties commits native PCB model records through Core.
+- `server/component-models.mjs` owns approved immutable local STEP bytes, bounded online package adoption, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. The preview route resolves a validated PCB instance or downloaded project footprint and model index through a project location or the approved STEP cache. PCB instances also support exact portable assets from `server/example-footprints.mjs`. All share the bounded STEP worker pool. `lib/library-package.ts` shares preparation across GUI/Agent placement. Pure `lib/library-project-assets.ts` prepares the native package files and library table for the same Core transaction as the placement. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
+- `server/library-worker.mjs` ranks one KiCad catalog using official entries and pinned example footprints. `server/example-footprints.mjs` supplies pinned search metadata and verified model bytes on demand.
+- The shared STEP worker retains original tessellated geometry and recovers surface colours for four hash-pinned Würth assemblies through `server/step-appearance.mjs`. Library previews, imported component models and PCB Model view consume the same mesh format. [Libraries](LIBRARIES.md#step-access-and-previews) owns the recovery bounds.
+- `server/nextpcb-library.mjs` is a read-only host adapter behind the existing authenticated library service. Explicit NextPCB selection reads fixed HTTPS catalog endpoints and allowlisted native assets; shared validators and generated PCB preparation retain Core document authority. `server/jlcpcb-library.mjs` reads JLCPCB search metadata and resolves exact EasyEDA CAD over fixed HTTPS. Symbol chooser search pages use the same host CAD readers to check footprint and model references before delivery; STEP remains on demand. `server/jlcpcb-cad.mjs` converts the supported subset and validates symbol and footprint records independently using the generated project and PCB validators. Both online sources share the authenticated library routes, bounded response reader and Electron system-network adapter on desktop. Provider pages never run in the renderer. [Libraries](LIBRARIES.md#catalog-service-and-chooser) owns access and geometry/model limits.
+- The authenticated library service resolves KiCad, NextPCB and JLCPCB identities for explicit chooser price checks. `server/library-prices.mjs` owns LCSC Electronics transport and cross-catalog identity matching. `server/nextpcb-prices.mjs` owns HQ Online quote transport. Desktop requests use the host network adapter. [Libraries](LIBRARIES.md#component-pricing) owns quote matching and retention.
+- Chooser and scoped Agent catalog reads use `lib/library-references.ts`. The datasheet reader shares the pricing identity resolver and selects the HQ Online or JLCPCB adapter. `server/library-datasheets.mjs` checks host-resolved PDF references, bounds downloads and returns raster pages through the shared PDF worker. [Libraries](LIBRARIES.md#component-datasheet-preview) owns matching and preview limits.
 - Codex, Claude, and Cursor expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools. Cursor uses `@cursor/sdk` in the service process: MCP-only built-ins, inline OpenPE MCP, one frozen empty filesystem and MCP environment for that run, no setting sources, and a private temporary directory. Its API key is `safeStorage` ciphertext at `cursor-credential.bin` in the OpenPE data directory, outside recovery, history, and Agent context. POSIX mode is 0600; Windows relies on the per-user data-directory ACL and does not call `icacls`. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the Cursor `openpe_ask_user` MCP tool, the private DeepSeek user-question patch, and the sole explicitly loaded Pi question extension. The latter three receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
@@ -122,7 +130,7 @@ uses the independent `openpe.agent-settings.v1` local-storage key.
 `tests/agent-follow-ups.test.ts` verifies steering identity/retries/revocation,
 native protocol fixtures and settings preservation. The isolated browser check
 `node scripts/check-agent-follow-ups-ui.mjs` covers queue order/promotion,
-settings, Stop/failure, session isolation, suggestion/action focus, newer focus choices, reuse guards during uncertain steering delivery and IME without a real provider. Queue composition checks exercise trusted pointer Remove/Steer/More/Resume, keyboard events without composition flags, retained draft/caret/reading position and normal actions after composition ends. `node scripts/check-agent-stop-ui.mjs` also checks that keyboard/pointer Stop retains draft text, selection and composer focus. `components/ModelSelect.tsx` owns the per-composer model catalog and explicit retries. `components/AgentComposer.tsx` uses the same current catalog for the model picker, effort availability and the composer status. `components/DesktopWorkspace.tsx` owns Agent detection for the window. Projects and conversations use its startup result, and Settings can refresh it. The provider browser check switches projects and conversations during delayed detection. The effort browser check covers silent unknown availability, delayed model discovery and retry, blocked submission, saved choices, draft selection and offline Home. `components/AgentComposer.tsx` measures input overflow only while the conversation is visible. Draft expansion changes the CSS cap of the existing textarea. The follow-up browser check verifies selection, session isolation, reading position, narrow and short viewports, and composition and repeated-key guards.
+settings, Stop/failure, session isolation, suggestion/action focus, newer focus choices, reuse guards during uncertain steering delivery and IME without a real provider. Queue composition checks exercise trusted pointer Remove/Steer/More/Resume, keyboard events without composition flags, retained draft/caret/reading position and normal actions after composition ends. `node scripts/check-agent-stop-ui.mjs` also checks that keyboard/pointer Stop retains draft text, selection and composer focus. `components/ModelSelect.tsx` owns the window’s in-memory model catalogs and shares one in-flight request and result per Agent. `components/DesktopWorkspace.tsx` starts discovery for the selected available Agent after startup detection and workspace restoration, then invalidates catalogs on successful manual detection. `components/AgentComposer.tsx` uses the same current catalog for the model picker, effort availability and the composer status. `components/DesktopWorkspace.tsx` owns Agent detection for the window. Projects and conversations use its startup result, and Settings can refresh it. The provider browser check switches projects and conversations during delayed detection. The effort browser check covers silent unknown availability, delayed model discovery and retry, blocked submission, saved choices, draft selection and offline Home. `components/AgentComposer.tsx` measures input overflow only while the conversation is visible. Draft expansion changes the CSS cap of the existing textarea. The follow-up browser check verifies selection, session isolation, reading position, narrow and short viewports, and composition and repeated-key guards.
 
 STEP conversion uses bounded reusable OCCT worker threads with fixed tessellation; [STEP access](LIBRARIES.md#step-access-and-previews) owns their reuse, timeout and memory limits. Mesh results are bounded and carry no document authority.
 
@@ -135,31 +143,39 @@ issuing a preview token. Token-gated routes provide CAD previews, read-only
 library previews and fixed plugin operations. CAD and library previews share
 the desktop geometry and STEP parser code through one serial parse queue and
 one bounded parser pool. Library IDs and model indices resolve prepared
-resources without downloads or cache/project writes. Native project grants,
+resources without downloads or cache/project writes. Explicit price checks use
+the same host library service and supplier adapters as desktop. Native project grants,
 Agent chat and workspace recovery are desktop-only. Packaged builds use the
 Electron bridge. [Preview transport](API.md#browser-development-preview-transport)
 · [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
 
 ## Ownership
 
-| State/data                                                                                                     | Owner                                                                     |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Accepted native model, Source drafts, revisions, undo and validated simulation design attributes               | ProjectCore                                                               |
-| Viewports, selection, CodeMirror history, ordinary-file drafts, local inspector/tool drafts and dirty baseline | Workbench/editor presentation                                             |
-| Open-project selection, admission and queued recovery                                                          | DesktopWorkspace                                                          |
-| Capability discovery/schemas/availability/events                                                               | Per-project capability host                                               |
-| Native destinations, grants, Save/export and Git storage                                                       | Electron/service host ports                                               |
-| Installed/enabled workbench lifecycle and provider installation receipts                                       | Separate host stores/adapters                                             |
-| Solver compilation, private execution derivatives, settings/results/probes                                     | Respective bundled simulation feature                                     |
-| Reviewed controller datasheets                                                                                 | Host reference adapter; internal resource catalog, outside document state |
-| PE Layout Skill workflow/reference loading and turn injection                                                  | Bundled plugin plus host infrastructure                                   |
-| Layout Parasitics DC network and shortest-route partial inductance                                             | Pure bundled analysis and per-panel presentation                          |
+| State/data                                                                                                     | Owner                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Accepted native model, Source drafts, revisions, undo and validated simulation design attributes               | ProjectCore                                                                                                     |
+| Viewports, selection, CodeMirror history, ordinary-file drafts, local inspector/tool drafts and dirty baseline | Workbench/editor presentation                                                                                   |
+| Open-project selection, admission and queued recovery                                                          | DesktopWorkspace                                                                                                |
+| Capability discovery/schemas/availability/events                                                               | Per-project capability host                                                                                     |
+| Native destinations, grants, Save/export and Git storage                                                       | Electron/service host ports                                                                                     |
+| Installed/enabled workbench lifecycle and provider installation receipts                                       | Separate host stores/adapters                                                                                   |
+| Solver compilation, private execution derivatives, settings/results/probes                                     | Respective bundled simulation feature                                                                           |
+| Reviewed controller datasheets                                                                                 | Host reference adapter; internal resource catalog, outside document state                                       |
+| PE Layout Skill workflow/reference loading and turn injection                                                  | Bundled plugin plus host infrastructure                                                                         |
+| Layout Parasitics measurement and native series preparation                                                    | Pure bundled domain; Core owns accepted topology and PCB-only projection                                        |
+| EMC geometric checks, intent, manual review and reports                                                        | Pure bundled domain; GUI owns session decisions, downloads and camera/selection, no Core mutation or native I/O |
 
 Simulation participation, model mappings and portable model references remain native data editable through Source/Core commands, undoable and exportable while SPICE is unavailable. The Schematic SPICE Simulation action, Properties parameter section and settings-dock participation switches require confirmed installed/enabled plugin state; Layout has no SPICE controls. Plugin removal cannot remove document attributes or portable files. Model selection/execution belongs to SPICE; hash-checked copying/Save portability belongs to host persistence. The native model picker inspects only its explicitly selected bounded file and returns declarations/issues without bodies or include access; pure binding checks validate symbols and model ports. Active model source is Core data, while declaration catalogs remain renderer presentation.
 
 Model CAD parameters belong to Core and native `.kicad_pro` settings. Sketches on the shared Model canvas and local tool/property previews belong to presentation. `lib/model-cad.ts` owns bounded profiles, semantic base-edge catalogues, extrusion/edge-treatment/Boolean recipes, conservative envelopes and canonical geometry keys. `lib/model-cad-selection.ts` owns pure typed selection, geometry eligibility filters and stale-entity pruning; `components/model-cad-edges.ts` and `components/model-cad-faces.ts` own visible analytic topology picking and disposable highlights. These adapters store no document mutations. Boolean operand roles remain presentation until the existing two-body Core command commits. `core/register-project.ts` wraps human/Agent commands with asynchronous host preflight; `ProjectCore` remains pure and rejects changed advanced geometry without an exact privately retained prepared key. Unchanged geometry permits pose/material edits; Source apply and whole-project replacement use the same gate. Native admission remains structural so imported data is preserved before lazy preview.
 
 File Export selects an exchange or manufacturing format independently of native Save. `lib/manufacturing-export.ts` dispatches pure exporters for the primary schematic (`lib/schematic-netlist-export.ts`), native PCB outline (`lib/pcb-dxf.ts`), PCB fabrication and assembly, and OpenSCAD (`lib/model-cad-scad.ts`). Full fabrication and standalone stencil/drill archives share layer and drill generation. `server/manufacturing-format.mjs` is the generated host facade and shares the project validator. `electron/native-export.cjs` validates requests, protects open sources and linked destinations, and writes one compiled file after a format-specific picker. Browser downloads use the same compiler. Source application remains a Core transaction. [Design exchange](FORMAT.md#design-exchange) · [Manufacturing export](FORMAT.md#manufacturing-export)
+
+Drawing PNG export uses the mounted renderer's capture callback for both the
+canvas menu and the scoped Agent command. `components/useDrawingImageExport.ts`
+binds it to the originating project and live drawing, then invokes the existing
+Electron picker through the native image port. [Drawing export](LAYOUT.md#annotations-and-png-export)
+owns capture and native output bounds.
 
 Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable. Meshes and preparation receipts stay outside native design and recovery. This host geometry service runs independently of simulation plugins. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve. Ambiguous or missing edges fail. [Model CAD limits](LAYOUT.md#model-cad)
 
@@ -193,16 +209,39 @@ added. [Layout](LAYOUT.md) owns convergence, cancellation and appearance limits;
 
 Layout Thermal settings and fields stay in the feature session. Workbench selects the active right analysis panel for Layout and supplies drawing and readout slots for Layout Thermal. Layout displays the selected-surface raster and real-node probes in its existing camera without storing fields as PCB data or introducing another execution path.
 
-Layout Parasitics calls a read-only per-project capability from the Layout analysis dock
-or a scoped Agent query. Workbench supplies the current validated PCB from
-`ProjectCore` to `lib/layout-parasitics.ts` through the adapter in
-`lib/workbench-plugins.ts`. The bounded network analysis runs in the renderer
-with confirmed plugin state and revision, Source and close gates. The result
-stays in the requesting panel or Agent response. This path has no additional
-HTTP route, solver process or store.
-Browser development uses the same renderer capability and bundled catalog.
+Layout Parasitics uses the per-project capabilities registered in
+`plugins/layout-parasitics/renderer/capabilities.ts`, with confirmed plugin state
+and revision, Source and close gates. Its measurement query reads the accepted
+PCB from `ProjectCore` through pure `domain/analysis.ts`; results remain in the
+requesting panel or Agent response. Its explicit study command recomputes that
+measurement and uses pure `domain/study.ts` to connect a labelled R/L series block
+between exact mapped pad pins in the existing schematic identified by
+`schematicId`. The native edit includes a bounded leaf-lead cut and anchored
+connection labels. A bounded Workbench commit port applies the prepared project through
+`ProjectCore.commitProject` as one validated undo transaction. Plugin code owns
+preparation, while Core owns the updated native document. Core also validates
+explicit native series-group fields and actual topology for PCB-only conductive
+equivalence, retaining the original physical board. ERC recognizes only the
+validated group's declared LP name aliases without altering native topology or
+driver checks. SPICE reads actual native
+geometry and performs no provenance-driven rewiring. No sheet or native file
+is created. Neither path adds an
+HTTP route, solver process or private store. Browser development uses the same
+renderer capabilities and bundled catalog. [Layout](LAYOUT.md#parasitic-study-schematics)
+owns the study model and its limits.
 
-EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `examples/project/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
+EMC Analysis owns accepted-board measurements, intent-driven check geometry and
+strict report/manual-review contracts under
+`plugins/emc-analysis/domain/`, exposed through its scoped renderer queries.
+Workbench owns the Layout dock and report session. A bounded Layout presentation
+port selects and centers exact current tracks, vias, footprints and transformed
+pads through canonical visibility and selection eligibility. Session decisions
+and justified exceptions cannot change automatic findings or Core data. Explicit
+HTML/JSON downloads serialize validated current reports. The plugin has no native I/O,
+service route, solver process, project mutation or persistent result store.
+[EMC Analysis](EMC.md) defines measurements, review contracts and incomplete coverage.
+
+EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `examples/project/emc-flyback/models/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
 
 EMC Flyback’s external electrical testbench is native Core-owned schematic content: V1/R21 feed VBUS, V2 supplies VCC, and R22/I1 load VOUT. The pure compiler stamps those accepted values and source waveforms instead of injecting supplies or loads. Footprint-free bench components have no PCB packages and contribute no PCB heat.
 
@@ -211,7 +250,7 @@ EMC Flyback’s external electrical testbench is native Core-owned schematic con
 ```mermaid
 flowchart LR
     UI[Human controls] --> Host[Per-project capability host]
-    Agent[Codex / Claude] <--> Bridge[Scoped service / Chat bridge]
+    Agent[Codex / Claude / Cursor] <--> Bridge[Scoped service / Chat bridge]
     Bridge <--> Host
     UI --> Preview[Local gesture preview]
     Preview --> Core[ProjectCore]
@@ -235,7 +274,12 @@ Layout pointer geometry stays on the renderer thread while
 pure `lib/pcb-polygons.ts` preparation. `pcbFillWorkerProtocol.ts`,
 `pcbFillWorkerClient.ts` and `usePCBFillWorker.ts` define the renderer-only
 messages, bounded client and retained view lifecycle. The preview client retains one gesture basis, one in-flight request
-and the latest pending candidate. Request IDs and generations guard responses;
+and the latest pending candidate. Its basis also carries only the relevant native
+board/net-class settings and custom clearance text, extracted by
+`lib/pcb-clearance-sources.ts`; rule changes revoke the worker generation.
+The shared fill engine uses these same accepted rules for Core commits and
+immediate preview masks, without passing unrelated project files or host access to the Worker.
+Request IDs and generations guard responses;
 the newest completed result can advance presentation while newer motion remains
 pending. `components/pcbFillPreview.ts` prepares temporary conservative masks that adapt the solved fill to immediate pointer
 geometry. Source, revision, visibility, cancellation and disposal gates discard
@@ -257,6 +301,11 @@ Up to 12 projects remain mounted with independent Core/undo/Source/sessions; ina
 
 Retained presentation is separate from document ownership. Pointer/camera readouts, conversations and recovery status avoid unrelated renders. Workspace presentation subscriptions retain immutable navigation snapshots, including project and conversation pin flags. When development refresh replaces the presentation implementation, DesktopWorkspace rebuilds only that cache and republishes current projects/status before paint; project, draft and mounted editor state remain intact. Hidden Layout/Model and clean Source defer presentation, then consume current documents/revision guards on reveal. Library selection, version history, Plugins, Settings and About load their modules on first use; deferred modal dialogs keep background input blocked and remain cancellable during loading. Native contexts and Send read current state. Internally owned immutable inputs support bounded caches; caller freezing never grants reuse. [Core](CORE.md#immutable-data-and-bounded-caches) owns cache correctness.
 
+`PanelFindController` routes presentation searches to the active pane, including
+Model's bounded scene metadata adapter. `components/component-highlight.ts`
+resolves cross-mode targets from native associations for the existing camera
+and selection adapters. [Panel Find](../DESIGN.md#panel-find) · [Cross-mode highlighting](../DESIGN.md#cross-mode-component-highlighting)
+
 `lib/schematic-wire-target.ts` snapshots visible anchors and wire bounds for the current gesture. Pointer updates reject candidates outside a conservative tolerance box before exact distance/projection checks, preserving native coordinates, inclusive tolerance and anchor tie priority.
 
 Layout's numerical camera belongs to GUI and remains current independently of
@@ -270,6 +319,12 @@ geometry, native bytes and undo remain in Core.
 ## Runtime call chains
 
 ### Startup and plugin lifecycle
+
+The service mounts the built-in adapters and the local QuickJS runtime. Native
+installation reviews the exact package and permission set; runtime sources never
+enter Node or renderer module loading. Per-project capability scopes bind
+contributions to the originating host and cancel them on disable/uninstall.
+[Package contract and limits](PLUGINS.md#plugin-packages-and-sdk)
 
 Electron loads service modules while initializing. Readiness awaits them, starts the service and window, and loads the renderer. Home, new projects and ordinary recovery run independently of the [example opening barrier](VERSION-HISTORY.md#opening-barrier-and-concurrency). Bundled plugin state is persisted separately, and disable or uninstall cancels feature work across projects. [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
 
@@ -287,6 +342,12 @@ transport volume without changing the drawing algorithm or command authority.
 There is no automatic placement/router or separate Agent document owner.
 
 PE Layout Skill loads only fixed IDs from pinned resources, verifies hashes/lifecycle and injects trusted guidance before user context. Disable/uninstall cancels turns carrying it. The workflow adds no arbitrary file/process access or autorouting implementation.
+
+### Raw KiCad chat
+
+Raw KiCad mode is a desktop window mode and starts off. `DesktopWorkspace` retains the mounted workbenches, blocks Core edits, suspends capability hosts and pauses recovery writes. Chat cancels normal generation and active reviews. Electron switches the authenticated loopback service and gates normal native operations while the mode is active. A transition interrupts in-flight service requests. The mode leaves installed plugins and their settings in place for the next workbench view.
+
+Electron's native picker admits only explicitly selected files. `server/raw-kicad-chat.mjs` reads the bounded original UTF-8 text into one in-memory selection and returns an opaque ID and filenames. On Send, the separate chat route joins the user's message, bounded raw conversation history and complete file text, then calls only the selected provider's message transport. No native design parsers, integrations or project context participate. A frame replacement or mode exit cancels raw chat, revokes the selection and resumes the regular admission rules. Unsaved work still uses normal close review. [API](API.md#raw-kicad-transport) owns limits and request shapes.
 
 ### A transient run
 
@@ -316,24 +377,19 @@ writes and returns opaque IDs plus display paths. Listing never reads project
 contents or creates grants. Recent opens resolve those IDs in the host and
 reuse the native reader/acceptance flow. [API](API.md) defines the protocol and
 bounds; [Design](../DESIGN.md#home-projects-and-recovery) owns presentation.
-Recent removal writes only this index. Thumbnail IPC uses the same bounded
+`recent-pins.json` stores pinned native locations and the default EMC shortcut preference separately from the native-use index. Pin/Unpin and removal write only these private Recent stores. Thumbnail IPC uses the same bounded
 native reader without granting or staging a project. `HomeProjectCard` retains
 one schematic thumbnail per mounted card and reuses `CanvasContextMenu` for
-keyboard/IME-safe removal from the list.
-
-`tests/recent-projects.test.ts` and `tests/desktop-recent.test.ts` cover persistence,
-native acceptance, duplicate activation, cancellation and invalid locations.
-`node scripts/check-recent-ui.mjs` checks the initial EMC entry, real-history
-replacement, refresh and failure isolation in an isolated browser without Electron.
+keyboard/IME-safe Pin/Unpin and removal from the list.
 
 | Data                                  | Location/lifecycle                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Native design and supporting files    | User-selected KiCad directory; grant-bound Save                                                                                 |
-| Verified portable simulation models   | Separate immutable `circuits/<component>.lib`; available through plugin removal                                                 |
-| Completed desktop results             | Direct `spice/<native-stem>.*` / `thermal/<native-stem>.*`; project-bound v2 manifest and current success                       |
+| Verified portable simulation models   | Separate immutable `models/<component>.lib`; available through plugin removal                                                   |
+| Completed desktop results             | Direct `spice-simulation/<native-stem>.*` / `layout-thermal/<native-stem>.*`; project-bound v2 manifest and current success     |
 | Workspace recovery                    | App data `openpe-workspace-v2.json`; no host destinations/grants/plugin results                                                 |
-| Recent native locations               | App data `recent-projects.json`; bounded host-only path index, separate from recovery and live grants                           |
-| Appearance/layer preferences          | App data `appearance-v1.json`; independent settings                                                                             |
+| Recent native locations and pins      | App data `recent-projects.json` and `recent-pins.json`; bounded host-only path indexes, separate from recovery and live grants  |
+| Appearance and Layout preferences     | App data `appearance-v1.json` and `layout-preferences-v1.json`; independent settings                                             |
 | Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                            |
 | Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                         |
 | Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/`, with any existing PDFs |
@@ -361,9 +417,8 @@ Recovery validates the full current envelope; exact-source import metadata uses 
 
 `scripts/example-native-files.ts` publishes the example converters' output to
 the Home catalog's explicit roots, directories and filenames. [Examples](EXAMPLES.md#regeneration-and-resource-preparation)
-owns generation, required KiCad versions and portable assets. The separate
-[fixture workflow](../tests/fixtures/README.md#regeneration) publishes internal
-regression inputs.
+owns generation, required KiCad versions and portable assets.
+[Test fixtures](../tests/fixtures/README.md) documents the retained regression inputs.
 
 `scripts/dev.mjs` supplies the preparation steps shared by development and
 production builds. `npm run examples:prepare` generates formats, generates the two OpenPE analytical STEP bodies, downloads the WE-CMB manufacturer model and shared simulation libraries, and prepares
@@ -381,24 +436,30 @@ resources directory. The check resolves every bare import reachable from the
 packaged service, including `@cursor/sdk`, `express`, `occt-import-js`,
 `pdfjs-dist`, `@napi-rs/canvas`, and the host Cursor platform package's
 tree-sitter natives, and fails if a module resolves outside the archive.
-macOS arm64 reads `release/mac-arm64/OpenPE.app`. Windows x64 reads
-`release/win-unpacked/OpenPE.exe`; that Windows check has not been executed.
-Windows x64 uses `--win dir nsis`: an unpacked directory and a one-click NSIS installer.
-macOS arm64 uses `--mac dir dmg`, `build/openpe.icns` from the
-Signal E master, category `public.app-category.developer-tools`, `identity`
-null, and the hardened-runtime entitlements in `build/entitlements.mac.plist`
-while signing stays off. The unsigned disk image is subject to Gatekeeper.
-Any other host or architecture throws. Shared
-`extraResources` are native examples, the project group, KiCad libraries,
+
+The supported hosts and package paths are listed in [Packaging](DEVELOPMENT.md#packaging).
+Icons derive from the Signal E master. macOS signing stays off, with entitlements
+in `build/entitlements.mac.plist`. Linux desktop metadata matches
+`ai.openpe.desktop`. `build/after-pack.cjs` rejects links and special files
+and sets directories and executables to 0755, other files to 0644. Umask 022
+keeps later `.desktop` entries readable after root-owned installation.
+
+Shared `extraResources` are native examples, the project group, KiCad libraries,
 `resources/thermal/1`, `resources/example-catalog/simulation/models`, and the
-ngspice manifest and source notice. ngspice runtime files are `build.win` and
-`build.mac` `extraResources`, matching the `win32-x64` and `darwin-arm64` file
+ngspice manifest and source notice. ngspice runtime files are `build.win`, `build.mac` and
+`build.linux` `extraResources`, matching the `win32-x64`, `darwin-arm64` and `linux-x64` file
 lists in `resources/ngspice-lock.json` exactly. `asarUnpack` extracts
 `occt-import-js`, `@napi-rs`, and the host `@cursor/sdk` platform package
-(`@cursor/sdk-darwin-arm64` or `@cursor/sdk-win32-x64`), including its
+(`@cursor/sdk-darwin-arm64`, `@cursor/sdk-win32-x64` or `@cursor/sdk-linux-x64`), including its
 tree-sitter N-API binaries and helper executables, outside the archive.
-Development prepares resources in order before starting its renderer and
-desktop children. Use `--verbose` for full stage diagnostics. Missing resources
+Development checks solver resources alongside the format and Home cache.
+Thermal checks run before ngspice checks because the bundles share source
+archives on Linux. A cache miss rebuilds formats and waits for the prepared
+thermal runtime before generating analytical Home models. Preparation completes
+before the renderer and desktop start. After the renderer reports readiness,
+an HTTP probe shares the startup deadline so the first page can compile in one request.
+The runner releases the response body and cancels outstanding probes when
+startup ends. Use `--verbose` for full stage diagnostics. Missing resources
 can require network access. A disk build does not reload Electron or service
 modules in a running instance.
 
@@ -407,23 +468,21 @@ format, model and Home stages when inputs and outputs match
 `.openpe/dev-preparation-v1.json`. Inputs cover code, dependency manifests,
 pinned resources and the curated native projects, including their libraries.
 Generated format bundles, portable STEP copies and downloaded reference
-circuits are outputs. Solver result trees are excluded. Fingerprints verify
-file identity and use at most four concurrent streams with 256 KiB chunks.
+circuits are outputs. Solver result trees are excluded. Fingerprints traverse
+and hash up to four inputs concurrently, verify file identity and use chunks
+of at most 256 KiB.
 Only successful preparation with unchanged inputs updates the record. Solver
 resource checks run on every development start.
 
-Checks can write logs, screenshots, temporary profiles and reports to
-`test-results/`. Some scripts also read prepared inputs there. For example,
-`simulation:build-examples` prepares and reads verified files under
-`test-results/example-models/`. Classify files by their consumers before
-cleanup. `tmp/` holds local experiments and is excluded from Git, formatting
-and typecheck. Resolve cleanup paths within the workspace and reject links.
-Keep native projects, recovery, Git history, prepared offline resources,
-corresponding sources/notices and current builds separate from test outputs.
+For local output ownership and cleanup, see [Workspace artifacts](DEVELOPMENT.md#workspace-artifacts).
+Project-specific ignore rules are scoped to `examples/` and `tests/fixtures/`.
+Native designs, lockfiles, notices, pinned inputs, required generated
+service/schema files and brand assets remain tracked. Next.js regenerates the
+ignored `next-env.d.ts`.
 
 ## Verification
 
-[AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. Windows x64 and macOS arm64 are both required; macOS arm64 is tested locally, and deferred Windows verification is recorded there. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
+[AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. Windows x64, macOS arm64 and glibc Linux x64 are verified separately; unavailable hosts are recorded as unverified. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
 
 | Agent or renderer concern                                                     | Focused checks                                                                                                                                 |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -433,31 +492,14 @@ corresponding sources/notices and current builds separate from test outputs.
 | Tool reviews, history and diagnostics                                         | `check-agent-tools-ui.mjs`, `check-agent-history-ui.mjs`, `check-agent-review-navigation-ui.mjs`                                               |
 | Queued messages and attachments                                               | `check-agent-queue-preview-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-attachments-ui.mjs`, `check-annotations.mjs`                 |
 | Embedded symbol and footprint drawing                                         | `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts`, `tests/footprint-drawing.test.ts`, `check-component-drawing-ui.mjs`  |
+| [Panel Find](../DESIGN.md#panel-find) | `tests/panel-find.test.ts`, `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs` |
+| [Cross-mode component highlighting](../DESIGN.md#cross-mode-component-highlighting) | `tests/component-highlight.test.ts` |
 
-Run the browser scripts with `node scripts/<script>.mjs`. They use isolated
-renderer fixtures and controlled services. Native dialogs, clipboard
-permissions, CAD kernel execution and provider authentication require their own
-checks.
-
-GUI/Agent design parity is exercised by `tests/gui-agent-parity.test.ts`: shared
-preparations produce matching native KiCad files and undo results behind the
-same revision, Source and close gates. PCB property capability schemas are
-generated from the canonical format definitions into
-`core/layout-property-schemas.json`; the API interpreter accepts their bounded
-nonrecursive shapes, while Core retains full document validation. Ownership and
-host grants remain unchanged by these object commands.
-
-Host parity extends through `lib/library-capabilities.ts` for STEP/SPICE resource
-selection, `lib/workbench-capabilities.ts` for workspace requests/history, and
-`lib/project-file-capabilities.ts` for explicit ordinary-file operations. The
-latter shares `useProjectDirectory` drafts and host compare-before-write checks;
-opaque file observations bind reads to destination/draft revisions without
-moving disk files into Core. Model contents/logs remain unavailable to Agents.
-Workspace requests acknowledge before navigation can revoke the originating run;
-opening another project never transfers its authority. Focused regressions are
-`tests/model-resource-capabilities.test.ts`, `tests/project-file-capabilities.test.ts`
-and `tests/workbench-project-actions.test.ts`, alongside existing Source, history
-and native-file lifecycle tests. The API contract records the scoped parity matrix.
+`tests/gui-agent-parity.test.ts` compares native KiCad bytes and undo for GUI
+and Agent edits behind revision, Source and close gates. Host parity checks
+include `tests/model-resource-capabilities.test.ts`,
+`tests/project-file-capabilities.test.ts` and
+`tests/workbench-project-actions.test.ts`. See the [API parity matrix](API.md).
 
 `scripts/test.mjs` discovers the complete `tests/*.test.ts` set and uses Node's
 process-isolated runner with bounded file concurrency. Successful complete runs
@@ -474,20 +516,26 @@ with the complete variant sequence.
 `npm test -- --test-concurrency=2` lowers memory pressure without changing the
 complete test set. Focused runs pass test paths after `npm test --`.
 
-| Concern                     | Representative checks                                                                                                                                                                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                                                          |
-| Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                               |
-| Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                |
-| Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                                        |
-| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE and Layout Thermal grips, shared widths and camera/native retention) |
-| Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                                             |
-| Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                                                                                        |
-| Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks                                                                                                                                   |
-| CAD geometry and admission  | `tests/model-cad.test.ts`; `tests/model-cad-sketch.test.ts`; `tests/model-cad-host.test.ts`; `tests/model-cad-kernel.test.ts`; `tests/model-cad-step.test.ts`; opt-in `OPENPE_TEST_MODEL_CAD=1` native-kernel tests                             |
-| Explicit desktop checks     | `check-desktop-startup.mjs`; `benchmark-desktop-startup.mjs`; `benchmark-desktop-interaction.mjs`; `benchmark-editor-experience.mjs`                                                                                                            |
+| Concern                     | Representative checks                                                                                                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                                                                                        |
+| Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                                                             |
+| Recent projects             | `tests/recent-projects.test.ts`, `tests/desktop-recent.test.ts`, `check-recent-ui.mjs`                                                                                                                           |
+| Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                                              |
+| Schematic sections          | `tests/schematic-section.test.ts`, `tests/schematic-section-views.test.ts`, `tests/schematic-section-controls.test.ts`; `check-thermal-workbench-ui.mjs --schematic-sections` (actual Workbench/Core with mocked host services)                                               |
+| Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                                                                      |
+| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE and Layout Thermal grips, shared widths and camera/native retention)                               |
+| Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                                                                           |
+| Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                                                                                                                      |
+| Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks; `check-thermal-workbench-ui.mjs --parasitics-study` (actual Workbench/Core, same-schematic additions, PCB preservation and GUI undo with mocked host services) |
+| CAD geometry and admission  | `tests/model-cad.test.ts`; `tests/model-cad-sketch.test.ts`; `tests/model-cad-host.test.ts`; `tests/model-cad-kernel.test.ts`; `tests/model-cad-step.test.ts`; opt-in `OPENPE_TEST_MODEL_CAD=1` native-kernel tests                                                           |
+| Explicit desktop checks     | `check-desktop-startup.mjs`; `benchmark-desktop-startup.mjs`; `benchmark-desktop-interaction.mjs`; `benchmark-editor-experience.mjs`                                                                                                                                          |
 
-Script basenames are under `scripts/`. Isolated renderer checks use fixture services/native pickers and do not establish live CLI authentication, desktop dispatch latency or GPU presentation. Model performance uses pinned offline STEP assets. Runtime measurements establish only their asserted workloads.
+Run browser scripts with `node scripts/<script>.mjs`. They use isolated renderer
+fixtures and controlled services. Native dialogs, clipboard permissions,
+desktop dispatch and GPU presentation, CAD kernel execution and provider
+authentication require their own checks. Model benchmarks use pinned offline
+STEP assets.
 
 Desktop benchmarks require explicit authorization and their own isolated profiles; use `npm run dev:web` for a dev renderer, since `npm run dev` already opens Electron. Run graphical checks serially, retain bounded input/overload guards and partial evidence, and stop on desktop overload. `OPENPE_EXPERIENCE_OPERATIONS` selects experience cases; `OPENPE_EXPERIENCE_NATIVE_AX=1` enables accessibility only in that benchmark's process (unset/`0` keeps the natural environment; other values fail). Detailed protocol and measurement assumptions are in the scripts; a frame marker is not a GPU fence.
 

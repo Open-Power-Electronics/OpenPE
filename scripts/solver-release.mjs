@@ -6,7 +6,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { create, extract, list } from 'tar';
 
-// Source date shared with the maintainer macOS builds. Archive bytes must not depend on the clock.
+// Source date shared by the maintainer builds. Archive bytes must not depend on the clock.
 export const SOLVER_ARCHIVE_EPOCH = 1786424074;
 const SOLVER_ARCHIVE_MTIME = new Date(SOLVER_ARCHIVE_EPOCH * 1000);
 const HASH = /^[0-9a-f]{64}$/;

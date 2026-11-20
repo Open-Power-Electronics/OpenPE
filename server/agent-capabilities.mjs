@@ -74,10 +74,12 @@ export function boundedAgentJSON(value, maxBytes) {
   return json;
 }
 
-/** Only the explicit PDF page query may attach a host-rendered image to tools. */
+const imageQueries = new Set(['project.datasheet.page', 'library.datasheet.page']);
+
+/** Only explicit datasheet page queries may attach host-rendered images to tools. */
 export function agentCapabilityContent(tool, args, result) {
   const json = boundedAgentJSON(result, agentCapabilityLimits.resultBytes);
-  if (tool !== 'openpe_query' || args?.name !== 'project.datasheet.page' || !result?.image)
+  if (tool !== 'openpe_query' || !imageQueries.has(args?.name) || !result?.image)
     return { text: json };
   const { image, ...metadata } = result;
   if (

@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,11 +7,12 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { parseProject, serializeProject } from '../server/project-format.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 
 // Real workspace and analysis docks with isolated services; no Electron,
 // user files, providers, native grants or solver execution.
-const project = parseProject(await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8'));
+const project = parseProject(formatTestProjectSource());
 for (const footprint of project.pcb.footprints) {
   const part = project.schematic.parts.find((part) => part.id === footprint.symbolId);
   (part.fields ??= {}).Footprint = footprint.libraryId;

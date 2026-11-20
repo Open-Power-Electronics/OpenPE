@@ -343,13 +343,7 @@
   color: inherit;
 }
 
-.addQuickLimitMenu:global(.select-popup) {
-  width: max-content;
-}
-
 .addQuickLimitMenu:global(.select-popup) :global(.select-option[role='option']) > span > strong {
-  overflow: visible;
-  white-space: normal;
   font-size: max(13px, var(--font-control));
 }
 
@@ -505,13 +499,11 @@
 
 .settingsTabs:global(.editor-visualization-tabs) {
   flex-wrap: wrap;
-  padding-inline: 0;
 }
 
 .settingsTabs:global(.editor-visualization-tabs) > :global(.editor-dock-tab) {
   flex: 0 1 auto;
   max-inline-size: 100%;
-  font-size: inherit;
 }
 
 .ruleSettingsError {

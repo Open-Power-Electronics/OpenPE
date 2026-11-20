@@ -1,6 +1,9 @@
-import type { SimulationResult, TransientConfig } from '../lib/spice';
-import { waveformCursorIndex, waveformIndices } from '../lib/waveform';
-import { waveformSampleWindow, type WaveformAxis } from '../lib/waveform-view';
+import type { SimulationResult, TransientConfig } from '../plugins/spice-simulation/domain/spice';
+import { waveformCursorIndex, waveformIndices } from '../plugins/spice-simulation/domain/waveform';
+import {
+  waveformSampleWindow,
+  type WaveformAxis,
+} from '../plugins/spice-simulation/domain/waveform-view';
 
 export type AgentWaveformPresentation = {
   layout: string;

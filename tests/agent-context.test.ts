@@ -108,6 +108,26 @@ test('initial provider context keeps attachment identity and omits unrelated nav
   }
 });
 
+test('schematic section observations retain the exact view and reject unsupported values', () => {
+  const { workspace, circuit, basis } = fixture();
+  for (const validate of [validateAgentWorkspaceContext, validateNativeContext]) {
+    for (const schematicSection of ['hardware', 'simulation', 'all']) {
+      const observed = { ...workspace, ui: { ...workspace.ui, schematicSection } };
+      assert.doesNotThrow(() => validate(observed, circuit.id, basis));
+      const prompt = agentPromptContext({ id: circuit.id, basis, workspace: observed }) as {
+        workspace: AgentWorkspaceContext;
+      };
+      assert.equal(prompt.workspace.ui.schematicSection, schematicSection);
+    }
+    for (const schematicSection of ['other', '', null, ['hardware'], 0])
+      assert.throws(
+        () =>
+          validate({ ...workspace, ui: { ...workspace.ui, schematicSection } }, circuit.id, basis),
+        /Invalid Agent workspace context/,
+      );
+  }
+});
+
 test('workspace context retains Source metadata and rejects private native files, drafts and parser excerpts', () => {
   const { workspace, circuit, basis } = fixture();
   const privateText = '.subckt PRIVATE_MODEL A B\nprivate model implementation\n.ends';
@@ -138,7 +158,7 @@ test('workspace context retains Source metadata and rejects private native files
             ...(safe.project as object),
             nativeFiles: {
               entry: 'project.kicad_pro',
-              files: [{ name: 'circuits/private.lib', source: privateText }],
+              files: [{ name: 'models/private.lib', source: privateText }],
             },
           },
         },

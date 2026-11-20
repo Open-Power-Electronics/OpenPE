@@ -4,15 +4,18 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { projectFromNativeFiles } from '../lib/project';
 import type { Point } from '../lib/circuit';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import {
   defaultThermalConfig,
   deriveThermalSpiceSources,
   prepareThermalModel,
   validateThermalResult,
-} from '../lib/thermal';
-import { runThermalSimulation } from '../server/thermal-runtime.mjs';
-import { extrudeThermalMesh, parseThermalPlanarMesh } from '../server/thermal-mesh.mjs';
+} from '../plugins/layout-thermal/domain/thermal';
+import { runThermalSimulation } from '../plugins/layout-thermal/host/thermal-runtime.mjs';
+import {
+  extrudeThermalMesh,
+  parseThermalPlanarMesh,
+} from '../plugins/layout-thermal/host/thermal-mesh.mjs';
 
 // Explicit offline coupled check. First run simulation:check-emc-flyback.
 const arguments_ = process.argv.slice(2);

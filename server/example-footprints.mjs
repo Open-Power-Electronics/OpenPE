@@ -7,7 +7,6 @@ import {
   writeFile,
   rename,
   unlink,
-  rmdir,
 } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,10 +28,38 @@ import {
   emcProjectAssets,
   verifyEmcFlybackAssets,
 } from './emc-flyback-assets.mjs';
-import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
+import { canonicalDirectory } from './host-path.cjs';
 
 const root = fileURLToPath(new URL('../resources/example-catalog/footprints/', import.meta.url));
 const packages = new Map(manifest.footprints.map((entry) => [entry.id, entry]));
+const emcPackages = new Map(emcManifest.footprints.map((entry) => [entry.id, entry]));
+
+/** Build the searchable view without changing the official KiCad index or reading CAD. */
+export function exampleFootprintSearchCatalog(official) {
+  const entries = new Map(official.map((entry) => [entry.id, entry]));
+  function include(record, modelPaths) {
+    const original = entries.get(record.id);
+    if (!original && !record.file) return;
+    const [library, name] = record.id.split(':');
+    const filenames = new Set(modelPaths.map((model) => model.split('/').at(-1)));
+    entries.set(record.id, {
+      ...(original ?? {
+        id: record.id,
+        library,
+        name,
+        description: 'Bundled example footprint',
+        keywords: '',
+      }),
+      keywords: [original?.keywords, ...filenames].filter(Boolean).join(' '),
+    });
+  }
+  for (const entry of packages.values())
+    include(entry, entry.models.flatMap((model) => [model, exampleModelPath(model)]));
+  for (const entry of emcPackages.values())
+    include(entry, entry.models.map((model) => model.path));
+  return [...entries.values()];
+}
+
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 async function readAsset(file, hash, assetRoot = root) {
   if (!file || path.isAbsolute(file) || file.split(/[\\/]/).some((p) => p === '..' || !p))
@@ -108,21 +135,29 @@ export async function exampleModelBytes(id, relative) {
   return readAsset(model.file, model.sha256);
 }
 
-async function writeAsset(target, bytes, label, previousBytes = []) {
+export async function portableExampleModelBytes(id, reference) {
+  if (emcPackages.get(id)?.models.some((model) => model.path === reference))
+    return emcModelBytes(id, reference);
+  const relative = packages
+    .get(id)
+    ?.models.find((item) => reference === '${KIPRJMOD}/' + exampleModelPath(item));
+  if (!relative) return null;
+  const model = manifest.models[relative];
+  return readAsset(model.file, model.sha256);
+}
+
+async function writeAsset(target, bytes, label) {
   try {
     const info = await lstat(target);
-    const allowed = [bytes, ...previousBytes];
     const existing =
-      info.isFile() &&
-      !info.isSymbolicLink() &&
-      allowed.some((candidate) => candidate.length === info.size)
+      info.isFile() && !info.isSymbolicLink() && info.size === bytes.length
         ? await readFile(target)
         : null;
-    if (!existing || !allowed.some((candidate) => existing.equals(candidate)))
+    if (!existing?.equals(bytes))
       throw new Error(
         `Existing example asset differs: ${label}. Preserved unchanged; choose another destination.`,
       );
-    if (existing.equals(bytes)) return;
+    return;
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -133,45 +168,6 @@ async function writeAsset(target, bytes, label, previousBytes = []) {
   } finally {
     await unlink(temp).catch(() => {});
   }
-}
-
-// Exact legacy bytes are retained only to recognize removable generated copies.
-function retiredAssetNotice(notices) {
-  const header =
-    'OpenPE project asset notices\n\nOriginal license terms, credits and provenance are reproduced below. Section names identify their bundled source documents.\n\n';
-  return Buffer.concat([
-    Buffer.from(header),
-    ...[...notices]
-      .sort((a, b) => a.file.localeCompare(b.file, 'en'))
-      .map(({ file, bytes }) =>
-        Buffer.concat([Buffer.from('===== ' + file + ' =====\n'), bytes, Buffer.from('\n\n')]),
-      ),
-  ]);
-}
-function retiredAssetNotices(notices) {
-  const groups = [
-    ...new Set(
-      notices.map(({ file }) =>
-        file.startsWith('licenses/footprints/')
-          ? 'boost'
-          : file.includes('/manufacturer/')
-            ? 'manufacturer'
-            : 'emc',
-      ),
-    ),
-  ];
-  return Array.from({ length: 2 ** groups.length - 1 }, (_, index) =>
-    retiredAssetNotice(
-      notices.filter(({ file }) => {
-        const group = file.startsWith('licenses/footprints/')
-          ? 'boost'
-          : file.includes('/manufacturer/')
-            ? 'manufacturer'
-            : 'emc';
-        return (index + 1) & (1 << groups.indexOf(group));
-      }),
-    ),
-  );
 }
 
 // Native project destinations are supplied by Electron, never the renderer.
@@ -269,14 +265,13 @@ export async function prepareExampleFootprints(project, projectFile) {
     }
     await writeAsset(path.join(directory, file), bytes, file);
   }
-  for (const { file, bytes, previousBytes } of emcAssets) {
-    if (file.startsWith('licenses/')) continue;
+  for (const { file, bytes } of emcAssets) {
     let parent = directory;
     for (const part of file.split('/').slice(0, -1)) {
       parent = path.join(parent, part);
       await safeDirectory(parent);
     }
-    await writeAsset(path.join(directory, file), bytes, file, previousBytes);
+    await writeAsset(path.join(directory, file), bytes, file);
   }
   const customLibraries = [
     ...new Set(
@@ -300,156 +295,5 @@ export async function prepareExampleFootprints(project, projectFile) {
       Buffer.from(table),
       'fp-lib-table',
     );
-  }
-}
-
-// Remove only known obsolete copies after the complete new native set is on disk.
-// Changed/unknown files and live legacy references retain their original paths.
-export async function cleanupExampleLayout(project, projectFile, bundle) {
-  const directory = path.resolve(path.dirname(projectFile));
-  const rooted = await canonicalDirectory(directory, {
-    message: 'Example cleanup cannot follow linked paths.',
-  });
-  async function regular(relative) {
-    const parts = relative.split('/');
-    if (
-      parts.some((part) => !part || part === '.' || part === '..' || part.includes('\\')) ||
-      path.isAbsolute(relative)
-    )
-      throw new Error('Invalid example cleanup path.');
-    let target = directory;
-    for (const part of parts) {
-      target = path.join(target, part);
-      const info = await lstat(target).catch((error) => {
-        if (error.code === 'ENOENT') return null;
-        throw error;
-      });
-      if (!info) return null;
-      if (info.isSymbolicLink()) throw new Error('Example cleanup cannot follow linked paths.');
-    }
-    await assertContainedPath(rooted, target, {
-      message: 'Example cleanup cannot follow linked paths.',
-    });
-    return (await lstat(target)).isFile() ? target : null;
-  }
-  for (const file of bundle.files) {
-    const target = await regular(file.name);
-    if (
-      !target ||
-      !(await readFile(target)).equals(Buffer.from(file.source, file.encoding ?? 'utf8'))
-    )
-      return;
-  }
-  const pairs = new Map();
-  for (const file of bundle.files) {
-    if (
-      /^footprints\/[^/]+\.pretty\//.test(file.name) ||
-      /^symbols\/[^/]+\.kicad_sym$/.test(file.name)
-    )
-      pairs.set(file.name.replace(/^(footprints|symbols)\//, ''), file.name);
-  }
-  for (const [tableName, suffix] of [
-    ['fp-lib-table', '.pretty'],
-    ['sym-lib-table', '.kicad_sym'],
-  ]) {
-    const table = bundle.files.find((file) => file.name === tableName);
-    if (!table) continue;
-    for (const entry of children(parseSExpr(table.source), 'lib')) {
-      const library = val(child(entry, 'name'));
-      const uri = val(child(entry, 'uri'));
-      if (!uri.startsWith('${KIPRJMOD}/') || !/^[\w.()+,-]+$/.test(library)) continue;
-      const relative = uri.slice('${KIPRJMOD}/'.length);
-      for (const file of bundle.files) {
-        if (suffix === '.pretty' && file.name.startsWith(relative + '/')) {
-          const leaf = file.name.slice(relative.length);
-          for (const prefix of ['', 'footprints/'])
-            pairs.set(prefix + library + suffix + leaf, file.name);
-        } else if (suffix === '.kicad_sym' && file.name === relative)
-          pairs.set(library + suffix, file.name);
-      }
-    }
-  }
-  for (const fp of project.pcb?.footprints ?? [])
-    for (const model of fp.models ?? []) {
-      for (const relative of [
-        ...Object.keys(manifest.models),
-        ...Object.keys(emcManifest.models),
-      ]) {
-        const after = exampleModelPath(relative);
-        if (model.path !== '$' + '{KIPRJMOD}/' + after) continue;
-        for (const prefix of ['models/', 'footprints/models/']) pairs.set(prefix + relative, after);
-        pairs.set('footprints/' + path.basename(after), after);
-        pairs.set('3D/' + path.basename(after), after);
-      }
-    }
-  const normalizeSource = (bytes) => portableExampleModelSource(bytes.toString('utf8'));
-  async function discard(file) {
-    await unlink(file);
-    let parent = path.dirname(file);
-    while (parent !== directory) {
-      const relative = path.relative(directory, parent);
-      if (!relative || relative.startsWith('..') || path.isAbsolute(relative))
-        throw new Error('Invalid example cleanup directory.');
-      try {
-        await rmdir(parent);
-      } catch (error) {
-        if (['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) break;
-        throw error;
-      }
-      parent = path.dirname(parent);
-    }
-  }
-  for (const [before, after] of pairs) {
-    if (before === after || bundle.files.some((file) => file.name === before)) continue;
-    const oldReference = '${KIPRJMOD}/' + before;
-    if (
-      project.pcb?.footprints.some((fp) =>
-        fp.models?.some((model) => model.path === oldReference),
-      ) ||
-      bundle.files.some((file) => file.source.includes(oldReference))
-    )
-      continue;
-    const oldFile = await regular(before);
-    const newFile = await regular(after);
-    if (!oldFile || !newFile) continue;
-    if ((await lstat(oldFile)).size > (await lstat(newFile)).size + 4096) continue;
-    const oldBytes = await readFile(oldFile),
-      newBytes = await readFile(newFile);
-    if (
-      !oldBytes.equals(newBytes) &&
-      !(before.endsWith('.kicad_mod') || before.endsWith('.kicad_sym'))
-    )
-      continue;
-    if (!oldBytes.equals(newBytes) && normalizeSource(oldBytes) !== normalizeSource(newBytes))
-      continue;
-    await discard(oldFile);
-  }
-  const licenses = (await emcProjectAssets(project)).filter((asset) =>
-    asset.file.startsWith('licenses/'),
-  );
-  for (const name of ['LICENSE.md', 'CREDITS.md', 'NOTICE.txt'])
-    licenses.push({ file: 'licenses/footprints/' + name, bytes: await readAsset(name) });
-  for (const asset of licenses) {
-    const aliases = [asset.file, 'footprints/' + asset.file];
-    if (asset.file.startsWith('licenses/footprints/'))
-      aliases.push('footprints/' + path.basename(asset.file));
-    for (const alias of aliases) {
-      const target = await regular(alias);
-      if (!target) continue;
-      const candidates = [asset.bytes, ...(asset.previousBytes ?? [])];
-      const info = await lstat(target);
-      if (!candidates.some((bytes) => bytes.length === info.size)) continue;
-      const existing = await readFile(target);
-      if (candidates.some((bytes) => bytes.equals(existing))) await discard(target);
-    }
-  }
-  const noticeFile = await regular('NOTICE.txt');
-  if (noticeFile) {
-    const candidates = retiredAssetNotices(licenses);
-    const size = (await lstat(noticeFile)).size;
-    if (candidates.some((bytes) => bytes.length === size)) {
-      const existing = await readFile(noticeFile);
-      if (candidates.some((bytes) => bytes.equals(existing))) await discard(noticeFile);
-    }
   }
 }

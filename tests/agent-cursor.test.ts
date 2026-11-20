@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../server/index.mjs';
-import { detectAgents, resolveAgent, runAgent } from '../server/agents.mjs';
+import { detectAgents, resolveAgent, runAgent, runRawAgent } from '../server/agents.mjs';
 import { listAgentModels } from '../server/agent-models.mjs';
 import {
   assertCursorSdkTools,
@@ -428,6 +428,24 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
     /bad-max has an invalid max-mode flag/,
   );
   assert.throws(() => cursorModelSelection(mixed, { effort: 'high' }), /does not expose a reasoning effort/);
+});
+
+test('raw Cursor uses an empty tool catalog and no bridge', async () => {
+  const state = sdkFor(async (options) => {
+    assert.deepEqual(options.tools, []);
+    assert.deepEqual(options.mcpServers, {});
+    return { options: { ...options, allowedProtoTools: [], disallowedProtoTools: [] } };
+  }, [{ type: 'assistant', message: { content: [{ type: 'text', text: 'Raw reply' }] } }]);
+  const events: any[] = [];
+  const result = await runRawAgent(
+    'cursor',
+    { prompt: 'Original text', model: 'plain' },
+    (event: any) => events.push(event),
+    new AbortController().signal,
+    { cursorCredential: { read: async () => apiKey }, sdk: state.sdk },
+  );
+  assert.equal(result.outcome, 'completed');
+  assert.ok(events.some((event) => event.type === 'text-delta' && event.delta === 'Raw reply'));
 });
 
 test('Cursor streams text, cancels without dropping it, and proves the tool set', async () => {

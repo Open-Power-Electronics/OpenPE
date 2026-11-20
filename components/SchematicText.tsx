@@ -1,8 +1,10 @@
 import { memo, useMemo } from 'react';
-import { schematicTexts, schematicPolylines } from '@/lib/schematic-text';
+import { schematicTexts, schematicTextBoxes, schematicPolylines } from '@/lib/schematic-text';
+import { schematicImages } from '@/lib/schematic-image';
 import type { SExpr } from '@/lib/sexpr';
 import type { Point } from '@/lib/circuit';
 import SchematicSelectionPaint from './SchematicSelectionPaint';
+import { schematicStrokeDasharray } from './schematic-stroke';
 import useRetainedElements from './useRetainedElements';
 
 const DrawingNativeText = memo(function DrawingNativeText({
@@ -11,6 +13,7 @@ const DrawingNativeText = memo(function DrawingNativeText({
   x,
   y: top,
   size,
+  thickness,
   bold,
   italic,
   color,
@@ -50,6 +53,13 @@ const DrawingNativeText = memo(function DrawingNativeText({
         fontStyle={italic ? 'italic' : undefined}
         fill={color ? 'var(--schematic-custom-color)' : undefined}
         fillOpacity={opacity}
+        stroke={
+          thickness ? `var(--${color ? 'schematic-custom-color' : 'schematic-note'})` : undefined
+        }
+        strokeWidth={thickness || undefined}
+        strokeOpacity={thickness ? opacity : undefined}
+        strokeLinejoin={thickness ? 'round' : undefined}
+        paintOrder={thickness ? 'stroke fill' : undefined}
         textAnchor={anchor}
         transform={translated ? `translate(${dx} ${dy})` : undefined}
         pointerEvents={onPointerDown ? 'bounding-box' : 'none'}
@@ -80,6 +90,8 @@ export default memo(function SchematicText({
 }) {
   const polylines = useMemo(() => schematicPolylines(original), [original]);
   const texts = useMemo(() => schematicTexts(original), [original]);
+  const boxes = useMemo(() => schematicTextBoxes(original), [original]);
+  const images = useMemo(() => schematicImages(original), [original]);
   const retainText = useRetainedElements(texts, [
     texts,
     selection,
@@ -97,14 +109,7 @@ export default memo(function SchematicText({
           fill="none"
           stroke="var(--schematic-note)"
           strokeWidth={line.width || 0.15}
-          strokeDasharray={
-            {
-              dash: '1.5 1',
-              dot: '0.2 0.8',
-              dash_dot: '1.5 0.8 0.2 0.8',
-              dash_dot_dot: '1.5 0.8 0.2 0.8 0.2 0.8',
-            }[line.type]
-          }
+          strokeDasharray={schematicStrokeDasharray(line.type)}
         />
       )),
     [polylines],
@@ -121,6 +126,7 @@ export default memo(function SchematicText({
             x: text.x,
             y: text.y,
             size: text.size,
+            thickness: text.thickness,
             bold: text.bold,
             italic: text.italic,
             color:
@@ -144,7 +150,53 @@ export default memo(function SchematicText({
   );
   return (
     <g fill="var(--schematic-note)" fontFamily="var(--ui-font)" pointerEvents="none">
+      {images.map(({ id, href, x, y, width, height }) => (
+        <image key={id} data-testid={`schematic-image-${id}`} {...{ href, x, y, width, height }} />
+      ))}
       {lineElements}
+      {boxes.map((box) => (
+        <g key={box.id} data-testid={`schematic-text-box-${box.id}`}>
+          <rect
+            x={box.x}
+            y={box.y}
+            width={box.width}
+            height={box.height}
+            fill="none"
+            stroke="var(--schematic-note)"
+            strokeWidth={box.lineWidth || 0.15}
+            strokeDasharray={schematicStrokeDasharray(box.lineType)}
+          />
+          <foreignObject x={box.x} y={box.y} width={box.width} height={box.height}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent:
+                  box.vertical === 'top'
+                    ? 'flex-start'
+                    : box.vertical === 'bottom'
+                      ? 'flex-end'
+                      : 'center',
+                height: '100%',
+                boxSizing: 'border-box',
+                padding: `${box.top}px ${box.right}px ${box.bottom}px ${box.left}px`,
+                textAlign:
+                  box.anchor === 'middle' ? 'center' : box.anchor === 'start' ? 'left' : 'right',
+                fontSize: box.size * 1.3,
+                fontWeight: box.bold ? 700 : undefined,
+                fontStyle: box.italic ? 'italic' : undefined,
+                color: box.color?.[3] ? `rgba(${box.color.join(',')})` : 'var(--schematic-note)',
+                WebkitTextStrokeWidth: box.thickness,
+                whiteSpace: 'pre-wrap',
+                overflowWrap: 'anywhere',
+                lineHeight: 1.15,
+              }}
+            >
+              {box.text}
+            </div>
+          </foreignObject>
+        </g>
+      ))}
       {textElements}
     </g>
   );

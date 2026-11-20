@@ -142,6 +142,16 @@ try {
   await second.dispatchEvent('contextmenu', { clientX: 350, clientY: 390 });
   await menu.waitFor();
   const bounds = await menu.boundingBox();
+  const labelsFit = await menu
+    .locator('.select-option > span')
+    .evaluateAll((labels) =>
+      labels.every(
+        (label) =>
+          label.scrollWidth <= label.clientWidth + 1 &&
+          label.scrollHeight <= label.clientHeight + 1,
+      ),
+    );
+  assert.equal(labelsFit, true, 'Project menu labels remain complete in a narrow window.');
   assert.ok(
     bounds &&
       bounds.x >= 8 &&

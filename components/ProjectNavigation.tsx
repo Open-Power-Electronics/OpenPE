@@ -378,7 +378,7 @@ export default function ProjectNavigation({
                     }}
                   >
                     <ArchiveRestore size={16} aria-hidden="true" />
-                    <span>Restore {session.title}</span>
+                    <span title={`Restore ${session.title}`}>Restore {session.title}</span>
                   </button>
                 ))}
           </div>,

@@ -9,7 +9,7 @@ import { uid, type Point } from '../lib/circuit';
 import { createEmptyPCB, movePCBSelection } from '../lib/pcb-layout';
 import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
 import { fillCopperZones, filledCopperPolygons } from '../lib/pcb-polygons';
-import { createProject, projectFromNativeFiles } from '../lib/project';
+import { createProject, projectFromNativeFiles, projectNativeFiles } from '../lib/project';
 import type { PCB } from '../lib/pcb';
 
 const rectangle = (x: number, y: number, width: number, height: number): Point[] => [
@@ -218,6 +218,60 @@ test('zone resizing and rule-area changes update saved copper in the originating
   assert.deepEqual(agent.getNativeFiles(), resized);
   agent.undo();
   assert.deepEqual(agent.getNativeFiles(), before);
+});
+
+test('native class and board rule minima follow GUI/Agent geometry edits and rule-only undo', async () => {
+  const files = projectNativeFiles(fixture());
+  const pro = files.files.find((file) => file.name === files.entry)!;
+  const data = JSON.parse(pro.source);
+  data.net_settings = { classes: [{ name: 'Default', clearance: 0.7 }], netclass_patterns: [] };
+  pro.source = JSON.stringify(data);
+  const project = projectFromNativeFiles(files);
+  const gui = new ProjectCore(project);
+  const agent = new ProjectCore(project);
+  const board = gui.getSnapshot().project!.pcb!;
+  const selection = [{ kind: 'track' as const, id: board.tracks[0].id }];
+  const delta = { x: 0, y: 3 };
+  gui.replaceBoard(movePCBSelection(board, selection, delta));
+  agent.execute('layout.move', { boardId: board.id, selection, delta });
+  assert.deepEqual(gui.getNativeFiles(), agent.getNativeFiles());
+  assert.equal(copperAt(agent.getSnapshot().project!.pcb!, 15, 13.85), false);
+  assert.equal(copperAt(agent.getSnapshot().project!.pcb!, 15, 13.95), true);
+  const report = (await agent.query('layout.drc', {
+    boardId: board.id,
+    settings: { scopes: ['clearance'] },
+  })) as { issues: unknown[] };
+  assert.deepEqual(report.issues, []);
+  const beforeRules = agent.getNativeFiles();
+  agent.execute('layout.drc.settings', { boardId: board.id, thresholds: { clearance: 0.9 } });
+  assert.equal(agent.getSnapshot().undoDepth, 2);
+  assert.equal(copperAt(agent.getSnapshot().project!.pcb!, 15, 14.05), false);
+  assert.equal(copperAt(agent.getSnapshot().project!.pcb!, 15, 14.15), true);
+  agent.undo();
+  assert.deepEqual(
+    agent.getNativeFiles(),
+    beforeRules,
+    'Undo restores rule values and exact accepted copper together.',
+  );
+  const latest = agent.getSnapshot().project!;
+  const native = latest.nativeFiles!;
+  const metadata = native.files.map((file) =>
+    file.name === native.entry
+      ? {
+          ...file,
+          source: JSON.stringify({
+            ...JSON.parse(file.source),
+            text_variables: { NOTE: 'metadata only' },
+          }),
+        }
+      : file,
+  );
+  agent.commitProject({ ...latest, nativeFiles: { ...native, files: metadata } });
+  assert.equal(
+    agent.getSnapshot().project!.pcb,
+    latest.pcb,
+    'Unrelated native metadata cannot recalculate or replace the board.',
+  );
 });
 
 test('failed dynamic refill and Source, stale-revision and close barriers retain accepted fills', () => {

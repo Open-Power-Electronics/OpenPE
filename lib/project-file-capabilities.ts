@@ -24,7 +24,7 @@ const textBytes = 1024 * 1024;
 const nativeFile = /(?:\.kicad_[^/.]+|(?:^|\/)(?:fp|sym)-lib-table)$/i;
 
 /** Explicit Agent file access preserves the GUI's separate model/log boundary. */
-export function projectFileRestriction(name: string): string | undefined {
+function projectFileRestriction(name: string): string | undefined {
   if (
     !name ||
     name.length > 1024 ||

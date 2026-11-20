@@ -19,8 +19,22 @@ const workspaceRequire = createRequire(path.join(root, 'package.json'));
 const typescript = () => workspaceRequire('typescript');
 
 const hosts = {
+  'linux:x64': {
+    executable: path.join(root, 'release', 'linux-unpacked', 'openpe'),
+    resources: path.join(root, 'release', 'linux-unpacked', 'resources'),
+    cursor: '@cursor/sdk-linux-x64',
+    canvas: '@napi-rs/canvas-linux-x64-gnu',
+  },
   'darwin:arm64': {
-    executable: path.join(root, 'release', 'mac-arm64', 'OpenPE.app', 'Contents', 'MacOS', 'OpenPE'),
+    executable: path.join(
+      root,
+      'release',
+      'mac-arm64',
+      'OpenPE.app',
+      'Contents',
+      'MacOS',
+      'OpenPE',
+    ),
     resources: path.join(root, 'release', 'mac-arm64', 'OpenPE.app', 'Contents', 'Resources'),
     cursor: '@cursor/sdk-darwin-arm64',
     canvas: '@napi-rs/canvas-darwin-arm64',
@@ -37,14 +51,20 @@ export function packagedHost(platform = process.platform, arch = process.arch) {
   const host = hosts[`${platform}:${arch}`];
   if (!host)
     throw new Error(
-      `Unsupported package host ${platform} ${arch}. OpenPE packages Windows x64 and macOS arm64 only.`,
+      `Unsupported package host ${platform} ${arch}. OpenPE packages Windows x64, macOS arm64 and Linux x64.`,
     );
   return host;
 }
 
 export function collectRuntimeSpecifiers(source, fileName, { dynamicImports = false } = {}) {
   const ts = typescript();
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.JS,
+  );
   if (sourceFile.parseDiagnostics?.length) {
     const diagnostic = sourceFile.parseDiagnostics[0];
     const text = diagnostic.messageText;
@@ -56,10 +76,7 @@ export function collectRuntimeSpecifiers(source, fileName, { dynamicImports = fa
   const required = [];
   const resolved = [];
   const visit = (node) => {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier
-    ) {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
       if (!ts.isStringLiteral(node.moduleSpecifier))
         throw new Error(`Module specifier in ${fileName} must be a string literal.`);
       imported.push(node.moduleSpecifier.text);
@@ -174,7 +191,8 @@ async function checkPackagedModules({ resources, host }) {
   const unpackedPath = `${asarPath}.unpacked`;
   if (!existsSync(asarPath)) throw new Error(`Packaged archive is missing: ${asarPath}`);
   const serverEntry = path.join(asarPath, 'server', 'index.mjs');
-  if (!existsSync(serverEntry)) throw new Error(`Packaged service entry is missing: ${serverEntry}`);
+  if (!existsSync(serverEntry))
+    throw new Error(`Packaged service entry is missing: ${serverEntry}`);
   const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   if (!lock.packages || typeof lock.packages !== 'object' || Array.isArray(lock.packages))
     throw new Error('package-lock.json has no packages.');
@@ -200,12 +218,17 @@ async function checkPackagedModules({ resources, host }) {
       throw error;
     }
     if (!insideApp(resolved))
-      throw new Error(`Resolved ${specifier} from ${fromFile} outside the packaged app: ${resolved}`);
+      throw new Error(
+        `Resolved ${specifier} from ${fromFile} outside the packaged app: ${resolved}`,
+      );
     resolvedCount += 1;
     return resolved;
   };
   const owningPackage = (file) => {
-    const moduleRoots = [path.join(asarPath, 'node_modules'), path.join(unpackedPath, 'node_modules')];
+    const moduleRoots = [
+      path.join(asarPath, 'node_modules'),
+      path.join(unpackedPath, 'node_modules'),
+    ];
     let directory = path.dirname(path.resolve(file));
     while (
       moduleRoots.some((moduleRoot) => contained(directory, moduleRoot) || directory === moduleRoot)
@@ -225,8 +248,7 @@ async function checkPackagedModules({ resources, host }) {
     throw new Error(`Packaged module is outside a package: ${file}`);
   };
   const containedFile = (directory, relative, name) => {
-    if (typeof relative !== 'string' || !relative)
-      throw new Error(`${name} entry is invalid.`);
+    if (typeof relative !== 'string' || !relative) throw new Error(`${name} entry is invalid.`);
     const file = path.resolve(directory, relative);
     if (!insideDirectory(file, directory))
       throw new Error(`${name} entry escapes the package: ${relative}`);
@@ -279,7 +301,8 @@ async function checkPackagedModules({ resources, host }) {
       if (typeof relative !== 'string' || !relative)
         throw new Error(`${manifest.name} bin path is invalid.`);
       const file = hostFile(containedFile(directory, relative, manifest.name));
-      if (!statSync(file).isFile()) throw new Error(`${manifest.name} bin is not a file: ${relative}`);
+      if (!statSync(file).isFile())
+        throw new Error(`${manifest.name} bin is not a file: ${relative}`);
       if (process.platform !== 'win32' && (statSync(file).mode & 0o111) === 0)
         throw new Error(`${manifest.name} bin is not executable: ${relative}`);
     }
@@ -311,7 +334,9 @@ async function checkPackagedModules({ resources, host }) {
       const candidate = path.join(directory, 'node_modules', ...parts, 'package.json');
       if (existsSync(candidate)) {
         if (!insideApp(candidate))
-          throw new Error(`Resolved ${name} from ${fromFile} outside the packaged app: ${candidate}`);
+          throw new Error(
+            `Resolved ${name} from ${fromFile} outside the packaged app: ${candidate}`,
+          );
         resolvedCount += 1;
         return candidate;
       }
@@ -359,9 +384,13 @@ async function checkPackagedModules({ resources, host }) {
     while (scanQueue.length) {
       const file = scanQueue.pop();
       if (!/\.(?:[cm]?js)$/.test(file)) continue;
-      const { imported } = collectRuntimeSpecifiers(readFileSync(file, 'utf8'), path.basename(file), {
-        dynamicImports: false,
-      });
+      const { imported } = collectRuntimeSpecifiers(
+        readFileSync(file, 'utf8'),
+        path.basename(file),
+        {
+          dynamicImports: false,
+        },
+      );
       for (const specifier of new Set(imported)) {
         const kind = classify(specifier);
         if (kind === 'host' || kind === 'builtin') continue;
@@ -398,8 +427,10 @@ async function checkPackagedModules({ resources, host }) {
   };
   walk(path.join(asarPath, 'server'));
   walk(path.join(asarPath, 'electron'));
+  walk(path.join(asarPath, 'plugins'));
   const appManifest = JSON.parse(readFileSync(path.join(asarPath, 'package.json'), 'utf8'));
-  for (const name of fieldNames(appManifest, 'dependencies')) queueRuntime(assertDependency(name, serverEntry));
+  for (const name of fieldNames(appManifest, 'dependencies'))
+    queueRuntime(assertDependency(name, serverEntry));
   drainScans();
   const cursor = packages.get(host.cursor);
   if (!cursor) throw new Error(`Host Cursor platform package ${host.cursor} was not packaged.`);

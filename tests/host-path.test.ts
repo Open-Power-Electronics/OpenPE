@@ -26,9 +26,13 @@ test('canonical suffix accepts an ancestor prefix and follows the volume case pr
   assert.equal(logicalSuffixOfCanonical(path.resolve(file), canonical), true);
   const target = path.join(outside, 'real.step');
   await writeFile(target, 'ISO-10303-21;');
-  const link = path.join(directory, 'linked.step');
-  await symlink(target, link);
-  assert.equal(logicalSuffixOfCanonical(path.resolve(link), await realpath(link)), false);
+  const link = path.join(directory, 'linked');
+  await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+  const linkedFile = path.join(link, 'real.step');
+  assert.equal(
+    logicalSuffixOfCanonical(path.resolve(linkedFile), await realpath(linkedFile)),
+    false,
+  );
   const toggled = path.join(path.dirname(file), 'enclosure.STEP');
   const folds = canonicalGrantPath(file) === canonicalGrantPath(toggled);
   assert.equal(logicalSuffixOfCanonical(path.resolve(toggled), canonical), folds);
@@ -43,13 +47,20 @@ test('a missing contained file rechecks its parent and exclusive create does not
   const rooted = await canonicalDirectory(root, { message: 'linked' });
   const missing = path.join(root, 'fresh.csv');
   assert.equal(
-    await assertContainedPath(rooted, missing, { message: 'linked', kind: 'file', allowMissing: true }),
+    await assertContainedPath(rooted, missing, {
+      message: 'linked',
+      kind: 'file',
+      allowMissing: true,
+    }),
     path.join(rooted.canonical, 'fresh.csv'),
   );
   await assertCanonicalParent(rooted.canonical, rooted.canonical, 'linked');
-  await assert.rejects(assertCanonicalParent(rooted.canonical, path.join(rooted.canonical, 'other'), 'linked'), /linked/);
+  await assert.rejects(
+    assertCanonicalParent(rooted.canonical, path.join(rooted.canonical, 'other'), 'linked'),
+    /linked/,
+  );
   const jump = path.join(root, 'jump');
-  await symlink(outside, jump);
+  await symlink(outside, jump, process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(
     assertContainedPath(rooted, path.join(jump, 'out.csv'), {
       message: 'linked',
@@ -59,7 +70,11 @@ test('a missing contained file rechecks its parent and exclusive create does not
     /linked/,
   );
   const link = path.join(root, 'link.csv');
-  await symlink('missing.csv', link);
-  await assert.rejects(open(link, containedCreateFlags()));
+  await symlink(
+    process.platform === 'win32' ? outside : 'missing.csv',
+    link,
+    process.platform === 'win32' ? 'junction' : 'file',
+  );
+  await assert.rejects(open(link, containedCreateFlags()), { code: 'EEXIST' });
   await assert.rejects(stat(path.join(root, 'missing.csv')), { code: 'ENOENT' });
 });

@@ -8063,7 +8063,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D2")
           (unit 1))))
-    (property "Sim.Library" "circuits/EMC_ES2D.lib"
+    (property "Sim.Library" "models/EMC_ES2D.lib"
       (at 234.95 62.23 0)
       (effects
         (font
@@ -11343,7 +11343,7 @@
           (reference "U4")
           (unit 1))))
     (lib_name "Isolator:LTV-817S")
-    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+    (property "Sim.Library" "models/EMC_flyback_control.lib"
       (at 241.3 157.48 0)
       (effects
         (font
@@ -12556,7 +12556,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D3")
           (unit 1))))
-    (property "Sim.Library" "circuits/EMC_SS510C.lib"
+    (property "Sim.Library" "models/EMC_SS510C.lib"
       (at 284.48 71.12 0)
       (effects
         (font
@@ -13065,7 +13065,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D7")
           (unit 1))))
-    (property "Sim.Library" "circuits/EMC_SS510C.lib"
+    (property "Sim.Library" "models/EMC_SS510C.lib"
       (at 284.48 81.28 0)
       (effects
         (font
@@ -15929,7 +15929,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U1")
           (unit 1))))
-    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+    (property "Sim.Library" "models/EMC_flyback_control.lib"
       (at 127 167.64 0)
       (effects
         (font
@@ -16361,7 +16361,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "Q1")
           (unit 1))))
-    (property "Sim.Library" "circuits/EMC_IRF520N.lib"
+    (property "Sim.Library" "models/EMC_IRF520N.lib"
       (at 238.76 101.6 0)
       (effects
         (font
@@ -17520,7 +17520,7 @@
           (reference "U3")
           (unit 1))))
     (lib_name "Reference_Voltage:TL431DBZ")
-    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+    (property "Sim.Library" "models/EMC_flyback_control.lib"
       (at 238.76 185.42 0)
       (effects
         (font

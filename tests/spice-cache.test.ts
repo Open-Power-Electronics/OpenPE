@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSpiceResultCache } from '../server/spice-cache.mjs';
-import type { SimulationResult } from '../lib/spice';
+import { createSpiceResultCache } from '../plugins/spice-simulation/host/spice-cache.mjs';
+import type { SimulationResult } from '../plugins/spice-simulation/domain/spice';
 
 const result = (samples = 2): SimulationResult => ({
   time: Array.from({ length: samples }, (_, i) => i),

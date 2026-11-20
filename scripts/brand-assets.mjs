@@ -11,19 +11,20 @@ const paths = (svg) => svg.match(/<path\b[^>]*\/>/g)?.join('\n');
 const geometry = paths(master);
 if (!geometry || !master.includes('data-role="body"') || !master.includes('data-role="signal"'))
   throw new Error('The OpenPE logo master must contain body and signal SVG paths.');
+const signal = geometry.match(/<path\b[^>]*data-role="signal"[^>]*\/>/)?.[0];
+if (!signal) throw new Error('The OpenPE logo master must contain a signal path.');
+await writeFile(
+  at('public/brand/openpe-signal.svg'),
+  `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">\n  <title>OpenPE — Loading signal</title>\n  ${signal}\n</svg>\n`,
+);
 
 const charcoal = '#292929';
 const green = '#87ea5c';
-const white = '#fafafa';
 const mono = master
   .replace(/(<path data-role="body"[^>]*?) stroke="[^"]*" stroke-width="[^"]*" stroke-linejoin="[^"]*" paint-order="[^"]*"/, '$1')
   .replaceAll(green, charcoal)
   .replace('</title>', ', monochrome</title>');
-const inverse = master
-  .replaceAll(charcoal, white)
-  .replace('</title>', ', reversed</title>');
 await writeFile(at('public/brand/openpe-mark-mono.svg'), mono);
-await writeFile(at('public/brand/openpe-mark-inverse.svg'), inverse);
 
 function lockup(markPaths, foreground, secondary) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="104" viewBox="0 0 360 104">
@@ -35,7 +36,6 @@ function lockup(markPaths, foreground, secondary) {
 `;
 }
 await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, charcoal, '#666666'));
-await writeFile(at('public/brand/openpe-lockup-inverse.svg'), lockup(paths(inverse), white, '#bdbdbd'));
 await mkdir(at('build'), { recursive: true });
 await sharp(Buffer.from(master)).resize(512, 512).png().toFile(at('public/brand/openpe-icon.png'));
 await sharp(at('public/brand/openpe-lockup.svg')).resize(1080, 312).png().toFile(at('public/brand/openpe-lockup.png'));
@@ -104,7 +104,6 @@ const preview = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="80
   <g transform="translate(244 174) scale(3)">${geometry}</g>
   <g transform="translate(840 174) scale(3)">${geometry}</g>
   <text x="340" y="431" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-weight="600" font-size="64" letter-spacing="-2.7" fill="${charcoal}">OpenPE</text>
-  <text x="936" y="431" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-weight="600" font-size="64" letter-spacing="-2.7" fill="${white}">OpenPE</text>
   <text x="340" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#777777">Electrical Engineering Studio</text>
   <text x="936" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#b6b9b6">Electrical Engineering Studio</text>
   <text x="84" y="548" font-family="Segoe UI,Arial,sans-serif" font-size="10" letter-spacing="1.3" fill="#8a8a86">LIGHT SURFACE</text>
@@ -132,4 +131,4 @@ const titlebarPreview = `<svg xmlns="http://www.w3.org/2000/svg" width="880" hei
 </svg>
 `;
 await sharp(Buffer.from(titlebarPreview)).png().toFile(at('references/openpe-titlebar-preview.png'));
-console.log('Generated OpenPE Signal E variants, transparent PNGs, Windows and macOS icons and identity previews.');
+console.log('Generated dark OpenPE Signal E marks, transparent PNGs, Windows and macOS icons and identity previews.');

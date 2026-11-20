@@ -51,7 +51,7 @@ const parenthesisTokens = Object.fromEntries(
   parenthesisTags.map((tag, depth) => [`parenthesis${depth}`, tag]),
 );
 
-export type SourceLanguage = 'json' | 'sexpr' | 'scad' | 'text';
+type SourceLanguage = 'json' | 'sexpr' | 'scad' | 'text';
 
 export function sourceLanguageForFile(name: string): SourceLanguage {
   if (/\.(?:kicad_pro|kicad_prl|kicad_jobset|json)$/i.test(name)) return 'json';
@@ -360,13 +360,13 @@ const structure = ViewPlugin.fromClass(
   { decorations: (plugin) => plugin.decorations },
 );
 
-export type SourcePresentation = {
+type SourcePresentation = {
   lineNumbers: boolean;
   whitespace: boolean;
   wordWrap: boolean;
 };
 
-export const defaultSourcePresentation: SourcePresentation = {
+const defaultSourcePresentation: SourcePresentation = {
   lineNumbers: true,
   whitespace: true,
   wordWrap: false,

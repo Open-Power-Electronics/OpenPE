@@ -6762,7 +6762,7 @@
     "files": [
       {
         "name": "lm2735-msop8-sepic.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2735-msop8-sepic.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2735 SEPIC\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM2735Y.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm2735-msop8-sepic.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM2735 SEPIC\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LM2735Y.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lm2735-msop8-sepic.kicad_sym",
@@ -6786,7 +6786,7 @@
     {
       "id": "reference-lm2735y",
       "sha256": "dbb2681f47a37a5c5559028262af5d6701c3199440134f45b8ae45da10009cf1",
-      "file": "circuits/LM2735Y.lib"
+      "file": "models/LM2735Y.lib"
     }
   ]
 }

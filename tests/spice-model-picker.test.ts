@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test, { type TestContext } from 'node:test';
 import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -9,7 +10,11 @@ import { createPart, emptyCircuit } from '../lib/circuit';
 import { createProject } from '../lib/project';
 import { partFields } from '../lib/library';
 import { externalModelBindingFields } from '../lib/simulation-model-binding';
-import { buildSpiceDeck, defaultTransient, simulationSupportError } from '../lib/spice';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  simulationSupportError,
+} from '../plugins/spice-simulation/domain/spice';
 import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
 import {
   simulationLibraryPath,
@@ -23,12 +28,16 @@ import {
 
 const require = createRequire(import.meta.url);
 const { FileGrants } = require('../electron/file-grants.cjs');
-const { registerSpiceModelPicker } = require('../electron/spice-model-picker.cjs');
-const { readSpiceModelFile } = require('../electron/spice-model-picker.cjs');
+const {
+  registerSpiceModelPicker,
+} = require('../plugins/spice-simulation/electron/spice-model-picker.cjs');
+const {
+  readSpiceModelFile,
+} = require('../plugins/spice-simulation/electron/spice-model-picker.cjs');
 const {
   MAX_MODEL_BYTES,
   spiceModelDeclarations,
-} = require('../electron/spice-model-declarations.cjs');
+} = require('../plugins/spice-simulation/host/spice-model-declarations.cjs');
 const externalModels = [{ name: 'vendor', kind: 'subcircuit', pins: ['1', '2'] }];
 const internalModels = [
   { name: 'LM2596_TRANS', kind: 'subcircuit', pins: ['1', '2', '3', '4', '5'] },
@@ -101,7 +110,7 @@ test('EMC native component bindings open their actual project library and preser
   for (const [ref, [library, name, pins]] of Object.entries(assignments)) {
     const part = project.schematic.parts.find((part) => part.ref === ref)!;
     const fields = partFields(part);
-    assert.equal(fields['Sim.Library'], `circuits/${library}.lib`);
+    assert.equal(fields['Sim.Library'], `models/${library}.lib`);
     assert.equal(fields['Sim.Name'], name);
     assert.equal(fields['Sim.Pins'], pins);
     expectedPath = path.resolve(path.dirname(filename), fields['Sim.Library']);
@@ -199,7 +208,7 @@ R1 A B 1k
 });
 
 test('reviewed LM5001 entries hide unused vendor helpers and remain independent of library filenames', async () => {
-  const bytes = await readFile('examples/lm5001-soic8-boost/circuits/LM5001.lib');
+  const bytes = await readFile('examples/lm5001-soic8-boost/models/LM5001.lib');
   assert.deepEqual(
     spiceModelDeclarations(bytes).models.map((model: { name: string }) => model.name),
     ['LM5001_TRANS'],
@@ -294,11 +303,11 @@ async function fixture(t: TestContext) {
   });
   const project = path.join(root, 'project');
   const vendor = path.join(root, 'vendor models');
-  await mkdir(path.join(project, 'circuits'), { recursive: true });
+  await mkdir(path.join(project, 'models'), { recursive: true });
   await mkdir(vendor);
   const projectFile = path.join(project, 'design.kicad_pro');
   const external = path.join(vendor, 'vendor.lib');
-  const internal = path.join(project, 'circuits', 'LM2596-5.lib');
+  const internal = path.join(project, 'models', 'LM2596-5.lib');
   await writeFile(projectFile, '{}');
   await writeFile(external, '.subckt vendor 1 2\n.ends vendor\n');
   await writeFile(internal, '.subckt LM2596_TRANS 1 2 3 4 5\n.ends LM2596_TRANS\n');
@@ -348,44 +357,81 @@ async function fixture(t: TestContext) {
   };
 }
 
+test('unsaved projects can inspect a prepared TI library through their live grant', async () => {
+  const grants = new FileGrants();
+  const id = grants.create();
+  const bytes = Buffer.from('.subckt example A B\n.ends DifferentName\n');
+  const file = `models/ti/${createHash('sha256').update(bytes).digest('hex')}/example.lib`;
+  let inspect!: (event: unknown, fileId: string, library: string) => Promise<unknown>;
+  const reads: string[] = [];
+  registerSpiceModelPicker({
+    ipcMain: {
+      handle(channel: string, handler: typeof inspect) {
+        if (channel === 'openpe:inspect-spice-model') inspect = handler;
+      },
+    },
+    authorize: (event: unknown) => {
+      if (event !== 'trusted') throw new Error('Unauthorized window.');
+    },
+    grants,
+    readPrepared: async (library: string) => {
+      reads.push(library);
+      return library === file ? bytes : null;
+    },
+  });
+  await assert.rejects(inspect('foreign', id, file), /Unauthorized/);
+  await assert.rejects(
+    inspect('trusted', id, '../example.lib'),
+    /Invalid current SPICE model path/,
+  );
+  assert.deepEqual(await inspect('trusted', id, file), {
+    path: file,
+    issues: [],
+    models: [{ name: 'example', kind: 'subcircuit', pins: ['A', 'B'] }],
+  });
+  grants.release(id);
+  await assert.rejects(inspect('trusted', id, file), /no file access grant/);
+  assert.deepEqual(reads, [file]);
+});
+
 test('automatic inspection lists the current project library without a picker or file writes', async (t) => {
   const f = await fixture(t);
   const before = await readFile(f.internal);
-  assert.deepEqual(await f.inspect('circuits/LM2596-5.lib'), {
-    path: 'circuits/LM2596-5.lib',
+  assert.deepEqual(await f.inspect('models/LM2596-5.lib'), {
+    path: 'models/LM2596-5.lib',
     models: internalModels,
     issues: [],
   });
   assert.equal(f.calls.length, 0);
   assert.deepEqual(await readFile(f.internal), before);
   assert.equal(await f.inspect(f.external), null, 'Absolute references require native selection.');
-  assert.equal(await f.inspect('circuits/LM2596-5.lib', f.grants.create()), null);
+  assert.equal(await f.inspect('models/LM2596-5.lib', f.grants.create()), null);
   for (const invalid of [
     '../vendor.lib',
     'circuits/../vendor.lib',
-    'circuits/LM2596-5.txt',
+    'models/LM2596-5.txt',
     '//host/vendor.lib',
     {},
     null,
   ])
     await assert.rejects(f.inspect(invalid));
-  await assert.rejects(f.inspect('circuits/missing.lib'), /not available/);
+  await assert.rejects(f.inspect('models/missing.lib'), /not available/);
   await writeFile(f.internal, Buffer.alloc(MAX_MODEL_BYTES + 1, 32));
-  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /2 MiB/);
+  await assert.rejects(f.inspect('models/LM2596-5.lib'), /2 MiB/);
   await writeFile(f.internal, before);
-  const replaced = f.inspect('circuits/LM2596-5.lib');
+  const replaced = f.inspect('models/LM2596-5.lib');
   f.grants.assign(f.id, path.join(f.project, 'replacement.kicad_pro'));
   await assert.rejects(replaced, /location changed|observation expired/);
   f.grants.assign(f.id, f.projectFile);
-  const untrusted = f.inspect('circuits/LM2596-5.lib');
+  const untrusted = f.inspect('models/LM2596-5.lib');
   f.authorize(false);
   await assert.rejects(untrusted, /Unauthorized/);
   f.authorize(true);
   f.authorize(false);
-  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /Unauthorized/);
+  await assert.rejects(f.inspect('models/LM2596-5.lib'), /Unauthorized/);
   f.authorize(true);
   f.grants.release(f.id);
-  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /grant/);
+  await assert.rejects(f.inspect('models/LM2596-5.lib'), /grant/);
 });
 
 test('automatic EMC library inspection returns all three top-level controller models', async () => {
@@ -406,7 +452,7 @@ test('automatic EMC library inspection returns all three top-level controller mo
   const result = await handlers.get('openpe:inspect-spice-model')!(
     {},
     fileId,
-    'circuits/EMC_flyback_control.lib',
+    'models/EMC_flyback_control.lib',
   );
   assert.deepEqual(
     result.models.map((model: { name: string }) => model.name),
@@ -426,7 +472,7 @@ test('native SPICE picker selects external files and preserves project-relative 
   assert.equal(await readFile(f.projectFile, 'utf8'), '{}');
   f.select(async () => ({ canceled: false, filePaths: [f.internal] }));
   assert.deepEqual(await f.invoke(), {
-    path: 'circuits/LM2596-5.lib',
+    path: 'models/LM2596-5.lib',
     models: internalModels,
     issues: [],
   });
@@ -445,9 +491,9 @@ test('current library paths only locate the native dialog and never authorize fi
   f.select(async () => ({ canceled: true, filePaths: [] }));
   assert.equal(await f.invoke(), null);
   assert.equal(f.calls.at(-1).defaultPath, f.project);
-  assert.equal(await f.invoke(f.id, 'circuits/LM2596-5.lib'), null);
+  assert.equal(await f.invoke(f.id, 'models/LM2596-5.lib'), null);
   assert.equal(f.calls.at(-1).defaultPath, f.internal);
-  assert.equal(await f.invoke(f.id, 'circuits\\LM2596-5.lib'), null);
+  assert.equal(await f.invoke(f.id, 'models\\LM2596-5.lib'), null);
   assert.equal(f.calls.at(-1).defaultPath, f.internal);
   assert.equal(await f.invoke(f.id, f.external), null);
   assert.equal(f.calls.at(-1).defaultPath, f.external);
@@ -469,7 +515,7 @@ test('current library paths only locate the native dialog and never authorize fi
   f.select(async () => ({ canceled: true, filePaths: [] }));
   assert.equal(await f.invoke(unsaved), null);
   assert.equal(f.calls.at(-1).defaultPath, undefined);
-  assert.equal(await f.invoke(unsaved, 'circuits/LM2596-5.lib'), null);
+  assert.equal(await f.invoke(unsaved, 'models/LM2596-5.lib'), null);
   assert.equal(f.calls.at(-1).defaultPath, undefined);
   assert.equal(await f.invoke(unsaved, f.external), null);
   assert.equal(f.calls.at(-1).defaultPath, f.external);
@@ -485,20 +531,20 @@ test('invalid current-library hints fail before opening the native dialog and re
     [],
     42,
     '',
-    'circuits/model.lib\0',
-    'circuits/model\r.lib',
-    'circuits/model\n.lib',
+    'models/model.lib\0',
+    'models/model\r.lib',
+    'models/model\n.lib',
     'model.exe',
     '../model.lib',
     './model.lib',
     'circuits/../model.lib',
-    'circuits\\..\\model.lib',
+    'models\\..\\model.lib',
     'circuits//model.lib',
-    'circuits\\\\model.lib',
+    'models\\\\model.lib',
     'circuits/',
     'C:relative.lib',
     'https://vendor.example/model.lib',
-    'file:///circuits/model.lib',
+    'file:///models/model.lib',
     '//server/share/model.lib',
     '\\\\server\\share\\model.lib',
     'm'.repeat(4097) + '.lib',

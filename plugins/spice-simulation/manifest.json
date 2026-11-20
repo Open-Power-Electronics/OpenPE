@@ -1,0 +1,24 @@
+{
+  "id": "spice-simulation@openpe",
+  "name": "SPICE Simulation",
+  "description": "Run supported circuit transients and inspect voltage and current waveforms.",
+  "detail": "Simulate supported power-electronics circuits locally with the bundled ngspice solver. Configure transient timing, probe net voltages and component currents, and compare actual solver samples with waveform cursors. Supported circuits and verified model limits apply; results are not ERC, DRC or production validation.",
+  "version": "1.0.0",
+  "author": "OpenPE",
+  "category": "Simulation",
+  "capabilities": ["Transient analysis", "Voltage and current probes", "Waveforms", "Local solver"],
+  "apiVersion": 1,
+  "runtime": "builtin",
+  "permissions": [],
+  "contributes": {
+    "capabilities": [
+      "simulation.status",
+      "simulation.configure",
+      "simulation.probes",
+      "simulation.run",
+      "simulation.cancel",
+      "simulation.presentation"
+    ]
+  },
+  "projectDirectory": "spice-simulation"
+}

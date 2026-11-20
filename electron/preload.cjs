@@ -1,7 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const maxRecoveryCharacters = 96 * 1024 * 1024;
 function desktopChrome() {
-  if (process.platform === 'win32') return { titleBarOverlay: true, titleBarInset: false };
+  if (process.platform === 'win32' || process.platform === 'linux')
+    return { titleBarOverlay: true, titleBarInset: false };
   if (process.platform === 'darwin') return { titleBarOverlay: true, titleBarInset: true };
   throw new Error(`Unsupported desktop platform ${process.platform}.`);
 }
@@ -9,7 +10,11 @@ const chrome = desktopChrome();
 contextBridge.exposeInMainWorld('openpe', {
   titleBarOverlay: chrome.titleBarOverlay,
   titleBarInset: chrome.titleBarInset,
+  installPlugin: () => ipcRenderer.invoke('openpe:install-plugin'),
   connection: () => ipcRenderer.invoke('openpe:connection'),
+  setRawKiCadMode: (value) => ipcRenderer.invoke('openpe:set-raw-kicad-mode', value),
+  chooseRawKiCadFiles: () => ipcRenderer.invoke('openpe:choose-raw-kicad-files'),
+  openLibraryHomepage: (site) => ipcRenderer.invoke('openpe:open-library-homepage', site),
   cursorCredentialStatus: () => ipcRenderer.invoke('openpe:cursor-credential-status'),
   cursorCredentialStore: (key) => {
     if (typeof key !== 'string' || key.length > 512)
@@ -26,6 +31,7 @@ contextBridge.exposeInMainWorld('openpe', {
   openRecent: (id) => ipcRenderer.invoke('openpe:open-recent', id),
   listRecent: () => ipcRenderer.invoke('openpe:list-recent'),
   removeRecent: (id) => ipcRenderer.invoke('openpe:remove-recent', id),
+  pinRecent: (id, pinned) => ipcRenderer.invoke('openpe:pin-recent', id, pinned),
   previewRecent: (id) => ipcRenderer.invoke('openpe:preview-recent', id),
   onRecentChanged: (callback) => {
     const listener = () => callback();

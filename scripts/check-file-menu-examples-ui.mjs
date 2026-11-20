@@ -1,3 +1,4 @@
+import { formatTestProjectSource } from './format-test-project.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -5,6 +6,7 @@ import { chromium } from 'playwright';
 import { parseProject } from '../server/project-format.mjs';
 import { readOriginalExamples } from './original-example-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 // Real workspace/Core with in-memory native ports. No Electron, providers,
@@ -25,8 +27,28 @@ const examples = await Promise.all(
     };
   }),
 );
-const rcSource = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
-const preferences = { provider: 'codex', effort: 'low', approvalMode: 'review', models: {} };
+const rcSource = formatTestProjectSource();
+const preferences = {
+  provider: 'codex',
+  effort: 'low',
+  approvalMode: 'review',
+  models: { ...defaultAgentPreferences.models },
+};
+// Host listings: catalog discovery by resource root and the pinned EMC shortcut.
+const home = {
+  examples: [...manifest.recent, ...manifest.examples].map(({ id, title, description, root }) => ({
+    id,
+    title,
+    description,
+    section: root,
+  })),
+  recent: manifest.recent.map(({ id, title, directory, file }) => ({
+    id,
+    title,
+    description: `/fixture/examples/project/${directory}/${file}.kicad_pro`,
+    pinned: true,
+  })),
+};
 await mkdir('test-results', { recursive: true });
 const bundle = await build({
   stdin: {
@@ -88,7 +110,7 @@ async function mount(titleBarOverlay, atLimit = false) {
     ...preferences,
   };
   await page.addInitScript(
-    ({ titleBarOverlay, examples }) => {
+    ({ titleBarOverlay, examples, home }) => {
       window.exampleMenuCalls = { opens: [], saves: [], allocations: 0, releases: [] };
       window.openpe = {
         titleBarOverlay,
@@ -105,6 +127,10 @@ async function mount(titleBarOverlay, atLimit = false) {
           window.exampleMenuCalls.allocations++;
           return crypto.randomUUID();
         },
+        listExamples: async () => ({ entries: home.examples, warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: home.recent, warnings: [] }),
+        onRecentChanged: () => () => {},
+        projectDirectory: async () => ({ entries: [], truncated: false }),
         releaseFile: async (id) => window.exampleMenuCalls.releases.push(id),
         setDirty: async () => {},
         onCloseRequested: () => () => {},
@@ -125,7 +151,7 @@ async function mount(titleBarOverlay, atLimit = false) {
         },
       };
     },
-    { titleBarOverlay, examples },
+    { titleBarOverlay, examples, home },
   );
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
@@ -234,11 +260,19 @@ try {
       'Example',
     ]);
     for (const popup of [fileMenu, recentMenu]) {
-      assert.equal((await popup.boundingBox()).width, 140);
-      const labels = await popup
-        .locator('.select-option strong')
-        .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).whiteSpace));
-      assert.ok(labels.length > 0 && labels.every((whiteSpace) => whiteSpace === 'nowrap'));
+      assert.ok((await popup.boundingBox()).width >= 140);
+      const labels = await popup.locator('.select-option strong').evaluateAll((elements) =>
+        elements.map((element) => ({
+          whiteSpace: getComputedStyle(element).whiteSpace,
+          fits:
+            element.scrollWidth <= element.clientWidth + 1 &&
+            element.scrollHeight <= element.clientHeight + 1,
+        })),
+      );
+      assert.ok(
+        labels.length > 0 && labels.every((label) => label.whiteSpace === 'nowrap' && label.fits),
+        'Menu labels display their complete single-line text.',
+      );
     }
     assert.deepEqual(
       (await recentMenu.getByRole('option').allTextContents()).map((value) => value.trim()),

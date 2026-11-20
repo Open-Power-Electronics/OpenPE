@@ -16,6 +16,7 @@ import { createEmptyPCB } from '../lib/pcb-layout';
 import { filledCopperPolygons, polygonPath, refreshPCBFill } from '../lib/pcb-polygons';
 import { createPCBTrackDrag } from '../lib/pcb-track-drag';
 import { parseProject, projectNativeFiles } from '../lib/project';
+import { pcbFillRuleContext } from '../lib/pcb-clearance-sources';
 
 function fixture() {
   const board = createEmptyPCB();
@@ -516,6 +517,7 @@ test('EMC dynamic fill preview reuses copper and connectivity and retains Core/n
   for (const y of [0.5, -0.5]) {
     const core = new ProjectCore(project);
     const basis = core.getSnapshot().project!.pcb!;
+    const fillRules = pcbFillRuleContext(core.getSnapshot().project!);
     const selected = basis.tracks.find(
       (track) => track.id === '55e76c6c-a882-41a3-85b9-455b1a2d200e',
     )!;
@@ -536,11 +538,11 @@ test('EMC dynamic fill preview reuses copper and connectivity and retains Core/n
     assert.equal(prepared.board.footprints, earlierPrepared.board.footprints);
     assert.deepEqual(prepared.board, invalidatePCBFill(basis, raw.board));
     assert.equal(invalidatePCBFill(basis, prepared.board), prepared.board);
-    const projected = refreshPCBFill(basis, prepared.board);
+    const projected = refreshPCBFill(basis, prepared.board, true, fillRules);
     assert.equal(isOwnedPCB(projected), true);
     assert.notEqual(projected, prepared.board);
     assert.ok(projected.zones.some((zone) => zone.filledPolygons !== undefined));
-    assert.equal(refreshPCBFill(basis, projected), projected);
+    assert.equal(refreshPCBFill(basis, projected, true, fillRules), projected);
     const { analysis, calls } = counted();
     const connectivity = analysis.connectivity(projected);
     assert.deepEqual(connectivity, { edges: [], padCount: 194, warnings: [] });

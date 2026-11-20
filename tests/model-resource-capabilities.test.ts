@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createCapabilityHost } from '../api/capabilities';
 import { ProjectCore } from '../core/project-core';
 import { createPart, uid } from '../lib/circuit';
-import { createExample } from '../lib/examples';
+import { createReferenceExample } from '../lib/reference-examples';
 import { displayPartValue, partFields } from '../lib/library';
 import {
   registerLibraryCapabilities,
@@ -29,7 +29,7 @@ function fixture() {
   const project = createProject();
   const part = createPart(project.schematic, 'R', 0, 0);
   part.fields = {
-    'Sim.Library': 'circuits/resistor.lib',
+    'Sim.Library': 'models/resistor.lib',
     'Sim.Name': 'OLD',
     'Sim.Device': 'R',
     'Sim.Pins': '1=+ 2=-',
@@ -256,7 +256,7 @@ test('SPICE choose updates library fields with shared GUI rules and exposes decl
   const project = fixture(),
     gui = new ProjectCore(project);
   const catalog: SpiceModelCatalog & { bytes: string; logs: string } = {
-    path: 'circuits/selected.lib',
+    path: 'models/selected.lib',
     models: [{ name: 'SELECTED', kind: 'model', device: 'R', pins: [] }],
     issues: [],
     bytes: 'private model body',
@@ -265,7 +265,7 @@ test('SPICE choose updates library fields with shared GUI rules and exposes decl
   const h = harness(project, {
     chooseSpiceModel: async (fileId, library) => {
       assert.equal(fileId, 'fixture-grant');
-      assert.equal(library, 'circuits/resistor.lib');
+      assert.equal(library, 'models/resistor.lib');
       return catalog;
     },
   });
@@ -291,7 +291,7 @@ test('SPICE inspected observations are immutable, part/revision bound and requir
   const project = fixture(),
     gui = new ProjectCore(project);
   const catalog: SpiceModelCatalog = {
-    path: 'circuits/resistor.lib',
+    path: 'models/resistor.lib',
     models: [{ name: 'SUB', kind: 'subcircuit', pins: ['INPUT', 'RETURN'] }],
     issues: [],
   };
@@ -400,8 +400,8 @@ test('the SPICE binding capability selects a passive model and clears it without
 });
 
 test('source waveform capability matches GUI parameter-row conversion in native files and undo', async (t) => {
-  const project = createExample('kicad-buck'),
-    part = project.schematic.parts.find((item) => item.ref === 'V102')!;
+  const project = createReferenceExample('reference-lm2598-to220-7-buck'),
+    part = project.schematic.parts.find((item) => item.ref === 'V1')!;
   const gui = new ProjectCore(project),
     h = harness(project);
   t.after(h.dispose);
@@ -425,15 +425,15 @@ test('source waveform capability matches GUI parameter-row conversion in native 
 test('host resource command results never expose retained native model bodies to Agents', async (t) => {
   const secret = '* PRIVATE_RESOURCE_BODY_7621\n.subckt model 1 2\nR1 1 2 1\n.ends\n';
   for (const command of ['part.spiceModel.bind', 'part.footprint', 'part.sourceType']) {
-    const initial = command === 'part.sourceType' ? createExample('kicad-buck') : fixture();
+    const initial = command === 'part.sourceType' ? createReferenceExample('reference-lm2598-to220-7-buck') : fixture();
     const native = projectNativeFiles(initial);
-    native.files.push({ name: 'circuits/private-resource.lib', source: secret });
+    native.files.push({ name: 'models/private-resource.lib', source: secret });
     const project = projectFromNativeFiles(native);
     const h = harness(project);
     t.after(h.dispose);
     const part =
       command === 'part.sourceType'
-        ? project.schematic.parts.find((item) => item.ref === 'V102')!
+        ? project.schematic.parts.find((item) => item.ref === 'V1')!
         : project.schematic.parts[0];
     const args = {
       schematicId: project.schematic.id,
@@ -447,7 +447,7 @@ test('host resource command results never expose retained native model bodies to
     const result = await h.host.execute(command, args, { actor: 'agent' });
     assert.doesNotMatch(JSON.stringify(result), /PRIVATE_RESOURCE_BODY_7621|nativeFiles/);
     assert.equal(
-      h.core.getNativeFiles().files.find((file) => file.name === 'circuits/private-resource.lib')
+      h.core.getNativeFiles().files.find((file) => file.name === 'models/private-resource.lib')
         ?.source,
       secret,
     );

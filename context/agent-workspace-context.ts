@@ -62,6 +62,8 @@ export function validateAgentWorkspaceContext(value: unknown, circuitId?: string
     ) ||
     !context.ui ||
     Array.isArray(context.ui) ||
+    (context.ui.schematicSection !== undefined &&
+      !['hardware', 'simulation', 'all'].includes(context.ui.schematicSection as string)) ||
     !context.simulation
   )
     fail();

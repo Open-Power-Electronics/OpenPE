@@ -6,10 +6,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { homeExamples, homeExampleNativePath, homeRecent } from '../lib/home-examples';
 import { projectFromNativeFiles, serializeProject } from '../lib/project';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
-import { defaultThermalConfig, prepareThermalModel } from '../lib/thermal';
-import { runSimulation, findSimulationResult } from '../server/spice.mjs';
-import { runThermalSimulation } from '../server/thermal-runtime.mjs';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import {
+  defaultThermalConfig,
+  prepareThermalModel,
+} from '../plugins/layout-thermal/domain/thermal';
+import { runSimulation, findSimulationResult } from '../plugins/spice-simulation/host/spice.mjs';
+import { runThermalSimulation } from '../plugins/layout-thermal/host/thermal-runtime.mjs';
 import { createProjectSpiceStore } from '../server/project-spice-files.mjs';
 import { createProjectThermalStore } from '../server/project-thermal-files.mjs';
 import { readProjectModelFile } from '../server/project-model-files.mjs';
@@ -109,7 +112,7 @@ for (const entry of entries) {
     report.spiceMs = performance.now() - spiceStarted;
     assert.ok(Math.abs(spice.time.at(-1)! - config.stop) < 1e-12);
     server = await launchServer(serverOptions);
-    const imported = await post('thermal/spice-sources', {});
+    const imported = await post('layout-thermal/spice-sources', {});
     const thermalConfig = {
       ...defaultThermalConfig(project.pcb!),
       heatSources: imported.heatSources,
@@ -120,7 +123,7 @@ for (const entry of entries) {
     let thermal;
     const thermalStarted = performance.now();
     if (savedThermal && JSON.stringify(savedThermal.model) === JSON.stringify(prepared)) {
-      const restored = await post('thermal/result', { config: thermalConfig });
+      const restored = await post('layout-thermal/result', { config: thermalConfig });
       thermal = restored.result;
     }
     if (!thermal && loadOnly) throw new Error('A matching saved thermal result is required.');
@@ -148,7 +151,7 @@ for (const entry of entries) {
     const loadedSpice = await post('simulation/result', {});
     assert.deepEqual(loadedSpice.config, config);
     assert.deepEqual(loadedSpice.result, spice);
-    const loadedThermal = await post('thermal/result', {});
+    const loadedThermal = await post('layout-thermal/result', {});
     assert.deepEqual(loadedThermal.config, thermalConfig);
     assert.deepEqual(loadedThermal.result, thermal);
     assert.deepEqual(await readNativeProject(filename), native);
@@ -156,12 +159,12 @@ for (const entry of entries) {
     report.thermalLoadedWithoutSolving = true;
     report.spiceManifest = path.join(
       path.dirname(filename),
-      'spice',
+      'spice-simulation',
       entry.file + '.manifest.json',
     );
     report.thermalManifest = path.join(
       path.dirname(filename),
-      'thermal',
+      'layout-thermal',
       entry.file + '.manifest.json',
     );
     report.spiceConfig = config;

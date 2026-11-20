@@ -1,3 +1,4 @@
+import { PadDrillGraphic } from './PadDrillGraphic';
 import { memo } from 'react';
 import {
   resolvePCBGraphic,
@@ -7,11 +8,12 @@ import {
   type BoardLayer,
   type BoardLine,
 } from '@/lib/pcb';
-import { padCopperLayers } from '@/lib/pcb-connectivity';
+import { padHasElectricalPin } from '@/lib/pcb-pad-role';
 import { padPosition, padRotation } from '@/lib/pcb-layout';
 import {
   pcbLayerColor,
   boardOutlineMinWidth,
+  pcbPadDisplayLayers,
   pcbPadLabels,
   pcbPadPaintLayer,
   pcbPadTypeLabel,
@@ -45,16 +47,22 @@ const LayoutFootprintText = memo(function LayoutFootprintText({
   ownerId,
   rotation,
   selection,
+  locked,
 }: {
   graphic: BoardLine;
   ownerId: string;
   rotation: number;
   selection: LayoutSelection;
+  locked?: boolean;
 }) {
   const selected = useLayoutSelection(selection, graphic.id, ownerId);
   return (
     <g data-selection-id={graphic.id} data-footprint-text={graphic.id}>
-      <PCBSelectionPaint color={layerColor(graphic.layer)} selected={selected}>
+      <PCBSelectionPaint
+        color={layerColor(graphic.layer)}
+        selected={selected}
+        locked={locked || graphic.locked}
+      >
         {(color) => <PCBGraphic graphic={graphic} color={color} footprintRotation={rotation} />}
       </PCBSelectionPaint>
     </g>
@@ -101,7 +109,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
   const graphics = f.graphics.filter((g) => visibleLayer(g.layer) && g.kind !== 'text');
   const zones = layers.zoneOutlines ? f.zones?.filter((z) => visibleLayer(z.layer)) : [];
   const pads = f.pads.filter((pad) => {
-    const padLayers = pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(pcb, f, pad);
+    const padLayers = pcbPadDisplayLayers(pcb, f, pad);
     if (onlyLayer && padLayerOrder)
       return (
         pcbPadPaintLayer(padLayers, layers, padLayerOrder) === onlyLayer && visibleLayer(onlyLayer)
@@ -121,7 +129,12 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
     >
       <g transform={`translate(${f.x} ${f.y}) rotate(${-f.rotation})`}>
         {graphics.map((g) => (
-          <PCBSelectionPaint key={g.id} color={layerColor(g.layer)} selected={selected}>
+          <PCBSelectionPaint
+            key={g.id}
+            color={layerColor(g.layer)}
+            selected={selected}
+            locked={f.locked || g.locked}
+          >
             {(color) => (
               <g data-footprint-graphic={g.id}>
                 <PCBGraphic
@@ -140,7 +153,12 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
           </PCBSelectionPaint>
         ))}
         {zones?.map((z) => (
-          <PCBSelectionPaint key={z.id} color={layerColor(z.layer)} selected={selected}>
+          <PCBSelectionPaint
+            key={z.id}
+            color={layerColor(z.layer)}
+            selected={selected}
+            locked={f.locked || z.locked}
+          >
             {(color) => (
               <path
                 data-pcb-zone-id={z.id}
@@ -157,11 +175,12 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
       </g>
       {pads.map((pad) => {
         const p = padPosition(f, pad);
-        const padLayers = padCopperLayers(pcb, f, pad);
+        const padLayers = pcbPadDisplayLayers(pcb, f, pad);
         const displayedLayer =
           padLayers.find((name) => name === layer && visibleLayer(name)) ??
           padLayers.find(visibleLayer);
-        const padSelected = selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
+        const padSelected =
+          selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
         const fill =
           pad.type === 'np_thru_hole'
             ? 'var(--canvas)'
@@ -174,22 +193,29 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
           pad.netId ? netNames.get(pad.netId) : undefined,
           layers,
         );
+        const pinLabel = padHasElectricalPin(pad)
+          ? ` · ${netNames.get(pad.netId ?? '') ?? 'Unassigned'}`
+          : '';
         return (
           <g
             key={pad.id}
             data-pad-id={pad.id}
-            aria-label={`${reference ?? f.reference ?? f.libraryId} · ${pcbPadTypeLabel(pad.type)}${pad.number ? ` ${pad.number}` : ''} · ${pad.type === 'np_thru_hole' ? 'Mechanical' : pad.netId ? (netNames.get(pad.netId) ?? 'Unassigned') : 'Unassigned'}`}
+            aria-label={`${reference ?? f.reference ?? f.libraryId} · ${pcbPadTypeLabel(pad)}${pad.number ? ` ${pad.number}` : ''}${pinLabel}`}
             data-pad-type={pad.type}
             opacity={netOpacity(pad.netId, padSelected)}
             data-export-opacity={netOpacity(pad.netId)}
             data-net-id={pad.netId ?? undefined}
             transform={`translate(${p.x} ${p.y}) rotate(${-padRotation(f, pad)})`}
           >
-            <PCBSelectionPaint color={fill} selected={padSelected && pad.type !== 'np_thru_hole'}>
+            <PCBSelectionPaint
+              color={fill}
+              selected={padSelected && pad.type !== 'np_thru_hole'}
+              locked={pad.type !== 'np_thru_hole' && (f.locked || pad.locked)}
+            >
               {(color) =>
                 pad.shape === 'circle' ? (
                   <circle r={pad.size.x / 2} fill={color} />
-                ) : pad.shape === 'roundrect' ? (
+                ) : pad.shape === 'roundrect' || pad.outline ? (
                   <path d={pcbPadPath(pad)} fill={color} />
                 ) : (
                   <rect
@@ -207,12 +233,11 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
               <PCBSelectionPaint
                 color="var(--pcb-outline)"
                 selected={padSelected && pad.type === 'np_thru_hole'}
+                locked={pad.type === 'np_thru_hole' && (f.locked || pad.locked)}
               >
                 {(color) => (
-                  <circle
-                    cx={pad.drillOffset?.x ?? 0}
-                    cy={pad.drillOffset?.y ?? 0}
-                    r={pad.drill! / 2}
+                  <PadDrillGraphic
+                    pad={pad}
                     fill="var(--pcb-hole)"
                     stroke={pad.type === 'np_thru_hole' ? color : undefined}
                     strokeWidth={0.08}
@@ -269,11 +294,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   const selected = useLayoutSelection(selection, f.id);
   const pcb = { layers: copperLayers };
   const pads = f.pads.filter(
-    (pad) =>
-      pad.drill &&
-      (pad.type === 'np_thru_hole'
-        ? layers['Edge.Cuts']
-        : padCopperLayers(pcb, f, pad).some((layer) => layers[layer as BoardLayer])),
+    (pad) => pad.drill && pcbPadDisplayLayers(pcb, f, pad).some((layer) => layers[layer]),
   );
   if (!layers.footprints || !pads.length) return null;
   const netOpacity = (netId: string | null, picked = false) =>
@@ -282,7 +303,8 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
     <g data-footprint-drills={f.id} pointerEvents="none" opacity={placement ? 0.65 : undefined}>
       {pads.map((pad) => {
         const at = padPosition(f, pad);
-        const padSelected = selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
+        const padSelected =
+          selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
         return (
           <g
             key={pad.id}
@@ -293,13 +315,13 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
             <PCBSelectionPaint
               color="var(--pcb-outline)"
               selected={padSelected && pad.type === 'np_thru_hole'}
+              locked={pad.type === 'np_thru_hole' && (f.locked || pad.locked)}
             >
               {(color, selection) => (
-                <circle
+                <PadDrillGraphic
+                  pad={pad}
                   data-pad-drill={selection ? undefined : pad.id}
-                  cx={pad.drillOffset?.x ?? 0}
-                  cy={pad.drillOffset?.y ?? 0}
-                  r={pad.drill! / 2}
+
                   fill="var(--pcb-hole)"
                   stroke={pad.type === 'np_thru_hole' ? color : undefined}
                   strokeWidth={0.08}
@@ -347,6 +369,7 @@ export const LayoutFootprintCaptions = memo(function LayoutFootprintCaptions({
           graphic={resolvePCBGraphic(g, reference ?? f.reference ?? '', value ?? f.value ?? '')}
           ownerId={f.id}
           rotation={f.rotation}
+          locked={f.locked}
           selection={selection}
         />
       ))}
@@ -354,6 +377,7 @@ export const LayoutFootprintCaptions = memo(function LayoutFootprintCaptions({
         <PCBSelectionPaint
           color={layerColor(f.side === 'front' ? 'F.SilkS' : 'B.SilkS')}
           selected={selected}
+          locked={f.locked}
         >
           {(color) => (
             <text

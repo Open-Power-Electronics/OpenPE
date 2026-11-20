@@ -86,7 +86,7 @@ export function NumberField({
     return accepted !== false;
   }
   return (
-    <label className="layout-field">
+    <label className="layout-field" data-pending-edit={draft !== format(value) || invalid}>
       <span>{quantityLabel(label)}</span>
       <QuantityInput
         decimalPlaces={decimalPlaces}
@@ -113,7 +113,7 @@ export function NumberField({
         }}
         onBlur={commit}
         onKeyDown={(e) => {
-          if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
+          if (isCommandModifier(e) && e.key.toLowerCase() === 's') {
             if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || !commit()) {
               e.preventDefault();
               e.stopPropagation();
@@ -205,7 +205,7 @@ export function TextField({
     },
     onBlur: commit,
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if ((isCommandModifier(event)) && event.key.toLowerCase() === 's') {
+      if (isCommandModifier(event) && event.key.toLowerCase() === 's') {
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || !commit()) {
           event.preventDefault();
           event.stopPropagation();
@@ -232,7 +232,7 @@ export function TextField({
     },
   };
   return (
-    <label className="layout-field">
+    <label className="layout-field" data-pending-edit={draft !== value || invalid}>
       <span>{label}</span>
       {multiline ? (
         <textarea {...props} rows={2} />

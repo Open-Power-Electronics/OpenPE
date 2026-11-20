@@ -105,14 +105,14 @@ onAnnotationsChange={()=>{}}/>);`,
         plugin.onLoad({ filter: /[\\/]pcb-routing\.ts$/ }, async ({ path }) => {
           let source = await readFile(path, 'utf8');
           const signature = /  function route\([\s\S]*?\): RouteResult \{/;
-          const tail = /\n  }\r?\n  return \{ route, validate, validateRegion \};/;
+          const tail = /\n  }\r?\n  \/\*\* Keep the requested spine/;
           assert.match(source, signature);
           assert.match(source, tail);
           source = source
             .replace(signature, '$&\n    const previewStarted = performance.now();try {')
             .replace(
               tail,
-              '\n    } finally { (window.routeTimings ??= []).push(performance.now() - previewStarted); }\n  }\n  return { route, validate, validateRegion };',
+              '\n    } finally { (window.routeTimings ??= []).push(performance.now() - previewStarted); }\n  }\n  /** Keep the requested spine',
             );
           return { contents: source, loader: 'ts' };
         });

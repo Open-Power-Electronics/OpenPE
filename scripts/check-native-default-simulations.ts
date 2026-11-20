@@ -6,15 +6,15 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { homeExamples, homeExampleNativePath, homeRecent } from '../lib/home-examples';
 import { projectFromNativeFiles } from '../lib/project';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import {
   defaultThermalConfig,
   deriveThermalSpiceSources,
   prepareThermalModel,
   validateThermalResult,
-} from '../lib/thermal';
-import { runSimulation } from '../server/spice.mjs';
-import { runThermalSimulation } from '../server/thermal-runtime.mjs';
+} from '../plugins/layout-thermal/domain/thermal';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
+import { runThermalSimulation } from '../plugins/layout-thermal/host/thermal-runtime.mjs';
 import { projectSimulationModels } from '../server/project-models.mjs';
 import { readProjectModelFile } from '../server/project-model-files.mjs';
 import { verifyHomeOutput } from './home-simulation-verification';

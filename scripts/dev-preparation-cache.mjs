@@ -29,12 +29,12 @@ const defaultPaths = [
   'lib',
   'scripts',
   'server',
+  'plugins',
   'schemas',
   ...nativeExampleDirectories,
   'resources/example-catalog',
   'resources/third-party-source/newstroke-10.0.0',
   'tests/fixtures/reference',
-  'resources/example-models-lock.json',
   'resources/emc-flyback-models-lock.json',
   'resources/reference-models-lock.json',
   'public/licenses/ti-models.txt',
@@ -43,16 +43,24 @@ const defaultPaths = [
   'tsconfig.json',
   'node_modules/.package-lock.json',
 ];
+const pinnedModelDirectories = homeManifest.recent.map(
+  (entry) => `${nativeExampleDirectory(entry)}/models/`,
+);
 const defaultOutputs = [
   'resources/example-catalog/simulation',
   ...nativeExampleDirectories.map((directory) => `${directory}/models`),
-  ...homeManifest.examples.map((entry) => `${nativeExampleDirectory(entry)}/circuits`),
   'schemas/internal-project-snapshot.schema.json',
   'lib/manufacturing-font.json',
   'lib/project-validator.mjs',
   'lib/project-document-validator.mjs',
   'server/example-models-lock.mjs',
-  'server/spice-model-entrypoints.cjs',
+  'server/plugin-project-format.cjs',
+  'server/capability-schema-format.mjs',
+  ...['spice-simulation/host/spice', 'layout-thermal/host/thermal'].flatMap((name) => [
+    `plugins/${name}-format.mjs`,
+    `plugins/${name}-format.d.mts`,
+  ]),
+  'plugins/spice-simulation/host/spice-model-entrypoints.cjs',
   ...[
     'simulation-model',
     'appearance',
@@ -63,24 +71,20 @@ const defaultOutputs = [
     'annotation',
     'agent-context',
   ].map((name) => `server/${name}-format.mjs`),
-  ...[
-    'datasheet',
-    'project',
-    'manufacturing',
-    'spice',
-    'thermal',
-    'model-cad',
-    'workspace',
-  ].flatMap((name) => [`server/${name}-format.mjs`, `server/${name}-format.d.mts`]),
+  ...['datasheet', 'project', 'manufacturing', 'model-cad', 'workspace'].flatMap((name) => [
+    `server/${name}-format.mjs`,
+    `server/${name}-format.d.mts`,
+  ]),
 ];
 // Generated solver records belong to the saved project, not Home preparation.
 const resultDirectories = nativeExampleDirectories.flatMap((directory) => [
-  `${directory}/spice`,
-  `${directory}/thermal`,
+  `${directory}/spice-simulation`,
+  `${directory}/layout-thermal`,
 ]);
 const workspace = fileURLToPath(new URL('../', import.meta.url));
 const missing = (error) => error.code === 'ENOENT';
 const normalized = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+const inputChunkSize = 256 * 1024;
 
 function contained(root, relative) {
   const absolute = path.resolve(root, relative);
@@ -130,12 +134,22 @@ async function inputHash(root, relative, expected) {
     if (!sameInput(await handle.stat(), expected)) throw changed();
     const hash = createHash('sha256');
     let size = 0;
-    for await (const chunk of handle.createReadStream({
-      highWaterMark: 256 * 1024,
-      autoClose: false,
-    })) {
-      hash.update(chunk);
-      size += chunk.length;
+    if (expected.size <= inputChunkSize) {
+      const bytes = Buffer.allocUnsafe(expected.size);
+      while (size < bytes.length) {
+        const { bytesRead } = await handle.read(bytes, size, bytes.length - size, size);
+        if (!bytesRead) break;
+        size += bytesRead;
+      }
+      hash.update(bytes.subarray(0, size));
+    } else {
+      for await (const chunk of handle.createReadStream({
+        highWaterMark: inputChunkSize,
+        autoClose: false,
+      })) {
+        hash.update(chunk);
+        size += chunk.length;
+      }
     }
     const after = await lstat(target);
     if (
@@ -151,51 +165,16 @@ async function inputHash(root, relative, expected) {
   }
 }
 
-async function snapshot(root, paths, outputs) {
-  const entries = [];
-  const files = [];
-  async function visit(relative, checkedParent = false) {
-    const local = normalized(relative.replaceAll('\\', '/'));
-    if (
-      resultDirectories.some(
-        (directory) =>
-          local === normalized(directory) || local.startsWith(normalized(directory) + '/'),
-      )
-    )
-      return;
-    const info = checkedParent
-      ? await lstat(contained(root, relative))
-      : await inspect(root, relative);
-    if (!info) {
-      entries.push([relative, 'missing']);
-      return;
-    }
-    if (info.isSymbolicLink()) throw new Error('Development preparation inputs cannot be links.');
-    if (info.isDirectory()) {
-      entries.push([relative, 'directory']);
-      const children = await readdir(contained(root, relative));
-      for (const child of children.sort()) {
-        if (child === '.git' || child.endsWith('.tmp')) continue;
-        await visit(`${relative}/${child}`, true);
-      }
-    } else if (info.isFile()) {
-      const entry = [relative, null];
-      entries.push(entry);
-      files.push({ entry, info });
-    } else throw new Error('Development preparation inputs must be regular files.');
-  }
-  for (const relative of [...paths].sort()) await visit(relative);
+async function scanInputs(items, cancelled, visit) {
   let next = 0;
   let failed = false;
   let failure;
-  // Retain traversal order in the fingerprint while bounding open handles and
-  // streaming buffers. A failed read drains active jobs before permitting retry.
+  // Drain the active jobs before returning an error, including open file handles.
   await Promise.all(
-    Array.from({ length: Math.min(4, files.length) }, async () => {
-      while (!failed && next < files.length) {
-        const { entry, info } = files[next++];
+    Array.from({ length: Math.min(4, items.length) }, async () => {
+      while (!failed && !cancelled() && next < items.length) {
         try {
-          entry[1] = await inputHash(root, entry[0], info);
+          await visit(items[next++]);
         } catch (error) {
           if (!failed) {
             failed = true;
@@ -206,6 +185,45 @@ async function snapshot(root, paths, outputs) {
     }),
   );
   if (failed) throw failure;
+}
+
+async function snapshot(root, paths, outputs, cancelled) {
+  const entries = [];
+  let level = paths.map((relative) => ({ relative, checkedParent: false }));
+  while (level.length) {
+    const children = [];
+    await scanInputs(level, cancelled, async ({ relative, checkedParent }) => {
+      const local = normalized(relative.replaceAll('\\', '/'));
+      if (
+        resultDirectories.some(
+          (directory) =>
+            local === normalized(directory) || local.startsWith(normalized(directory) + '/'),
+        )
+      )
+        return;
+      const info = checkedParent
+        ? await lstat(contained(root, relative))
+        : await inspect(root, relative);
+      if (!info) {
+        entries.push([relative, 'missing']);
+        return;
+      }
+      if (info.isSymbolicLink()) throw new Error('Development preparation inputs cannot be links.');
+      if (info.isDirectory()) {
+        entries.push([relative, 'directory']);
+        for (const child of await readdir(contained(root, relative))) {
+          if (child === '.git' || child.endsWith('.tmp')) continue;
+          children.push({ relative: `${relative}/${child}`, checkedParent: true });
+        }
+      } else if (info.isFile()) {
+        entries.push([relative, await inputHash(root, relative, info)]);
+      } else throw new Error('Development preparation inputs must be regular files.');
+    });
+    if (cancelled()) return null;
+    level = children;
+  }
+  // File-system completion order must not affect the fingerprint.
+  entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const identity = JSON.stringify([root, process.version, process.platform, process.arch]);
   const hash = (items) =>
     createHash('sha256').update(identity).update(JSON.stringify(items)).digest('hex');
@@ -213,7 +231,10 @@ async function snapshot(root, paths, outputs) {
     all: hash(entries),
     inputs: hash(
       entries.filter(
-        ([file]) => !outputs.some((output) => file === output || file.startsWith(`${output}/`)),
+        ([file]) =>
+          (file.endsWith('.lib') &&
+            pinnedModelDirectories.some((directory) => file.startsWith(directory))) ||
+          !outputs.some((output) => file === output || file.startsWith(`${output}/`)),
       ),
     ),
   };
@@ -236,7 +257,8 @@ export async function withDevPreparationCache({
     normalized(await realpath(root)) !== normalized(root)
   )
     throw new Error('Development preparation requires a regular workspace directory.');
-  const before = await snapshot(root, paths, outputs);
+  const before = await snapshot(root, paths, outputs, cancelled);
+  if (!before) return false;
   let saved;
   try {
     const info = await inspect(root, cacheFile);
@@ -253,10 +275,10 @@ export async function withDevPreparationCache({
   if (cancelled()) return false;
   await prepare();
   if (cancelled()) return false;
-  const after = await snapshot(root, paths, outputs);
+  const after = await snapshot(root, paths, outputs, cancelled);
   // A developer may edit a source while preparation runs. Such a run cannot
   // certify that its generated files reflect those new inputs.
-  if (cancelled() || before.inputs !== after.inputs) return false;
+  if (!after || cancelled() || before.inputs !== after.inputs) return false;
   let temporary;
   try {
     const info = await inspect(root, cacheFile, true);

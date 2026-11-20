@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize, Minus, Plus } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { ComparisonViewActions, useComparisonView } from './ComparisonView';
 import { parseProject, type Project } from '@/lib/project';
 import { defaultPCBDisplay, pcbDisplayLayers, pcbLayerPaintOrder } from '@/lib/pcb-display';
 import {
@@ -27,8 +27,7 @@ import {
 import { createLayoutSelection } from './LayoutSelection';
 import useCanvasBrightness from './useCanvasBrightness';
 
-type View = { x: number; y: number; width: number; height: number };
-const emptyView: View = { x: -5, y: -5, width: 90, height: 70 };
+const emptyView = { x: -5, y: -5, width: 90, height: 70 };
 
 // These are the editor's artwork renderers, without edit tools or connectivity
 // analysis. Saved copper is observed as-is; viewing never fills a zone.
@@ -204,85 +203,18 @@ export default function LayoutComparison({
   const after = useMemo(() => parseProject(sources.afterSource), [sources.afterSource]);
   const surface = useRef<HTMLElement>(null);
   const dark = useCanvasBrightness(surface);
-  const leftRef = useRef<SVGGElement>(null),
-    rightRef = useRef<SVGGElement>(null);
-  const [view, setView] = useState(emptyView);
   const [beforeNotice, setBeforeNotice] = useState('');
   const [afterNotice, setAfterNotice] = useState('');
-  const initialView = useRef(view);
-  const fitted = useRef<{ before: Project; after: Project } | null>(null);
-  const drag = useRef<{
-    id: number;
-    x: number;
-    y: number;
-    scale: number;
-    view: View;
-    target: SVGSVGElement;
-  } | null>(null);
-  const cancelDrag = useCallback(() => {
-    const current = drag.current;
-    drag.current = null;
-    if (current?.target.hasPointerCapture(current.id))
-      current.target.releasePointerCapture(current.id);
-  }, []);
-  useEffect(() => {
-    cancelDrag();
-    if (!active || (fitted.current?.before === before && fitted.current.after === after)) return;
-    const boxes = [leftRef.current, rightRef.current]
-      .filter((group) => group?.childElementCount)
-      .map((group) => group!.getBBox());
-    let next = emptyView;
-    if (boxes.length) {
-      const x = Math.min(...boxes.map((box) => box.x)) - 5;
-      const y = Math.min(...boxes.map((box) => box.y)) - 5;
-      next = {
-        x,
-        y,
-        width: Math.max(20, Math.max(...boxes.map((box) => box.x + box.width)) - x + 5),
-        height: Math.max(20, Math.max(...boxes.map((box) => box.y + box.height)) - y + 5),
-      };
-    }
-    initialView.current = next;
-    fitted.current = { before, after };
-    setView(next);
-    return cancelDrag;
-  }, [active, before, after, cancelDrag]);
-  const zoom = useCallback(
-    (factor: number) => {
-      cancelDrag();
-      setView((current) => {
-        const ratio = (current.width / initialView.current.width) * factor;
-        if (ratio < 0.02 || ratio > 20) return current;
-        return {
-          x: current.x + (current.width * (1 - factor)) / 2,
-          y: current.y + (current.height * (1 - factor)) / 2,
-          width: current.width * factor,
-          height: current.height * factor,
-        };
-      });
-    },
-    [cancelDrag],
-  );
-  useEffect(() => {
-    if (!active) return;
-    const surfaces = [leftRef.current, rightRef.current]
-      .map((group) => group?.ownerSVGElement)
-      .filter((svg): svg is SVGSVGElement => Boolean(svg));
-    const wheel = (event: WheelEvent) => {
-      event.preventDefault();
-      if (event.deltaY) zoom(event.deltaY < 0 ? 0.8 : 1.25);
-    };
-    const observer = new ResizeObserver(cancelDrag);
-    for (const svg of surfaces) {
-      svg.addEventListener('wheel', wheel, { passive: false });
-      observer.observe(svg);
-    }
-    return () => {
-      observer.disconnect();
-      for (const svg of surfaces) svg.removeEventListener('wheel', wheel);
-      cancelDrag();
-    };
-  }, [active, before, after, zoom, cancelDrag]);
+  const { leftRef, rightRef, svgProps, zoom, fit } = useComparisonView({
+    active,
+    before,
+    after,
+    initialView: emptyView,
+    emptyView,
+    padding: 5,
+    focusOnPointerDown: true,
+    stopArrowPropagation: true,
+  });
   return (
     <section
       ref={surface}
@@ -292,35 +224,7 @@ export default function LayoutComparison({
     >
       <div className="schematic-compare-toolbar">
         <span className="history-preview-label">PCB layout · Read-only</span>
-        <div className="compare-view-actions">
-          <button
-            className="tool-button"
-            aria-label="Zoom out comparison"
-            title="Zoom out"
-            onClick={() => zoom(1.25)}
-          >
-            <Minus size={17} />
-          </button>
-          <button
-            className="tool-button"
-            aria-label="Zoom in comparison"
-            title="Zoom in"
-            onClick={() => zoom(0.8)}
-          >
-            <Plus size={17} />
-          </button>
-          <button
-            className="tool-button"
-            aria-label="Fit comparison"
-            title="Fit view"
-            onClick={() => {
-              cancelDrag();
-              setView(initialView.current);
-            }}
-          >
-            <Maximize size={17} />
-          </button>
-        </div>
+        <ComparisonViewActions zoom={zoom} fit={fit} />
       </div>
       <div className="schematic-compare-panes">
         {(
@@ -354,60 +258,7 @@ export default function LayoutComparison({
               </p>
             )}
             {project.pcb ? (
-              <svg
-                role="img"
-                tabIndex={0}
-                aria-label={`${side}: ${label}`}
-                viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-                onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key))
-                    return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  cancelDrag();
-                  setView((current) => ({
-                    ...current,
-                    x:
-                      current.x +
-                      ((event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0) *
-                        current.width) /
-                        10,
-                    y:
-                      current.y +
-                      ((event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0) *
-                        current.height) /
-                        10,
-                  }));
-                }}
-                onPointerDown={(event) => {
-                  if (event.button !== 0) return;
-                  const matrix = event.currentTarget.getScreenCTM();
-                  if (!matrix) return;
-                  event.currentTarget.focus({ preventScroll: true });
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  drag.current = {
-                    id: event.pointerId,
-                    x: event.clientX,
-                    y: event.clientY,
-                    view,
-                    scale: matrix.a,
-                    target: event.currentTarget,
-                  };
-                }}
-                onPointerMove={(event) => {
-                  const current = drag.current;
-                  if (current && current.id === event.pointerId)
-                    setView({
-                      ...current.view,
-                      x: current.view.x - (event.clientX - current.x) / current.scale,
-                      y: current.view.y - (event.clientY - current.y) / current.scale,
-                    });
-                }}
-                onPointerUp={cancelDrag}
-                onPointerCancel={cancelDrag}
-                onLostPointerCapture={cancelDrag}
-              >
+              <svg role="img" tabIndex={0} aria-label={`${side}: ${label}`} {...svgProps}>
                 <g ref={ref}>
                   <Drawing project={project} onNotice={onNotice} />
                 </g>

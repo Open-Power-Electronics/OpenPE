@@ -1,0 +1,23 @@
+{
+  "id": "layout-parasitics@openpe",
+  "name": "Layout Parasitics",
+  "description": "Extract PCB parasitics and add editable schematic components.",
+  "detail": "Choose two pads or vias on the same net. Estimate DC resistance, shortest route length and partial inductance with explicit copper and via assumptions. Add a labelled R/L block to the selected schematic while retaining its existing circuit and PCB.",
+  "version": "1.1.0",
+  "author": "OpenPE",
+  "category": "PCB design",
+  "capabilities": [
+    "Two-terminal DC resistance",
+    "Parallel copper paths",
+    "Shortest path length",
+    "Partial inductance",
+    "Labelled schematic studies"
+  ],
+  "apiVersion": 1,
+  "runtime": "builtin",
+  "permissions": [],
+  "contributes": {
+    "capabilities": ["parasitics.measure", "parasitics.createStudy"]
+  },
+  "projectDirectory": "layout-parasitics"
+}

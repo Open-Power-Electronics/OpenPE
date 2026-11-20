@@ -359,10 +359,25 @@ test('explicit Claude effort overrides only the child environment without claimi
   await assertStopped(cwd);
 });
 
-test('Codex defaults to medium and leaves an explicit model with no effort unmodified', async () => {
-  for (const [mode, model, expected] of [
-    ['default-effort', undefined, 'medium'],
-    ['codex-model-default', 'fixture-model', undefined],
+test('Claude executes the advertised Default alias with native reasoning settings', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-default-model-'));
+  const events: any[] = [];
+  const result = await runAgent(
+    'claude',
+    { ...request, model: 'default' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: resolver('claude-native-default') },
+  );
+  assert.equal(result.outcome, 'completed', JSON.stringify(events));
+  await assertStopped(cwd);
+});
+
+test('Codex leaves omitted effort to the native provider for both model choices', async () => {
+  for (const [mode, model] of [
+    ['default-effort', undefined],
+    ['codex-model-default', 'fixture-model'],
   ] as const) {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-default-effort-'));
     const events: any[] = [];
@@ -375,7 +390,7 @@ test('Codex defaults to medium and leaves an explicit model with no effort unmod
       { resolve: resolver(mode) },
     );
     assert.equal(result.outcome, 'completed', JSON.stringify(events));
-    assert.equal(events.find((event) => event.type === 'agent-info')?.reasoningEffort, expected);
+    assert.equal(events.find((event) => event.type === 'agent-info')?.reasoningEffort, 'high');
     await assertStopped(cwd);
   }
 });
@@ -684,7 +699,7 @@ test('session streams run independently, reject duplicates and all stop at shutd
   assert.deepEqual([...stopped].sort(), ['four', 'one', 'three', 'two']);
 });
 
-test('model discovery paginates without creating a thread, filters capabilities and cleans up', async () => {
+test('Codex discovery keeps hidden and new models across pages and describes input support', async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-models-'));
   const result = await listAgentModels('codex', cwd, new AbortController().signal, {
     resolve: resolver('catalog'),
@@ -696,7 +711,9 @@ test('model discovery paginates without creating a thread, filters capabilities 
       description: 'fixture-model',
       efforts: ['low', 'none', 'minimal', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     },
-    { id: 'fixture-second', label: 'Second Model', description: 'fixture-second', efforts: [] },
+    { id: 'gpt-6.2-astra', label: 'GPT-6.2 Astra', description: 'gpt-6.2-astra' },
+    { id: 'image-input', label: 'image-input', description: 'image-input', textInput: false },
+    { id: 'gpt-6.2-sol', label: 'GPT-6.2 Sol', description: 'gpt-6.2-sol', efforts: [] },
   ]);
   assert.equal(
     result.defaultModel,
@@ -714,6 +731,7 @@ test('Claude discovers per-model effort capabilities without prompting or exposi
   assert.deepEqual(result, {
     defaultModel: null,
     models: [
+      { id: 'default', label: 'Default', description: 'Claude Code alias · resolved by your CLI' },
       {
         id: 'opus',
         label: 'Opus',
@@ -769,14 +787,18 @@ test('Claude model discovery rejects interactive requests, failures and timeouts
   }
 });
 
-test('model discovery preserves the catalog without guessing a configured model', async () => {
-  for (const mode of ['catalog-config-error', 'catalog-no-default']) {
+test('Codex discovery uses the native recommendation when config has no model', async () => {
+  for (const [mode, expected] of [
+    ['catalog-config-error', null],
+    ['catalog-no-default', null],
+    ['catalog-recommended', 'fixture-model'],
+  ] as const) {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-model-config-'));
     const result = await listAgentModels('codex', cwd, new AbortController().signal, {
       resolve: resolver(mode),
     });
-    assert.equal(result.models.length, 2);
-    assert.equal(result.defaultModel, null);
+    assert.equal(result.models.length, 4);
+    assert.equal(result.defaultModel, expected);
     await assertStopped(cwd);
   }
 });
@@ -786,6 +808,7 @@ test('model discovery errors, approval requests, timeout and cancellation never 
     child: ChildProcess;
     command: unknown;
     args: unknown;
+    windowsHide: boolean | undefined;
     events: { spawned: boolean; exited: boolean; closed: boolean };
     spawned: Promise<void>;
     exited: Promise<void>;
@@ -796,7 +819,8 @@ test('model discovery errors, approval requests, timeout and cancellation never 
   const spawn = childProcess.spawn;
   const observe = t.mock.method(childProcess, 'spawn', ((...args: unknown[]) => {
     const child = Reflect.apply(spawn, childProcess, args) as ChildProcess;
-    const cwd = (args[2] as SpawnOptions | undefined)?.cwd;
+    const options = args[2] as SpawnOptions | undefined;
+    const cwd = options?.cwd;
     if (typeof cwd === 'string' && expected.has(cwd)) {
       // Observe OS lifecycle immediately, before a loaded child can exit. The
       // fixture PID file proves readiness elsewhere, not whether spawn occurred.
@@ -805,6 +829,7 @@ test('model discovery errors, approval requests, timeout and cancellation never 
         child,
         command: args[0],
         args: args[1],
+        windowsHide: options?.windowsHide,
         events,
         spawned: new Promise<void>((resolve) =>
           child.once('spawn', () => {
@@ -883,6 +908,7 @@ test('model discovery errors, approval requests, timeout and cancellation never 
       const record = records[0];
       assert.equal(record.command, process.execPath);
       assert.deepEqual(record.args, expected.get(cwd));
+      assert.equal(record.windowsHide, true);
       assert.ok(record.child.pid && record.child.pid > 0, 'The fixture must have an OS process.');
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

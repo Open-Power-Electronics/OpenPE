@@ -5,6 +5,6 @@
   },
   "text_variables": {
     "OPENPE_PROJECT_NAME": "LMR70503 Buck-Boost",
-    "OPENPE_SIMULATION_MODELS": "[\"circuits/LMR70503.lib\"]"
+    "OPENPE_SIMULATION_MODELS": "[\"models/LMR70503.lib\"]"
   }
 }

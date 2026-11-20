@@ -1,16 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PCB } from '@/lib/pcb';
+import { samePCBFillRules, type PCBFillRuleContext } from '@/lib/pcb-clearance-sources';
 import { createPCBFillWorkerClient, type PCBFillWorkerResult } from './pcbFillWorkerClient';
 
 /** Background drawing only. Core always prepares and validates the final edit. */
-export function usePCBFillWorker(basis: PCB, candidate: PCB, enabled: boolean, revision?: number) {
+export function usePCBFillWorker(
+  basis: PCB,
+  candidate: PCB,
+  enabled: boolean,
+  revision?: number,
+  rules?: PCBFillRuleContext,
+) {
   const client = useRef<ReturnType<typeof createPCBFillWorkerClient> | null>(null);
   const origin = useRef(revision);
   const [completed, setCompleted] = useState<{
     result: PCBFillWorkerResult;
     revision?: number;
   } | null>(null);
-  const [failure, setFailure] = useState<{ basis: PCB; error: string } | null>(null);
+  const [failure, setFailure] = useState<{
+    basis: PCB;
+    error: string;
+    rules?: PCBFillRuleContext;
+  } | null>(null);
 
   useEffect(() => {
     if (origin.current !== revision) {
@@ -35,7 +46,7 @@ export function usePCBFillWorker(basis: PCB, candidate: PCB, enabled: boolean, r
         });
         client.current = createPCBFillWorkerClient(worker, (result) => {
           if (result.error !== undefined) {
-            setFailure({ basis: result.basis, error: result.error });
+            setFailure({ basis: result.basis, error: result.error, rules: result.rules });
             if (result.fatal) client.current = null;
           } else {
             setCompleted({ result, revision });
@@ -43,13 +54,13 @@ export function usePCBFillWorker(basis: PCB, candidate: PCB, enabled: boolean, r
           }
         });
       }
-      client.current.submit(basis, candidate);
+      client.current.submit(basis, candidate, rules);
     } catch (error) {
       client.current?.dispose();
       client.current = null;
-      setFailure({ basis, error: (error as Error).message });
+      setFailure({ basis, error: (error as Error).message, rules });
     }
-  }, [basis, candidate, enabled, revision]);
+  }, [basis, candidate, enabled, revision, rules]);
 
   useEffect(
     () => () => {
@@ -61,9 +72,15 @@ export function usePCBFillWorker(basis: PCB, candidate: PCB, enabled: boolean, r
 
   return {
     completed:
-      enabled && completed?.result.basis === basis && completed.revision === revision
+      enabled &&
+      completed?.result.basis === basis &&
+      completed.revision === revision &&
+      samePCBFillRules(completed.result.rules, rules)
         ? completed.result
         : null,
-    error: enabled && failure?.basis === basis ? failure.error : '',
+    error:
+      enabled && failure?.basis === basis && samePCBFillRules(failure.rules, rules)
+        ? failure.error
+        : '',
   };
 }

@@ -1,9 +1,9 @@
 'use client';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { Maximize, Minus, Plus } from 'lucide-react';
+import { memo, useEffect, useMemo, useState, type RefObject } from 'react';
 import Select from './Select';
 import SymbolGraphic from './SymbolGraphic';
 import SchematicText from './SchematicText';
+import { ComparisonViewActions, useComparisonView } from './ComparisonView';
 import { parseProject, projectSchematics } from '@/lib/project';
 import type { Circuit } from '@/lib/circuit';
 import { partTransform } from '@/lib/schematic-edit';
@@ -17,6 +17,8 @@ import { globalLabelPath, visibleJunctions } from '@/lib/schematic-view';
 import { compareSchematicVersions, type SchematicChange } from '@/lib/schematic-version-diff';
 
 type View = { x: number; y: number; width: number; height: number };
+const initialView: View = { x: 0, y: 0, width: 100, height: 100 };
+const emptyView: View = { x: -10, y: -10, width: 100, height: 100 };
 
 const Drawing = memo(function Drawing({
   active,
@@ -227,88 +229,14 @@ export default function SchematicComparison({
   const left = before.find((sheet) => sheet.id === activeId);
   const right = after.find((sheet) => sheet.id === activeId);
   const changes = useMemo(() => compareSchematicVersions(left, right), [left, right]);
-  const leftRef = useRef<SVGGElement>(null),
-    rightRef = useRef<SVGGElement>(null);
-  const [view, setView] = useState<View>({ x: 0, y: 0, width: 100, height: 100 });
-  const initialView = useRef(view);
-  const fittedPair = useRef<{ left?: Circuit; right?: Circuit } | null>(null);
-  const drag = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    view: View;
-    scale: number;
-    target: SVGSVGElement;
-  } | null>(null);
-  const cancelDrag = useCallback(() => {
-    const current = drag.current;
-    drag.current = null;
-    if (current?.target.hasPointerCapture(current.pointerId))
-      current.target.releasePointerCapture(current.pointerId);
-  }, []);
-  // Dialog opens in a layout effect. Measure afterwards, when its SVG is visible;
-  // a closed dialog reports empty bounds even for fully populated native sheets.
-  useEffect(() => {
-    cancelDrag();
-    if (!active || (fittedPair.current?.left === left && fittedPair.current?.right === right))
-      return;
-    const boxes = [leftRef.current, rightRef.current]
-      .filter((group) => group?.childElementCount)
-      .map((group) => group!.getBBox());
-    let next = { x: -10, y: -10, width: 100, height: 100 };
-    if (boxes.length) {
-      const x = Math.min(...boxes.map((box) => box.x)) - 8;
-      const y = Math.min(...boxes.map((box) => box.y)) - 8;
-      next = {
-        x,
-        y,
-        width: Math.max(20, Math.max(...boxes.map((box) => box.x + box.width)) - x + 8),
-        height: Math.max(20, Math.max(...boxes.map((box) => box.y + box.height)) - y + 8),
-      };
-    }
-    initialView.current = next;
-    fittedPair.current = { left, right };
-    setView(next);
-    return cancelDrag;
-  }, [active, left, right, cancelDrag]);
-  const zoom = useCallback(
-    (factor: number) => {
-      cancelDrag();
-      setView((current) => {
-        const ratio = (current.width / initialView.current.width) * factor;
-        if (ratio < 0.02 || ratio > 20) return current;
-        return {
-          x: current.x + (current.width * (1 - factor)) / 2,
-          y: current.y + (current.height * (1 - factor)) / 2,
-          width: current.width * factor,
-          height: current.height * factor,
-        };
-      });
-    },
-    [cancelDrag],
-  );
-  useEffect(() => {
-    if (!active) {
-      cancelDrag();
-      return;
-    }
-    const surfaces = [leftRef.current, rightRef.current]
-      .map((group) => group?.ownerSVGElement)
-      .filter((svg): svg is SVGSVGElement => Boolean(svg));
-    const wheel = (event: WheelEvent) => {
-      event.preventDefault();
-      if (event.deltaY) zoom(event.deltaY < 0 ? 0.8 : 1.25);
-    };
-    const observer = new ResizeObserver(cancelDrag);
-    for (const svg of surfaces) {
-      svg.addEventListener('wheel', wheel, { passive: false });
-      observer.observe(svg);
-    }
-    return () => {
-      observer.disconnect();
-      for (const svg of surfaces) svg.removeEventListener('wheel', wheel);
-    };
-  }, [left, right, zoom, cancelDrag, active]);
+  const { leftRef, rightRef, svgProps, zoom, fit } = useComparisonView({
+    active,
+    before: left,
+    after: right,
+    initialView,
+    emptyView,
+    padding: 8,
+  });
   return (
     <section className="schematic-comparison" aria-label="Schematic comparison">
       <div className="schematic-compare-toolbar">
@@ -327,35 +255,7 @@ export default function SchematicComparison({
             </span>
           ))}
         </div>
-        <div className="compare-view-actions">
-          <button
-            className="tool-button"
-            aria-label="Zoom out comparison"
-            title="Zoom out"
-            onClick={() => zoom(1.25)}
-          >
-            <Minus size={17} />
-          </button>
-          <button
-            className="tool-button"
-            aria-label="Zoom in comparison"
-            title="Zoom in"
-            onClick={() => zoom(0.8)}
-          >
-            <Plus size={17} />
-          </button>
-          <button
-            className="tool-button"
-            aria-label="Fit comparison"
-            title="Fit view"
-            onClick={() => {
-              cancelDrag();
-              setView(initialView.current);
-            }}
-          >
-            <Maximize size={17} />
-          </button>
-        </div>
+        <ComparisonViewActions zoom={zoom} fit={fit} />
       </div>
       <div className="schematic-compare-panes">
         {(
@@ -370,58 +270,7 @@ export default function SchematicComparison({
               <strong aria-description={label}>{label}</strong>
             </header>
             {circuit ? (
-              <svg
-                role="img"
-                tabIndex={0}
-                aria-label={`${side}: ${label}`}
-                viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-                onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key))
-                    return;
-                  event.preventDefault();
-                  cancelDrag();
-                  setView((current) => ({
-                    ...current,
-                    x:
-                      current.x +
-                      ((event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0) *
-                        current.width) /
-                        10,
-                    y:
-                      current.y +
-                      ((event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0) *
-                        current.height) /
-                        10,
-                  }));
-                }}
-                onPointerDown={(event) => {
-                  if (event.button !== 0) return;
-                  const matrix = event.currentTarget.getScreenCTM();
-                  if (!matrix) return;
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  drag.current = {
-                    pointerId: event.pointerId,
-                    x: event.clientX,
-                    y: event.clientY,
-                    view,
-                    scale: matrix.a,
-                    target: event.currentTarget,
-                  };
-                }}
-                onPointerMove={(event) => {
-                  const current = drag.current;
-                  if (current && current.pointerId === event.pointerId)
-                    setView({
-                      ...current.view,
-                      x: current.view.x - (event.clientX - current.x) / current.scale,
-                      y: current.view.y - (event.clientY - current.y) / current.scale,
-                    });
-                }}
-                onPointerUp={cancelDrag}
-                onPointerCancel={cancelDrag}
-                onLostPointerCapture={cancelDrag}
-              >
+              <svg role="img" tabIndex={0} aria-label={`${side}: ${label}`} {...svgProps}>
                 <Drawing active={active} circuit={circuit} changes={changes} drawingRef={ref} />
               </svg>
             ) : (

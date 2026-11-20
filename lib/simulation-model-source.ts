@@ -1,11 +1,10 @@
 import type { Circuit, Part } from './circuit';
 import { partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
-import examples from './example-simulation.json';
 import references from './reference-simulation.json';
 
-export type SimulationModelSource = 'basic' | 'external';
-export type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
+type SimulationModelSource = 'basic' | 'external';
+type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
 export const passiveSimulationModels = ['R', 'C', 'L'] as const;
 export const passiveConnectorSymbol = 'Connector_Generic:Conn_01x02';
 export type PassiveSimulationModel = (typeof passiveSimulationModels)[number];
@@ -30,7 +29,7 @@ type BasicDefinition = {
   modelName: string;
 };
 const definitions = (
-  [...examples.profiles, ...references.profiles] as { parts: BasicDefinition[] }[]
+  references.profiles as { parts: BasicDefinition[] }[]
 ).flatMap((profile) => profile.parts);
 
 /** Current native KiCad bindings define the mode unless an explicit override is stored. */

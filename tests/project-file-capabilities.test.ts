@@ -272,7 +272,7 @@ test('native/model/log paths and arbitrary names reject before reading or mutati
     'notes/trace.RAW',
     'models/notes.txt',
     'vendor/3D/shape.txt',
-    'circuits/custom.txt',
+    'models/custom.txt',
     'spice/result.csv',
     'thermal/result.csv',
     'assembly.scad',

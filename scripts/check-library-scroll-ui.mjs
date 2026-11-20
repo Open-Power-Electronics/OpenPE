@@ -33,7 +33,7 @@ const bundle = await build({
       };
       window.showModelChooser = () => {
         window.modelChosen = false;
-        root.render(<LibraryChooser kind="footprints" initialPreview="3d" requireModel actionLabel="Use model" onClose={()=>{}} onChoose={()=>{window.modelChosen=true;}}/>);
+        root.render(<LibraryChooser kind="footprints" initialPreview="3d" requireModel onClose={()=>{}} onChoose={()=>{window.modelChosen=true;}}/>);
       };
       root.render(<LibraryChooser kind="footprints" onClose={()=>{}} onChoose={detail=>window.chosen=detail.id}/>);
     `,
@@ -51,6 +51,10 @@ const entries = Array.from({ length: 205 }, (_, index) => ({
   library: 'Fixture',
   description: 'Test footprint',
 }));
+const libraryNames = [
+  'Fixture',
+  ...Array.from({ length: 80 }, (_, i) => `Library_${String(i).padStart(2, '0')}`),
+];
 const browser = await chromium.launch({
   channel:
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
@@ -68,6 +72,10 @@ try {
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/libraries/footprints') {
+      if (url.searchParams.get('categories') === 'KiCad')
+        return route.fulfill({
+          json: { categories: libraryNames.map((name) => ({ id: name, name, children: [] })) },
+        });
       const id = url.searchParams.get('id');
       if (id)
         return route.fulfill({
@@ -94,10 +102,7 @@ try {
         json: {
           entries: matches.slice(offset, offset + 100),
           total: matches.length,
-          libraries: [
-            'Fixture',
-            ...Array.from({ length: 80 }, (_, i) => `Library_${String(i).padStart(2, '0')}`),
-          ],
+          libraries: libraryNames,
         },
       });
     }
@@ -110,16 +115,17 @@ try {
   const rows = page.locator('.library-results button');
   const list = page.locator('.library-results');
   const search = page.getByRole('textbox', { name: 'Search footprints' });
-  const assign = page.getByRole('button', { name: 'Assign footprint', exact: true });
+  const assign = page.getByRole('button', { name: 'Assign', exact: true });
+  const submit = page.getByRole('button', { name: 'Search', exact: true });
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 100 &&
       !document.querySelector('.dialog-button.primary').disabled,
   );
   assert.equal(await page.locator('.library-pagination').count(), 0);
-  const library = page.getByRole('combobox', { name: 'Library', exact: true });
+  const library = page.getByRole('combobox', { name: 'Category level 1', exact: true });
   await library.click();
-  const popup = page.getByRole('listbox', { name: 'Library', exact: true });
+  const popup = page.getByRole('listbox', { name: 'Category level 1', exact: true });
   await popup.waitFor();
   const popupBounds = await popup.boundingBox();
   assert.ok(popupBounds.height <= 280 && popupBounds.y + popupBounds.height <= 760);
@@ -175,7 +181,12 @@ try {
   await page.waitForFunction(() => !document.querySelector('.dialog-button.primary').disabled);
   await assign.click();
   assert.equal(await page.evaluate(() => window.chosen), entries.at(-1).id);
+  const beforeDraftSearches = offsets.length;
   await search.fill('Footprint_002');
+  assert.equal(await rows.count(), 205, 'Editing the draft retains the loaded rows.');
+  assert.equal(await page.locator('.library-detail-id').textContent(), entries.at(-1).id);
+  assert.equal(offsets.length, beforeDraftSearches, 'Draft edits do not search.');
+  await submit.click();
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 1 &&
@@ -184,9 +195,13 @@ try {
   assert.equal(await rows.first().getAttribute('aria-description'), entries[2].id);
   assert.equal(offsets.at(-1).offset, 0, 'New searches reset paging.');
   await search.fill('missing');
+  await submit.click();
   await page.getByText('No matching footprints.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.library-detail').isVisible(), false);
   assert.equal(await assign.isEnabled(), false);
   await search.fill('');
+  assert.equal(await rows.count(), 0, 'Clearing the draft retains the committed empty results.');
+  await submit.click();
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 100 &&
@@ -225,6 +240,7 @@ try {
 
   await browse.click();
   await search.fill('Footprint_002');
+  await submit.click();
   await page.waitForFunction(() => !document.querySelector('.dialog-button.primary').disabled);
   await assign.click();
   assert.equal(await footprint.inputValue(), entries[2].id);
@@ -335,27 +351,42 @@ try {
       'A fresh unassigned fixture starts with an empty query.',
     );
     await search.fill('Footprint_002');
-    await page.waitForFunction(
-      (id) =>
-        document.querySelectorAll('.library-results button').length === 1 &&
-        document.querySelector('.library-detail-id')?.textContent === id &&
-        !document.querySelector('.dialog-button.primary').disabled,
-      entries[2].id,
-    );
+    if (surface === 'result') {
+      await submit.click();
+      await page.waitForFunction(
+        (id) =>
+          document.querySelectorAll('.library-results button').length === 1 &&
+          document.querySelector('.library-detail-id')?.textContent === id &&
+          !document.querySelector('.dialog-button.primary').disabled,
+        entries[2].id,
+      );
+    }
     await (surface === 'search' ? search : rows.first()).focus();
     await page.keyboard.press('Enter');
+    if (surface === 'search') {
+      assert.equal(await chooser.isVisible(), true, 'Search Enter searches without assigning.');
+      assert.equal(await page.evaluate(() => window.propertySaves.length), 0);
+      await page.waitForFunction(
+        (id) =>
+          document.querySelectorAll('.library-results button').length === 1 &&
+          document.querySelector('.library-detail-id')?.textContent === id &&
+          !document.querySelector('.dialog-button.primary').disabled,
+        entries[2].id,
+      );
+      await rows.first().press('Enter');
+    }
     await chooser.waitFor({ state: 'detached' });
     assert.equal(await footprint.inputValue(), entries[2].id);
     assert.deepEqual(
       await page.evaluate(() => window.propertySaves.map((save) => save.fields.Footprint)),
       [entries[2].id],
-      `Ordinary Enter from ${surface} confirms the current footprint exactly once.`,
+      `Result Enter after ${surface} interaction confirms the current footprint exactly once.`,
     );
   }
   await page.evaluate(() => window.showModelChooser());
   await page.getByText('This footprint has no 3D model.', { exact: true }).waitFor();
   assert.equal(
-    await page.getByRole('button', { name: 'Use model', exact: true }).isDisabled(),
+    await page.getByRole('button', { name: 'Update', exact: true }).isDisabled(),
     true,
   );
   assert.equal(
@@ -370,7 +401,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'Library browsing: scroll loading, retries, keyboard paging, current footprint preview, reassignment, cancellation, empty-state protection, IME default suppression and ordinary Enter confirmation passed.',
+    'Library browsing: category scrolling, scroll loading, retries, keyboard paging, current footprint preview, reassignment, cancellation, empty-state protection, IME guards, search Enter and result Enter confirmation passed.',
   );
 } finally {
   await browser.close();

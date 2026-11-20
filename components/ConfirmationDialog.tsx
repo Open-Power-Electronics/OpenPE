@@ -1,26 +1,29 @@
-import { FileText, LoaderCircle, Save } from 'lucide-react';
+import { FileText, LoaderCircle, Save, Trash2 } from 'lucide-react';
 import Dialog from './Dialog';
 
-export type ConfirmationKind = 'close' | 'close-project';
+export type ConfirmationKind = 'close' | 'close-project' | 'remove-schematic';
 
 export default function ConfirmationDialog({
+  kind,
   documentTitle,
   busy,
   error,
   onCancel,
   onConfirm,
 }: {
+  kind: ConfirmationKind;
   documentTitle?: string;
   busy: boolean;
   error: string;
   onCancel: () => void;
   onConfirm: (saveFirst?: boolean) => Promise<void>;
 }) {
+  const removingSchematic = kind === 'remove-schematic';
   return (
     <Dialog
       compact
-      title="Save changes?"
-      icon={<Save size={20} />}
+      title={removingSchematic ? 'Remove schematic?' : 'Save changes?'}
+      icon={removingSchematic ? <Trash2 size={20} /> : <Save size={20} />}
       busy={busy}
       onClose={onCancel}
       footer={
@@ -33,24 +36,34 @@ export default function ConfirmationDialog({
           >
             Cancel
           </button>
-          <div className="dialog-footer-actions">
-            <button
-              className="dialog-button quiet"
-              disabled={busy}
-              onClick={() => void onConfirm()}
-            >
-              Don't save
-            </button>
-
+          {removingSchematic ? (
             <button
               className="dialog-button primary"
               disabled={busy}
-              onClick={() => void onConfirm(true)}
+              onClick={() => void onConfirm()}
             >
-              {busy ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}
-              Save
+              {busy ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}
+              Remove
             </button>
-          </div>
+          ) : (
+            <div className="dialog-footer-actions">
+              <button
+                className="dialog-button quiet"
+                disabled={busy}
+                onClick={() => void onConfirm()}
+              >
+                Discard
+              </button>
+              <button
+                className="dialog-button primary"
+                disabled={busy}
+                onClick={() => void onConfirm(true)}
+              >
+                {busy ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />}
+                Save
+              </button>
+            </div>
+          )}
         </>
       }
     >
@@ -60,6 +73,7 @@ export default function ConfirmationDialog({
           <strong>{documentTitle}</strong>
         </span>
       </div>
+      {removingSchematic && <p>You can restore this schematic with Undo.</p>}
       {error && (
         <p className="dialog-error" role="alert">
           {error}

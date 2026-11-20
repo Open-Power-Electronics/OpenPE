@@ -13,9 +13,12 @@ import { emptyCircuit, uid } from '../lib/circuit';
 import { isOwnedProjectNode, ownProject } from '../lib/immutable-project';
 import { exampleProject } from '../lib/project-example';
 import { simulationModelDefinitions } from '../lib/simulation-models';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { buildSpiceDeck, defaultTransient } from '../plugins/spice-simulation/domain/spice';
 import { child, children, parseSExpr, val, writeSExpr } from '../lib/sexpr';
 import { materializedPCBTree } from '../lib/pcb';
+import { flipPCBFootprint } from '../lib/pcb-layout';
+import { schematicPolylines, schematicTextBoxes, schematicTexts } from '../lib/schematic-text';
+import { schematicImages } from '../lib/schematic-image';
 import { ProjectCore } from '../core/project-core';
 import { nativeProjectDirty } from '../lib/native-project-dirty';
 import { toProjectDocument } from '../lib/project-document';
@@ -50,6 +53,241 @@ function nativeFixture(): KiCadProjectFiles {
     ],
   };
 }
+
+test('native schematic note thickness survives private snapshots and ordinary edits', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_sch'))!;
+  const tree = parseSExpr(file.source);
+  tree.push([
+    'text',
+    '"Filter"',
+    ['at', '20', '25', '0'],
+    ['effects', ['font', ['size', '2.032', '2.032'], ['thickness', '0.4064'], ['bold', 'yes']]],
+    ['uuid', JSON.stringify(uid())],
+  ]);
+  file.source = writeSExpr(tree) + '\n';
+  const imported = projectFromNativeFiles(bundle);
+  const core = new ProjectCore(parseProject(serializeProject(imported)));
+  const sheet = core.getSnapshot().project!.schematic;
+  const current = schematicTexts(sheet.original)[0];
+  assert.equal(current.thickness, 0.4064);
+  assert.equal(
+    core.getNativeFiles().files.find((item) => item.name === file.name)?.source,
+    file.source,
+  );
+  core.execute('schematic.move', {
+    schematicId: sheet.id,
+    ids: [current.id],
+    delta: { x: 1.27, y: 2.54 },
+  });
+  const saved = projectFromNativeFiles(core.getNativeFiles());
+  assert.equal(schematicTexts(saved.schematic.original)[0].thickness, 0.4064);
+  assert.throws(
+    () =>
+      projectFromNativeFiles({
+        ...bundle,
+        files: bundle.files.map((item) =>
+          item === file
+            ? { ...item, source: item.source.replace('(thickness 0.4064)', '(thickness -1)') }
+            : item,
+        ),
+      }),
+    /Unsupported schematic text/,
+  );
+});
+
+test('embedded PNG notes retain native bytes, placement and scale through schematic edits', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_sch'))!;
+  const tree = parseSExpr(file.source);
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+XmfcAAAAASUVORK5CYII=';
+  const id = uid();
+  const image = parseSExpr(`(image (at 20 25) (scale 2) (uuid "${id}") (data "${png}"))`);
+  tree.push(image);
+  file.source = writeSExpr(tree) + '\n';
+  const core = new ProjectCore(projectFromNativeFiles(bundle));
+  const clean = core.getNativeFiles();
+  const sheet = core.getSnapshot().project!.schematic;
+  const [drawing] = schematicImages(sheet.original);
+  assert.equal(drawing.id, id);
+  assert.equal(drawing.href, `data:image/png;base64,${png}`);
+  assert.equal(drawing.width, (25.4 * 2) / 300);
+  assert.equal(drawing.x, 20 - drawing.width / 2);
+  core.execute('schematic.move', {
+    schematicId: sheet.id,
+    ids: [sheet.parts[0].id],
+    delta: { x: 1.27, y: 1.27 },
+  });
+  const reopened = projectFromNativeFiles(core.getNativeFiles());
+  assert.deepEqual(child(reopened.schematic.original!, 'image'), image);
+  assert.ok(core.undo());
+  assert.deepEqual(core.getNativeFiles(), clean);
+  child(image, 'data')![1] = '"PHN2Zz4="';
+  file.source = writeSExpr(tree) + '\n';
+  assert.throws(() => projectFromNativeFiles(bundle), /Unsupported schematic image/);
+});
+
+test('native text boxes retain their content and geometry through schematic edits and Save as', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_sch'))!;
+  const tree = parseSExpr(file.source);
+  const box = parseSExpr(`(text_box "Filter notes\\nCheck the cutoff" (at 20 25 0)
+    (size 35 12) (margins 1 2 3 4) (stroke (width 0.15) (type dash)) (fill (type none))
+    (effects (font (size 1.27 1.27)) (justify left top)) (uuid "${uid()}"))`);
+  tree.push(box);
+  file.source = writeSExpr(tree) + '\n';
+  const core = new ProjectCore(projectFromNativeFiles(bundle));
+  const sheet = core.getSnapshot().project!.schematic;
+  assert.deepEqual(schematicTextBoxes(sheet.original)[0], {
+    id: val(child(box, 'uuid')),
+    text: 'Filter notes\nCheck the cutoff',
+    x: 20,
+    y: 25,
+    size: 1.27,
+    anchor: 'start',
+    vertical: 'top',
+    width: 35,
+    height: 12,
+    left: 1,
+    top: 2,
+    right: 3,
+    bottom: 4,
+    lineWidth: 0.15,
+    lineType: 'dash',
+  });
+  core.execute('schematic.move', {
+    schematicId: sheet.id,
+    ids: [sheet.parts[0].id],
+    delta: { x: 1.27, y: 1.27 },
+  });
+  const reopened = projectFromNativeFiles(
+    projectNativeFiles(core.getSnapshot().project!, 'Copy.kicad_pro'),
+  );
+  assert.deepEqual(child(reopened.schematic.original!, 'text_box'), box);
+  child(box, 'margins')![1] = '40';
+  file.source = writeSExpr(tree) + '\n';
+  assert.throws(() => projectFromNativeFiles(bundle), /Unsupported schematic text box/);
+});
+
+test('native rectangular notes and tabbed metadata survive component edits and undo', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_sch'))!;
+  const tree = parseSExpr(file.source);
+  const library = children(child(tree, 'lib_symbols')!, 'symbol')[0];
+  const description = ['property', '"Description"', '"\tConnector"', ['at', '0', '0', '0']];
+  const oldDescription = children(library, 'property').find((node) => val(node) === 'Description');
+  if (oldDescription) library[library.indexOf(oldDescription)] = description;
+  else library.push(description);
+  const rectangle = [
+    'rectangle',
+    ['start', '2', '3'],
+    ['end', '5', '7'],
+    ['stroke', ['width', '0'], ['type', 'dash']],
+    ['fill', ['type', 'none']],
+    ['uuid', JSON.stringify(uid())],
+  ];
+  tree.push(rectangle);
+  file.source = writeSExpr(tree) + '\n';
+  const core = new ProjectCore(projectFromNativeFiles(bundle));
+  const clean = core.getNativeFiles();
+  assert.equal(clean.files.find((item) => item.name === file.name)?.source, file.source);
+  const sheet = core.getSnapshot().project!.schematic;
+  assert.deepEqual(schematicPolylines(sheet.original)[0].points, [
+    { x: 2, y: 3 },
+    { x: 5, y: 3 },
+    { x: 5, y: 7 },
+    { x: 2, y: 7 },
+    { x: 2, y: 3 },
+  ]);
+  core.execute('schematic.move', {
+    schematicId: sheet.id,
+    ids: [sheet.parts[0].id],
+    delta: { x: 2.54, y: 2.54 },
+  });
+  const edited = core.getNativeFiles();
+  const reopened = projectFromNativeFiles(edited);
+  assert.deepEqual(child(reopened.schematic.original!, 'rectangle'), rectangle);
+  assert.ok(edited.files.find((item) => item.name === file.name)?.source.includes('"\tConnector"'));
+  assert.ok(core.undo());
+  assert.deepEqual(core.getNativeFiles(), clean);
+});
+
+test('fabrication reference points follow their footprint through move, rotate, flip and Save as', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_pcb'))!;
+  const tree = parseSExpr(file.source);
+  const footprint = children(tree, 'footprint').find(
+    (node) => !node.includes('locked') && val(child(node, 'locked')) !== 'yes',
+  )!;
+  const at = child(footprint, 'at')!;
+  at.splice(1, at.length - 1, '40', '30', '0');
+  const id = uid();
+  footprint.push([
+    'point',
+    ['at', '41', '32'],
+    ['size', '2'],
+    ['layer', '"F.Fab"'],
+    ['uuid', JSON.stringify(id)],
+  ]);
+  file.source = writeSExpr(tree) + '\n';
+  const core = new ProjectCore(projectFromNativeFiles(bundle));
+  const clean = core.getNativeFiles();
+  assert.equal(clean.files.find((item) => item.name === file.name)?.source, file.source);
+  const board = core.getSnapshot().project!.pcb!;
+  const owner = board.footprints.find((item) => item.referencePoints?.length)!;
+  assert.deepEqual(owner.referencePoints, [{ x: 1, y: 2, id, size: 2, layer: 'F.Fab' }]);
+  const selection = [{ kind: 'footprint', id: owner.id }];
+  core.execute('layout.move', { boardId: board.id, selection, delta: { x: 3, y: 4 } });
+  core.execute('layout.rotate', { boardId: board.id, selection, degrees: 90 });
+  const moved = core.getSnapshot().project!;
+  core.replaceBoard({
+    ...moved.pcb!,
+    footprints: moved.pcb!.footprints.map((item) =>
+      item.id === owner.id ? flipPCBFootprint(item) : item,
+    ),
+  });
+  const exported = projectNativeFiles(core.getSnapshot().project!, 'Copy.kicad_pro');
+  const reopened = projectFromNativeFiles(exported);
+  const retained = reopened.pcb!.footprints.find((item) => item.id === owner.id)!;
+  assert.deepEqual(retained.referencePoints, [{ x: 1, y: -2, id, size: 2, layer: 'B.Fab' }]);
+  const written = parseSExpr(exported.files.find((item) => item.name === 'Copy.kicad_pcb')!.source);
+  const rawPoint = children(written, 'footprint').flatMap((item) => children(item, 'point'))[0];
+  assert.deepEqual(child(rawPoint, 'at'), ['at', '45', '35']);
+  assert.ok(core.undo());
+  assert.ok(core.undo());
+  assert.ok(core.undo());
+  assert.deepEqual(core.getNativeFiles(), clean);
+});
+
+test('an explicit blank reference remains attached to its unlinked footprint UUID', () => {
+  const bundle = nativeFixture();
+  const file = bundle.files.find((item) => item.name.endsWith('.kicad_pcb'))!;
+  const tree = parseSExpr(file.source);
+  const footprint = children(tree, 'footprint')[0];
+  const fields = children(footprint, 'property');
+  const reference = fields.find((node) => val(node) === 'Reference')!;
+  const value = fields.find((node) => val(node) === 'Value')!;
+  reference[2] = value[2] = '""';
+  const binding = child(footprint, 'path');
+  if (binding) footprint.splice(footprint.indexOf(binding), 1);
+  file.source = writeSExpr(tree) + '\n';
+  const imported = projectFromNativeFiles(bundle);
+  const board = imported.pcb!;
+  assert.equal(board.footprints[0].symbolId, null);
+  assert.equal(board.footprints[0].reference, '');
+  assert.equal(board.footprints[0].value, '');
+  const edited = projectNativeFiles({
+    ...imported,
+    pcb: { ...board, thickness: board.thickness + 0.1 },
+  });
+  const reopened = projectFromNativeFiles(edited);
+  assert.equal(reopened.pcb!.footprints[0].id, board.footprints[0].id);
+  assert.equal(reopened.pcb!.footprints[0].reference, '');
+  footprint.splice(footprint.indexOf(reference), 1);
+  file.source = writeSExpr(tree) + '\n';
+  assert.throws(() => projectFromNativeFiles(bundle), /requires a native Reference property/);
+});
 
 test('renaming a project persists through native files, Source, Save as and undo', () => {
   const bundle = nativeFixture();
@@ -736,6 +974,12 @@ test('rejects traversal, Windows aliases, duplicate files and unsupported native
     'upstream/input.kicad_sch',
     'upstream/simulation/model.lib',
     'ThErMaL/project/model.lib',
+    'spice-simulation/board.circuit.cir',
+    'spice-simulation/board.example-model-0.lib',
+    'layout-thermal/input.kicad_sch',
+    'pe-layout-skill/input.kicad_sch',
+    'layout-parasitics/input.lib',
+    'summary@example/input.kicad_sch',
   ]) {
     const cached = nativeFixture();
     cached.files.push({ name, source: '* private simulation artifact' });

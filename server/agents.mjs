@@ -1,5 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -18,16 +19,21 @@ import {
   agentSimulationGuidance,
   agentCapabilityContent,
 } from './agent-capabilities.mjs';
-import { validModelId } from './model-id.mjs';
 import { validateAnnotations, annotationContext } from './annotation-format.mjs';
 import {
   agentProviderIds,
   agentName,
   isAgentProvider,
   isProviderReasoningEffort,
-  defaultReasoningEffort,
+  validAgentModelId,
 } from './agent-provider-format.mjs';
-import { agentLaunchers, verifyPiIsolation } from './agent-provider-runtime.mjs';
+import {
+  agentLaunchers,
+  codexIsolationArgs,
+  rawCodexIsolationArgs,
+  verifyPiIsolation,
+  windowsCodexNpmLaunch,
+} from './agent-provider-runtime.mjs';
 import {
   loadCursorSdk,
   readCursorApiKey,
@@ -88,7 +94,12 @@ export async function resolveAgent(id, options = {}) {
     throw new Error('Cursor runs in the OpenPE service through the Cursor SDK and has no CLI launcher.');
   const run = options.exec ?? exec;
   const exists = options.exists ?? existsSync;
-  let candidates = [];
+  const candidates = [];
+  const roaming = process.env.APPDATA;
+  const npmBin = roaming && path.isAbsolute(roaming) ? path.join(roaming, 'npm') : null;
+  // An already running desktop app can inherit a PATH that predates a Codex CLI install.
+  if (process.platform === 'win32' && id === 'codex' && npmBin)
+    candidates.push(path.join(npmBin, 'codex.cmd'));
   for (const command of agentLaunchers[id].commands) {
     try {
       candidates.push(
@@ -104,12 +115,12 @@ export async function resolveAgent(id, options = {}) {
     } catch {}
   }
   if (process.platform === 'win32') {
-    const local = process.env.LOCALAPPDATA || '';
-    const roaming = process.env.APPDATA || '';
-    if (id === 'codex')
+    const local = process.env.LOCALAPPDATA;
+    if (id === 'codex' && local && path.isAbsolute(local))
       candidates.push(path.join(local, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe'));
-    for (const command of agentLaunchers[id].commands)
-      candidates.push(path.join(roaming, 'npm', `${command}.cmd`));
+    if (id !== 'codex')
+      for (const command of agentLaunchers[id].commands)
+        candidates.push(path.join(roaming || '', 'npm', `${command}.cmd`));
     if (id === 'pi' && process.env.USERPROFILE)
       candidates.push(path.join(process.env.USERPROFILE, '.pi', 'agent', 'bin', 'pi.cmd'));
   } else candidates.push(...posixInstallCandidates(id, options.home ?? os.homedir()));
@@ -118,6 +129,11 @@ export async function resolveAgent(id, options = {}) {
     // npm also creates a POSIX shim without an extension; Windows cannot spawn it.
     if (process.platform === 'win32' && !/\.(exe|com|cmd)$/i.test(candidate)) continue;
     if (/\.cmd$/i.test(candidate)) {
+      if (id === 'codex') {
+        const launch = windowsCodexNpmLaunch(candidate, exists);
+        if (launch) return launch;
+        continue;
+      }
       if (id === 'pi') {
         const managedLauncher = path.join(path.dirname(candidate), 'pi-launcher.js');
         if (exists(managedLauncher))
@@ -306,6 +322,29 @@ User request: ${prompt}`;
  * @param {{resolve?:typeof resolveAgent, timeoutMs?:number, pcbDesignInstructions?:string, input?:ReturnType<typeof import('./agent-input.mjs').createAgentInputBridge>, questions?:{url:string, token:string}, capabilities?:{call:(tool:string,args:unknown)=>Promise<unknown>,url?:string,token?:string}, cursorCredential?:{read:()=>Promise<string>}, sdk?:object, loadCursorSdk?:()=>Promise<object>}} options
  */
 export async function runAgent(provider, request, cwd, emit, signal, options = {}) {
+  return runAgentTransport(provider, request, cwd, emit, signal, options, false);
+}
+
+/** Raw text is assembled by the native file session, before provider transport. */
+export async function runRawAgent(
+  provider,
+  request,
+  emit,
+  signal,
+  { cursorCredential, resolve, sdk, timeoutMs } = {},
+) {
+  signal.throwIfAborted();
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-raw-agent-'));
+  try {
+    return await runAgentTransport(
+      provider, request, directory, emit, signal, { cursorCredential, resolve, sdk, timeoutMs }, true,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
+
+async function runAgentTransport(provider, request, cwd, emit, signal, options, raw) {
   if (!isAgentProvider(provider)) throw new Error('Unknown agent.');
   validateAnnotations(request.annotations);
   const annotations = request.annotations || [];
@@ -324,14 +363,13 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
     !validCursorRequestParameters(request.parameters)
   )
     throw new Error('Invalid Cursor model parameters.');
-  if (request.model !== undefined && !validModelId(request.model))
+  if (request.model !== undefined && !validAgentModelId(provider, request.model))
     throw new Error('Invalid model ID.');
   // Prepare once, before launching a provider. Oversized input must fail through
   // the ordinary request error path, never throw inside a child-process callback.
-  const providerPrompt = makePrompt(
-    { ...request, capabilities: capabilityEnabled, questionTool },
-    options.pcbDesignInstructions,
-  );
+  const providerPrompt = raw
+    ? request.prompt
+    : makePrompt({ ...request, capabilities: capabilityEnabled, questionTool }, options.pcbDesignInstructions);
   const images = annotations.map(({ image }) => ({
     mimeType: 'image/png',
     data: image.dataUrl.slice('data:image/png;base64,'.length),
@@ -345,7 +383,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
     );
   if (provider === 'cursor') {
     if (signal.aborted) return { outcome: 'cancelled' };
-    return runCursorAgent(providerPrompt, request, emit, signal, options);
+    return runCursorAgent(providerPrompt, request, emit, signal, options, raw);
   }
   if (provider === 'deepseek') {
     const launch = await (options.resolve || resolveAgent)(provider);
@@ -393,12 +431,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
           'app-server',
           '--listen',
           'stdio://',
-          '-c',
-          'features.shell_tool=false',
-          '-c',
-          'web_search="disabled"',
-          '-c',
-          'mcp_servers={}',
+          ...(raw ? rawCodexIsolationArgs : codexIsolationArgs),
         ]
       : [
           '-p',
@@ -411,7 +444,8 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
           '--permission-prompt-tool',
           'stdio',
           '--tools',
-          'AskUserQuestion',
+          raw ? '' : 'AskUserQuestion',
+          ...(raw ? ['--safe-mode', '--no-session-persistence', '--disallowedTools', '*'] : []),
           '--strict-mcp-config',
           '--mcp-config',
           JSON.stringify({
@@ -772,8 +806,10 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
         }
         if (event.id !== undefined && event.method) {
           if (event.method === 'item/tool/requestUserInput') {
-            void askQuestion(event);
-            return;
+            if (!raw) {
+              void askQuestion(event);
+              return;
+            }
           }
           if (event.method === 'item/tool/call' && capabilityEnabled) {
             void toolCall(event);
@@ -800,18 +836,18 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
             params: {
               cwd,
               sandbox: 'read-only',
-              approvalPolicy: 'untrusted',
+              approvalPolicy: raw ? 'never' : 'untrusted',
               approvalsReviewer: 'user',
               ephemeral: true,
               ...(capabilityEnabled ? { dynamicTools: agentCapabilityTools } : {}),
               ...(request.model ? { model: request.model } : {}),
               config: {
-                'features.default_mode_request_user_input': true,
-                ...(request.effort || !request.model
-                  ? { model_reasoning_effort: request.effort || defaultReasoningEffort }
-                  : {}),
+                'features.default_mode_request_user_input': !raw,
+                ...(request.effort && { model_reasoning_effort: request.effort }),
               },
-              developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
+              ...(!raw && {
+                developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
+              }),
             },
           });
           return;

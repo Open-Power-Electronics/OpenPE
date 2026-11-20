@@ -1,0 +1,360 @@
+.emc-analysis-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--font-control);
+}
+.emc-analysis-panel > .editor-dock-header {
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-top: 0;
+}
+.emc-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.emc-tabs > button {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.emc-tabs > button[aria-selected='true'] {
+  background: var(--tint);
+  color: var(--text-strong);
+}
+.emc-tabs > button:hover {
+  background: var(--panel);
+}
+.emc-analysis-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: var(--properties-inset);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.emc-setup,
+.emc-results,
+.emc-checklist {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 16px;
+  min-width: 0;
+}
+.emc-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.emc-section > summary,
+.emc-coverage > summary,
+.emc-exception > summary {
+  min-height: 30px;
+  align-content: center;
+  color: var(--text-strong);
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.emc-section[open] > summary {
+  margin-bottom: 12px;
+}
+.emc-section h3,
+.emc-section h4,
+.emc-finding-group h3,
+.emc-finding-detail h3,
+.emc-finding-detail h4 {
+  margin: 0;
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.emc-section h4 {
+  margin-top: 8px;
+  font-size: var(--font-small);
+}
+.emc-section .layout-field,
+.emc-results > .layout-field {
+  min-width: 0;
+}
+.emc-section .quantity-input,
+.emc-section .select-trigger,
+.emc-results > .layout-field .select-trigger {
+  width: 100%;
+  min-width: 0;
+}
+.emc-analysis-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+}
+.emc-analysis-panel .dialog-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.emc-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+}
+.emc-intents {
+  display: grid;
+  gap: 4px;
+}
+.emc-intent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.emc-intent > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.emc-intent strong {
+  color: var(--text-strong);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.emc-intent span {
+  color: var(--muted);
+  font-size: var(--font-small);
+  overflow-wrap: anywhere;
+}
+.emc-intent > .tool-button {
+  flex-shrink: 0;
+}
+.emc-note,
+.emc-finding-detail p,
+.emc-coverage p,
+.emc-exception p {
+  margin: 0;
+  font-size: var(--font-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.emc-note,
+.emc-coverage {
+  color: var(--muted);
+}
+.emc-empty {
+  display: flex;
+  flex: 1;
+  min-height: 140px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+.emc-empty p {
+  max-width: 30ch;
+  margin: 0;
+  line-height: 1.5;
+}
+.emc-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: var(--font-small);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.emc-finding-group {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.emc-finding-group > h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--font-small);
+  margin-bottom: 4px;
+}
+.emc-finding-group > h3 > span {
+  color: var(--muted);
+  font-weight: 400;
+}
+.emc-finding {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 0;
+  border-left: 2px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.emc-finding:hover {
+  background: var(--panel);
+}
+.emc-finding[aria-pressed='true'] {
+  background: var(--tint);
+}
+.emc-finding.emc-warning {
+  border-left-color: var(--border-strong);
+}
+.emc-finding > span,
+.emc-finding > em {
+  font-size: var(--font-small);
+  font-style: normal;
+  color: var(--muted);
+}
+.emc-finding > strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.emc-finding-detail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 8px;
+}
+.emc-detail-heading {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  justify-content: space-between;
+}
+.emc-detail-heading > .tool-button {
+  flex-shrink: 0;
+}
+.emc-confidence {
+  width: fit-content;
+  color: var(--muted);
+  font-size: var(--font-small);
+}
+.emc-readout {
+  margin: 0;
+  font-size: var(--font-small);
+}
+.emc-readout > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+}
+.emc-readout > div + div {
+  border-top: 1px solid var(--line-soft);
+}
+.emc-readout dt {
+  color: var(--muted);
+}
+.emc-readout dd {
+  margin: 0;
+  text-align: right;
+  font-family: var(--code-font);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.emc-exception,
+.emc-coverage {
+  min-width: 0;
+  font-size: var(--font-small);
+}
+.emc-exception[open] > summary,
+.emc-coverage[open] > summary {
+  margin-bottom: 12px;
+}
+.emc-exception .layout-field {
+  margin-top: 12px;
+}
+.emc-exception .dialog-button {
+  margin: 8px 4px 0 0;
+}
+.emc-coverage > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.emc-coverage > div > strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.emc-coverage > p {
+  margin-top: 12px;
+}
+.emc-manual-status {
+  display: block;
+  margin-left: 16px;
+  color: var(--muted);
+  font-size: var(--font-small);
+  font-weight: 400;
+}
+.emc-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--editor-footer-height);
+  padding: 2px 8px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.emc-report-actions {
+  display: flex;
+  gap: 2px;
+}
+.emc-check-status {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+  overflow-wrap: anywhere;
+}
+.emc-check-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}

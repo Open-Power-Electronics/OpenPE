@@ -2,7 +2,7 @@ import type { PCBBounds } from './pcb-layout';
 import { createLayoutGridApplicator } from './drawing-grid';
 import { flushLayoutCamera } from './layout-camera-presentation';
 
-export type DrawingPNG = { dataUrl: string; width: number; height: number };
+type DrawingPNG = { dataUrl: string; width: number; height: number };
 /** Fit board bounds independently of the interactive camera; keep visible layers. */
 export async function captureLayoutPNG(svg: SVGSVGElement, bounds: PCBBounds): Promise<DrawingPNG> {
   flushLayoutCamera(svg);

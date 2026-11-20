@@ -220,9 +220,9 @@ function modelCadEnvironment(runtime, stage) {
       OMP_NUM_THREADS: '1',
     };
   }
-  if (platform !== 'darwin-arm64')
+  if (platform !== 'darwin-arm64' && platform !== 'linux-x64')
     throw new Error(`Unsupported OpenPE solver platform ${platform}.`);
-  // Fresh environment: no inherited DYLD_* or Homebrew PATH. Gmsh loads through its rpath.
+  // Fresh environment: no inherited loader variables or user PATH. Gmsh loads through its rpath.
   return {
     PATH: ['/usr/bin', '/bin', toolDirectory].join(':'),
     TMPDIR: stage,

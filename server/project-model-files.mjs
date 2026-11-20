@@ -1,7 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, realpath, open, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { validateSimulationModels } from './simulation-model-format.mjs';
+import {
+  simulationModelDefinitions,
+  validateSimulationModels,
+} from './simulation-model-format.mjs';
+import { projectBoundTiModels } from './project-format.mjs';
+import { readCachedTiModel } from './ti-models.mjs';
+import {
+  importedTiModelPath,
+  readCachedTiImport,
+  readImportedTiModel,
+  verifyImportedTiModel,
+} from '../plugins/spice-simulation/host/ti-model-import.mjs';
+export { readCachedTiImport };
 
 export function verifyProjectModelBytes(model, bytes) {
   validateSimulationModels([model]);
@@ -19,20 +31,29 @@ async function modelPath(projectFile, model, create) {
   validateSimulationModels([model]);
   if (!projectFile) return null;
   const root = await realpath(path.dirname(path.resolve(projectFile)));
-  const directory = path.join(root, path.dirname(model.file));
-  if (create)
-    await mkdir(directory).catch((error) => {
-      if (error.code !== 'EEXIST') throw error;
+  let directory = root;
+  for (const component of model.file.split('/').slice(0, -1)) {
+    directory = path.join(directory, component);
+    if (create)
+      await mkdir(directory).catch((error) => {
+        if (error.code !== 'EEXIST') throw error;
+      });
+    const info = await lstat(directory).catch((error) => {
+      if (error.code !== 'ENOENT') throw error;
+      return null;
     });
-  const info = await lstat(directory).catch((error) => {
-    if (error.code === 'ENOENT') return null;
-    throw error;
-  });
-  if (!info) return null;
-  const resolved = await realpath(directory);
-  const normalize = (file) => (process.platform === 'win32' ? file.toLowerCase() : file);
-  if (!info.isDirectory() || info.isSymbolicLink() || normalize(resolved) !== normalize(directory))
-    throw new Error('The project model folder must be a real directory beside the project file.');
+    if (!info) return null;
+    const resolved = await realpath(directory);
+    const normalize = (file) => (process.platform === 'win32' ? file.toLowerCase() : file);
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      normalize(resolved) !== normalize(directory)
+    )
+      throw new Error(
+        'The shared project model folder must be a real directory beside the project file.',
+      );
+  }
   const file = path.join(directory, path.basename(model.file));
   const existing = await lstat(file).catch((error) => {
     if (error.code === 'ENOENT') return null;
@@ -93,5 +114,41 @@ export async function prepareProjectModelFiles(project, destination, sourceFile,
       (await store(model.id, signal));
     signal.throwIfAborted();
     await writeProjectModelFile(destination, model, bytes);
+  }
+}
+
+/** Carry explicit TI bindings through native Save without adding run references. */
+export async function prepareBoundTiModelFiles(project, bundle, destination, sourceFile, dataDir) {
+  const existing = new Map(bundle.files.map((entry) => [entry.name.toLowerCase(), entry]));
+  const { reviewedIds, libraries } = projectBoundTiModels(project);
+  for (const id of reviewedIds) {
+    const model = simulationModelDefinitions.find((entry) => entry.id === id);
+    if (existing.has(model.file.toLowerCase())) continue;
+    const bytes =
+      (await readProjectModelFile(destination, model)) ??
+      (sourceFile !== destination ? await readProjectModelFile(sourceFile, model) : null) ??
+      (await readCachedTiModel(dataDir, id));
+    if (bytes)
+      bundle.files.push({ name: model.file, source: bytes.toString('latin1'), encoding: 'latin1' });
+  }
+  for (const file of libraries) {
+    if (!importedTiModelPath(file)) continue;
+    const entry = existing.get(file.toLowerCase());
+    const current = await readImportedTiModel(file, path.dirname(destination));
+    if (entry) {
+      verifyImportedTiModel(file, Buffer.from(entry.source, entry.encoding ?? 'utf8'));
+      continue;
+    }
+    const bytes =
+      current ??
+      (sourceFile && sourceFile !== destination
+        ? await readImportedTiModel(file, path.dirname(sourceFile))
+        : null) ??
+      (await readCachedTiImport(dataDir, file));
+    if (!bytes)
+      throw new Error(
+        `The TI library ${path.posix.basename(file)} is missing. Download the package again before saving.`,
+      );
+    bundle.files.push({ name: file, source: bytes.toString('latin1'), encoding: 'latin1' });
   }
 }

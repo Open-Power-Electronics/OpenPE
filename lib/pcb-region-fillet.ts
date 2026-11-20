@@ -2,7 +2,7 @@ import type { Point } from './circuit';
 import type { BoardLine, BoardZone, PCB } from './pcb';
 
 export type PCBRegionTarget = { kind: 'zone' | 'graphic'; id: string };
-export const PCB_REGION_FILLET_TOLERANCE_MM = 0.01;
+const PCB_REGION_FILLET_TOLERANCE_MM = 0.01;
 const maxPoints = 10000;
 const epsilon = 1e-9;
 const cross = (a: Point, b: Point, c: Point) =>

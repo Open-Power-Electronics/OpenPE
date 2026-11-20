@@ -1,12 +1,12 @@
+import { createReferenceExample } from '../lib/reference-examples';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPart, emptyCircuit } from '../lib/circuit';
 import { partFields, displayPartValue } from '../lib/library';
+import { val } from '../lib/sexpr';
 import { preparePartProperties } from '../lib/part-properties';
 import { createProject, projectFromNativeFiles } from '../lib/project';
 import { ProjectCore } from '../core/project-core';
-import { createExample } from '../lib/examples';
-import { createReferenceExample } from '../lib/reference-examples';
 import { createHomeExample } from '../lib/create-home-example';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import {
@@ -14,11 +14,15 @@ import {
   initialConditionField,
   spiceInitialConditions,
 } from '../lib/simulation-initial-conditions';
-import { buildSpiceDeck, defaultTransient, type SpiceDeck } from '../lib/spice';
-import { runSimulation } from '../server/spice.mjs';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  type SpiceDeck,
+} from '../plugins/spice-simulation/domain/spice';
+import { runSimulation } from '../plugins/spice-simulation/host/spice.mjs';
 import type { KiCadProjectFiles } from '../lib/kicad-project';
 import { parseProject as serviceParse } from '../server/project-format.mjs';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
 
 test('optional capacitor and inductor initial conditions commit and undo without storing implicit defaults', () => {
   for (const [kind, name] of [
@@ -74,7 +78,7 @@ test('optional capacitor and inductor initial conditions commit and undo without
 test('ideal, model Buck and curated compilers apply capacitor voltage and inductor current with UIC', () => {
   for (const circuit of [
     switchingStageFixture(),
-    createExample('kicad-buck').schematic,
+    createReferenceExample('reference-lm2598-to220-7-buck').schematic,
     createReferenceExample('reference-lm2596-to220-5-buck').schematic,
   ]) {
     for (const kind of ['C', 'L'] as const) {
@@ -159,13 +163,38 @@ test('TPS61046 retains its capacitor polarities and initial voltages while compu
   assert.match(deck.netlist, /^R\d+ \S+ 0 1000$/m);
 });
 
-test('ideal and model Buck compilers preserve capacitor initial voltage while computing unspecified state', () => {
-  for (const circuit of [switchingStageFixture(), createExample('kicad-buck').schematic]) {
+test('ideal and model compilers preserve capacitor initial voltage while computing unspecified state', () => {
+  for (const circuit of [
+    switchingStageFixture(),
+    createReferenceExample('reference-tps61046-bga6-boost').schematic,
+  ]) {
+    for (const part of circuit.parts) {
+      const fields = partFields(part);
+      delete fields['OpenPE.InitialVoltage'];
+      delete fields['OpenPE.InitialCurrent'];
+      part.fields = fields;
+      if (part.raw)
+        part.raw = part.raw.filter(
+          (node) =>
+            !Array.isArray(node) ||
+            node[0] !== 'property' ||
+            !['OpenPE.InitialVoltage', 'OpenPE.InitialCurrent'].includes(val(node)),
+        );
+    }
     const capacitor = circuit.parts.find((part) => storagePrimitive(part) === 'C')!;
     capacitor.fields = { ...partFields(capacitor), 'OpenPE.InitialVoltage': '1.5' };
     const config = defaultTransient(circuit),
       deck = buildSpiceDeck(circuit, config);
-    assert.match(deck.netlist, /^\.ic .*v\(\w+\)=1\.5/m);
+    const initialized = deck.netlist.match(/^C\d+ (\S+) (\S+) \S+ IC=1\.5$/m)!;
+    assert.ok(initialized, 'The selected capacitor keeps its explicit device initial voltage.');
+    const voltages = new Map(
+      [...deck.netlist.matchAll(/v\((\w+)\)=(-?[\d.]+)/g)].map((match) => [
+        match[1],
+        Number(match[2]),
+      ]),
+    );
+    voltages.set('0', 0);
+    assert.equal(voltages.get(initialized[1])! - voltages.get(initialized[2])!, 1.5);
     assert.doesNotMatch(deck.netlist, /^tran .* uic$/m);
     assert.deepEqual(serviceDeck(circuit, config), deck);
   }

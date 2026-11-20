@@ -1,7 +1,7 @@
 import { invalidatePCBFill, type Pad, type PCB, type Footprint, type BoardZone } from './pcb';
 import { flipPCBFootprint } from './pcb-layout';
 
-export type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
+type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
 
 /** Undefined clears an optional override; omitted fields and native identity survive. */
 export function preparePCBZoneProperties(zone: BoardZone, changes: PCBZoneProperties): BoardZone {
@@ -87,7 +87,10 @@ export function setPCBViaProperties(
 }
 
 export type PCBPadProperties = Partial<
-  Omit<Pad, 'id' | 'number' | 'netId' | 'type' | 'layers' | 'unconnected'>
+  Omit<
+    Pad,
+    'id' | 'number' | 'netId' | 'type' | 'layers' | 'unconnected' | 'outline' | 'customAnchor'
+  >
 >;
 
 const padPropertyKeys = new Set([
@@ -98,6 +101,7 @@ const padPropertyKeys = new Set([
   'shape',
   'drill',
   'drillOffset',
+  'drillSlot',
   'roundrectRatio',
   'chamferRatio',
   'chamfer',
@@ -127,12 +131,15 @@ export function setPCBPadProperties(board: PCB, padId: string, changes: PCBPadPr
       fail('Pad geometry cannot be removed.');
   }
   const next = { ...pad, ...changes };
+  if (next.shape !== pad.shape && (next.shape === 'custom' || pad.shape === 'custom'))
+    fail('Edit the custom pad outline in the footprint drawing or native Source.');
   for (const key of Object.keys(changes) as (keyof PCBPadProperties)[])
     if (changes[key] === undefined) delete next[key];
   if (changes.size) next.size = { ...changes.size };
   if (changes.drillOffset) next.drillOffset = { ...changes.drillOffset };
+  if (changes.drillSlot) next.drillSlot = { ...changes.drillSlot };
   if (changes.chamfer) next.chamfer = [...changes.chamfer];
-  if (next.shape === 'circle') {
+  if (next.shape === 'circle' || next.customAnchor === 'circle') {
     // A single dimension field edits the circle diameter on either axis.
     const diameter =
       changes.size && changes.size.x === pad.size.x && changes.size.y !== pad.size.y
@@ -152,11 +159,18 @@ export function setPCBPadProperties(board: PCB, padId: string, changes: PCBPadPr
     next.size.y <= 0
   )
     fail('Pad position, rotation and positive size must be finite.');
-  if (next.type === 'smd' && (next.drill !== undefined || next.drillOffset !== undefined))
+  if (
+    next.type === 'smd' &&
+    (next.drill !== undefined || next.drillOffset !== undefined || next.drillSlot)
+  )
     fail('SMD pads cannot have a drill or drill offset.');
   if (next.type !== 'smd' && (!Number.isFinite(next.drill) || next.drill! <= 0))
     fail('Through-hole pads require a positive drill.');
-  if (next.type === 'thru_hole' && next.drill! >= Math.min(next.size.x, next.size.y))
+  if (
+    next.type === 'thru_hole' &&
+    !next.outline &&
+    next.drill! >= Math.min(next.size.x, next.size.y)
+  )
     fail('Through-hole drill must be smaller than its pad.');
   if (JSON.stringify(next) === JSON.stringify(pad)) return board;
   return invalidatePCBFill(board, {

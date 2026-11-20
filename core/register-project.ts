@@ -21,6 +21,13 @@ export function registerProjectCapabilities(
         available: () => {
           if (definition.id === 'modelCad.get')
             return !!core.getSnapshot().project?.pcb || 'This project has no PCB layout.';
+          if (definition.id === 'layout.placement.preview') {
+            const snapshot = core.getSnapshot();
+            if (snapshot.editingBlocked) return snapshot.editingBlocked;
+            if (snapshot.sourceDraft !== null)
+              return 'Apply the Source edits before previewing placement.';
+            return !!snapshot.project?.pcb || 'This project has no PCB layout.';
+          }
           if (!['schematic.erc', 'layout.drc'].includes(definition.id)) return true;
           const snapshot = core.getSnapshot();
           if (snapshot.editingBlocked) return snapshot.editingBlocked;

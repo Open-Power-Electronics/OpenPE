@@ -48,6 +48,27 @@ function pose(basis: PCB, x: number): PCB {
   };
 }
 
+test('native rule changes revoke an active worker generation even when the board identity is unchanged', () => {
+  const worker = new WorkerPort();
+  const results: PCBFillWorkerResult[] = [];
+  const client = createPCBFillWorkerClient(worker, (result) => results.push(result));
+  const board = createEmptyPCB();
+  const candidate = pose(board, 1);
+  client.submit(board, candidate, { projectSource: '{"net_settings":{}}' });
+  const old = worker.fills()[0];
+  const rules = { projectSource: '{"net_settings":{"classes":[]}}' };
+  client.submit(board, candidate, rules);
+  rules.projectSource = '{"changedAfterSubmission":true}';
+  worker.complete(old);
+  assert.deepEqual(results, []);
+  const basis = worker.messages.filter((message) => message.type === 'basis').at(-1)!;
+  assert.equal(basis.type, 'basis');
+  assert.deepEqual(basis.rules, { projectSource: '{"net_settings":{"classes":[]}}' });
+  worker.complete();
+  assert.equal(results.length, 1);
+  client.dispose();
+});
+
 test('one active worker fill coalesces pending poses and advances continuously during movement', () => {
   const worker = new WorkerPort();
   const results: PCBFillWorkerResult[] = [];

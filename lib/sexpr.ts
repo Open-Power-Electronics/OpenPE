@@ -2,8 +2,18 @@ import { isOwnedProjectNode, recordOwnedProjectNode } from './immutable-project-
 
 export type SExpr = (string | SExpr)[];
 // Quoted atoms retain their quotes so unknown fields can be written without loss.
+export function decodeKiCadString(value: string): string {
+  // KiCad emits literal tabs inside quoted properties and descriptions.
+  const decoded: unknown = JSON.parse(
+    value.includes('\t')
+      ? value.replace(/\\[\s\S]|\t/g, (token) => (token === '\t' ? '\\t' : token))
+      : value,
+  );
+  if (typeof decoded !== 'string') throw new Error('Invalid string.');
+  return decoded;
+}
 const atom = (v: string | SExpr | undefined): string =>
-  typeof v === 'string' ? (v.startsWith('"') ? JSON.parse(v) : v) : '';
+  typeof v === 'string' ? (v.startsWith('"') ? decodeKiCadString(v) : v) : '';
 export const quote = (v: string) => JSON.stringify(v);
 export const children = (n: SExpr, name: string): SExpr[] =>
   n.filter((x): x is SExpr => Array.isArray(x) && x[0] === name);
@@ -44,7 +54,7 @@ function parseSExprValue(source: string, maxLength: number, owned: boolean): SEx
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
-            JSON.parse(t);
+            decodeKiCadString(t);
           } catch {
             throw new Error('Invalid string.');
           }

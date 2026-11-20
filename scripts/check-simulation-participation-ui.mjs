@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';

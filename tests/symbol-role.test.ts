@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { symbolRole, symbolRoleColors } from '../lib/symbol-role';
 import { parseSExpr, quote, type SExpr } from '../lib/sexpr';
-import { createExample } from '../lib/examples';
+import { createReferenceExample } from '../lib/reference-examples';
 import { parseProject, serializeProject } from '../lib/project';
 import { appearanceVariables, defaultAppearance } from '../lib/appearance';
 import { partFootprint } from '../lib/library';
@@ -70,7 +70,7 @@ test('instance assignment overrides library defaults while local power markers r
 });
 
 test('Buck classification survives canonical round trips without mutating design data', () => {
-  const project = createExample('kicad-buck');
+  const project = createReferenceExample('reference-lm2598-to220-7-buck');
   const source = serializeProject(project);
   for (const candidate of [project, parseProject(source)]) {
     const { parts, libraries } = candidate.schematic;

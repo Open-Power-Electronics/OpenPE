@@ -1,0 +1,38 @@
+{
+  "format": "openpe-plugin",
+  "version": 1,
+  "manifest": {
+    "apiVersion": 1,
+    "id": "project-summary@openpe-community",
+    "name": "Project Summary",
+    "version": "1.0.0",
+    "description": "Count the components in the current project.",
+    "author": "OpenPE community example",
+    "category": "Utilities",
+    "runtime": "javascript",
+    "entry": "main.js",
+    "permissions": [
+      "project.read"
+    ],
+    "contributes": {
+      "commands": [
+        {
+          "id": "extension.openpe_community.project_summary.summarize",
+          "name": "Summarize project",
+          "description": "Read this project and return component counts and optional references.",
+          "handler": "summarize",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "includeReferences": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      ]
+    }
+  },
+  "source": "registerPlugin({\n  summarize(input, context) {\n    const project = context.project;\n    if (!project) return { name: null, components: 0 };\n    const sheets = [project.schematic, ...(project.additionalSchematics || []).map(item => item.schematic)];\n    const components = sheets.flatMap(sheet => sheet.components || []);\n    const result = { name: project.project.name, components: components.length };\n    if (input.includeReferences) result.references = components.map(item => item.reference);\n    return result;\n  }\n});\n"
+}

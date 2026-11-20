@@ -153,12 +153,11 @@ for (const directory of ['components', 'lib', 'api', 'core']) await snapshot(dir
 await snapshot('domain', true);
 await snapshot('resources/example-catalog', false, true);
 for (const name of [
-  'example-models-lock.json',
   'emc-flyback-models-lock.json',
   'reference-models-lock.json',
 ])
   await snapshot(`resources/${name}`);
-await snapshot('tests/fixtures/kicad/manifest.json', true);
+await snapshot('resources/example-catalog/manifest.json', true);
 for (const name of ['globals.css', 'workspace.css', 'layout-editor.css'])
   await snapshot(`app/${name}`);
 await snapshot('public/brand/openpe-mark.svg', true);

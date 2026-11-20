@@ -9,7 +9,7 @@ import { importDocument, parseProject, serializeProject } from '../lib/project';
 import { symbolAnnotation, unitGraphics } from '../lib/library';
 import { child, children, num, parseSExpr, val, type SExpr } from '../lib/sexpr';
 import { prepareReferenceSimulation } from '../scripts/reference-simulation';
-import { spiceNets } from '../lib/spice';
+import { spiceNets } from '../plugins/spice-simulation/domain/spice';
 
 // Ignore only the two fields' placement. Everything else in the native document,
 // including property contents, visibility, pin mappings and library data, remains

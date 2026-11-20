@@ -6,7 +6,10 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { createCursorCredentialStore, credentialFile } = require('../electron/cursor-credential.cjs');
+const {
+  createCursorCredentialStore,
+  credentialFile,
+} = require('../electron/cursor-credential.cjs');
 
 const key = 'cursor_test_key_value_0001';
 
@@ -49,6 +52,17 @@ test('Cursor API key storage encrypts one file and reports only its suffix', asy
       safeStorage: memoryStorage(false),
     });
     await assert.rejects(unavailable.write(key), /encryption is unavailable/);
+    const plaintextBackend = createCursorCredentialStore({
+      directory,
+      safeStorage: { ...memoryStorage(), getSelectedStorageBackend: () => 'basic_text' },
+    });
+    await assert.rejects(plaintextBackend.write(key), /encryption is unavailable/);
+    await assert.rejects(plaintextBackend.read(), /encryption is unavailable/);
+    assert.equal(
+      await store.read(),
+      key,
+      'Unavailable keyring must preserve the encrypted credential.',
+    );
     await writeFile(store.file, Buffer.from('not-encrypted'));
     await assert.rejects(store.status(), /could not be decrypted/);
     await assert.rejects(store.read(), /could not be decrypted/);

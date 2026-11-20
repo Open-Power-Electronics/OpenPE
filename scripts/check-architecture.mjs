@@ -11,7 +11,15 @@ const ts = createRequire(import.meta.url)('typescript');
 // IPC authorization, runtime globals or whether a capability has been registered.
 const browserAreas = ['api', 'context', 'core', 'lib', 'app', 'components'];
 const hostAreas = new Set(['server', 'electron']);
-const sourceAreas = [...browserAreas, ...hostAreas];
+const sourceAreas = [...browserAreas, ...hostAreas, 'plugins'];
+const areaOf = (file) => {
+  if (!file.startsWith('plugins/')) return file.split('/')[0];
+  if (file.includes('/host/') || /plugins\/runtime\/(?:host|sandbox-worker)\.mjs$/.test(file))
+    return 'server';
+  if (file.includes('/electron/')) return 'electron';
+  if (file.includes('/renderer/') || file.endsWith('.tsx')) return 'components';
+  return 'lib';
+};
 const scriptFile = /\.(?:[cm]?[jt]sx?)$/i;
 const declarationFile = /\.d\.[cm]?ts$/i;
 const nodeOnly = new Set(['lib/default-examples.ts']);
@@ -21,8 +29,8 @@ const hostDeclarationSources = new Map([
   ['server/datasheet-format.d.mts', 'lib/example-datasheets.ts'],
   ['server/project-format.d.mts', 'lib/project.ts'],
   ['server/manufacturing-format.d.mts', 'lib/manufacturing-export.ts'],
-  ['server/spice-format.d.mts', 'lib/spice.ts'],
-  ['server/thermal-format.d.mts', 'lib/thermal.ts'],
+  ['plugins/spice-simulation/host/spice-format.d.mts', 'plugins/spice-simulation/domain/spice.ts'],
+  ['plugins/layout-thermal/host/thermal-format.d.mts', 'plugins/layout-thermal/domain/thermal.ts'],
   ['server/model-cad-format.d.mts', 'lib/model-cad.ts'],
   ['server/workspace-format.d.mts', 'lib/workspace-state.ts'],
 ]);
@@ -30,10 +38,12 @@ const coreAdapters = new Set(['lib/library-capabilities.ts']);
 const presentationAdapters = new Set([
   ...coreAdapters,
   'lib/provider-plugin-capabilities.ts',
-  'lib/simulation-capabilities.ts',
-  'lib/thermal-capabilities.ts',
+  'plugins/spice-simulation/renderer/simulation-capabilities.ts',
+  'plugins/layout-thermal/renderer/thermal-capabilities.ts',
   'lib/workbench-capabilities.ts',
   'lib/workbench-plugins.ts',
+  'plugins/runtime/capabilities.ts',
+  'plugins/runtime/client.ts',
   'lib/bridge.ts',
   'lib/source-editor.ts',
   'lib/download.ts',
@@ -214,7 +224,7 @@ export async function checkArchitecture(
   }
   const cache = ts.createModuleResolutionCache(root, canonical, options);
   for (const module of modules.values()) {
-    const area = module.file.split('/')[0];
+    const area = areaOf(module.file);
     for (const error of module.errors) report(module, error, 'syntax', error.message);
     for (const dependency of module.dependencies) {
       const specifier = dependency.specifier;
@@ -289,18 +299,23 @@ export async function checkArchitecture(
       dependency.module = modules.get(canonical(dependency.target));
       // JSON, styles and images are data assets rather than source dependency layers.
       if (!scriptFile.test(dependency.target)) continue;
-      const targetArea = dependency.target.split('/')[0];
+      const targetArea = areaOf(dependency.target);
       const adapterCore = area === 'lib' && coreAdapters.has(module.file) && targetArea === 'core';
       const declarationForward =
         dependency.typeOnly && hostDeclarationSources.get(module.file) === dependency.target;
       const nativeWriter =
         module.file === 'server/example-projects.mjs' &&
         dependency.target === 'electron/native-project.cjs';
+      // Shared immutable manifest data/validation has no live renderer or domain imports.
+      const pluginContract =
+        hostAreas.has(area) &&
+        ['plugins/catalog.mjs', 'plugins/runtime/manifest.mjs'].includes(dependency.target);
       if (
         !permittedAreas[area].has(targetArea) &&
         !adapterCore &&
         !declarationForward &&
-        !nativeWriter
+        !nativeWriter &&
+        !pluginContract
       )
         report(
           module,
@@ -337,7 +352,7 @@ export async function checkArchitecture(
       for (const dependency of module.dependencies) {
         if (dependency.typeOnly || !dependency.specifier) continue;
         if (dependency.target && !scriptFile.test(dependency.target)) continue;
-        const targetArea = dependency.target?.split('/')[0];
+        const targetArea = dependency.target ? areaOf(dependency.target) : undefined;
         const adapter = dependency.target && presentationAdapters.has(dependency.target);
         const forbidden =
           (targetArea && !permittedAreas[area].has(targetArea)) ||

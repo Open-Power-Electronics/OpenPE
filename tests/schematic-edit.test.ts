@@ -11,7 +11,7 @@ import {
 } from '../lib/circuit';
 import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
 import { extraSymbolAnnotations, partFields, symbolAnnotation } from '../lib/library';
-import { createExample } from '../lib/examples';
+import { parameterizedHomeProject } from './fixtures/model-parameters';
 import { visibleSchematicIds } from '../lib/schematic-view';
 import { defaultSchematicLayers } from '../lib/schematic-layers';
 import { createProject, exportKiCad, parseProject, serializeProject } from '../lib/project';
@@ -99,9 +99,9 @@ test('independent field movement preserves component pins, other fields, wires, 
 });
 
 test('simulation parameter text stays visible with values and moves independently through project and KiCad round trips', () => {
-  const project = createExample('kicad-buck');
+  const project = parameterizedHomeProject('PULSE');
   const before = structuredClone(project.schematic);
-  const part = before.parts.find((p) => p.ref === 'V101')!;
+  const part = before.parts.find((p) => p.ref === 'V1')!;
   const id = fieldId(part.id, 'Sim.Params');
   const at = extraSymbolAnnotations(part).find((field) => field.name === 'Sim.Params')!;
   assert.ok(
@@ -110,7 +110,7 @@ test('simulation parameter text stays visible with values and moves independentl
   );
   assert.ok(visibleSchematicIds(before, { ...defaultSchematicLayers, fields: false }).has(id));
   assert.ok(!visibleSchematicIds(before, { ...defaultSchematicLayers, values: false }).has(id));
-  const inductor = before.parts.find((p) => p.ref === 'L101')!;
+  const inductor = before.parts.find((p) => p.ref === 'L1')!;
   assert.ok(
     !visibleSchematicIds(before, defaultSchematicLayers).has(fieldId(inductor.id, 'Sim.Params')),
     'hidden parameters represented by Value do not appear twice',

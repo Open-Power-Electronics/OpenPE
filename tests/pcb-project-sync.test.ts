@@ -2,14 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ProjectCore } from '../core/project-core';
-import { createPart, emptyCircuit, pinPositions, uid } from '../lib/circuit';
+import {
+  createPart,
+  emptyCircuit,
+  parseCircuit,
+  pinPositions,
+  serializeCircuit,
+  uid,
+} from '../lib/circuit';
 import { ownProject, isOwnedProject } from '../lib/immutable-project';
-import { createProject, serializeProject } from '../lib/project';
+import { createProject, serializeProject, validateProject, type Project } from '../lib/project';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import { displayPartValue, partFields } from '../lib/library';
 import { PCBProjectSync, schematicPCBSourceFingerprint } from '../lib/pcb-project-sync';
-import { updatePCBFromSchematic } from '../lib/pcb-sync';
+import {
+  schematicPCBNets,
+  schematicPCBPhysicalNets,
+  updatePCBFromSchematic,
+} from '../lib/pcb-sync';
+import { prepareParasiticsStudy } from '../plugins/layout-parasitics/domain/study';
+import { saveAnnotation } from '../lib/schematic-edit';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
+import { runSchematicERC } from '../lib/schematic-erc';
 
 const detail = {
   id: 'Test:TwoPin',
@@ -33,6 +47,51 @@ function fixture(withBoard = false) {
     project.pcb = updatePCBFromSchematic(circuit, undefined, new Map([[detail.id, detail]])).board;
   return project;
 }
+
+test('numbered mechanical slots stay independent of same-number electrical pads through sync and replacement', () => {
+  const project = fixture();
+  const footprint = [
+    ...detail.footprint.slice(0, 3),
+    parseSExpr(
+      '(pad "1" np_thru_hole oval (at 5 3 90) (size 1 2) (drill oval 1 1.5) (layers "*.Mask"))',
+    ),
+    parseSExpr(
+      '(pad "MH2" np_thru_hole oval (at 5 9) (size 1 2) (drill oval 1 2) (layers "*.Mask"))',
+    ),
+    ...detail.footprint.slice(3),
+  ];
+  const sources = new Map([[detail.id, { ...detail, footprint }]]);
+  project.pcb = updatePCBFromSchematic(project.schematic, undefined, sources).board;
+  validateProject(project);
+  const [mechanical, second, pin] = project.pcb.footprints[0].pads;
+  assert.equal(mechanical.number, pin.number);
+  assert.equal(mechanical.netId, null);
+  assert.equal(second.number, 'MH2');
+  assert.ok(pin.netId);
+
+  project.schematic.labels[0].text = 'VIN';
+  const id = 'Test:Replacement';
+  const replacement = [...footprint.slice(0, 3), ...footprint.slice(3).reverse()];
+  replacement[1] = '"Replacement"';
+  sources.set(id, { id, footprint: replacement });
+  project.schematic.parts[0].fields!.Footprint = id;
+  project.pcb = updatePCBFromSchematic(project.schematic, project.pcb, sources).board;
+  validateProject(project);
+  const pads = project.pcb.footprints[0].pads;
+  assert.deepEqual(
+    pads.find((pad) => pad.id === mechanical.id),
+    mechanical,
+  );
+  assert.deepEqual(
+    pads.find((pad) => pad.id === second.id),
+    second,
+  );
+  assert.equal(pads.find((pad) => pad.id === pin.id)?.netId, pin.netId);
+  assert.equal(project.pcb.nets.find((net) => net.id === pin.netId)?.name, 'VIN');
+  const invalid = structuredClone(project);
+  invalid.pcb!.footprints[0].pads.find((pad) => pad.id === mechanical.id)!.netId = pin.netId;
+  assert.throws(() => validateProject(invalid), /mechanical pads cannot carry an electrical net/);
+});
 
 test('owned loaded boards reuse preparation while board and other-sheet edits stay authoritative', () => {
   const initial = fixture(true);
@@ -116,6 +175,195 @@ function nativeLM2596() {
     })),
   });
 }
+
+test('a native series parasitic model changes simulation topology while preserving PCB copper nets and one-step undo', () => {
+  const initial = nativeLM2596();
+  const sync = new PCBProjectSync(initial);
+  const core = new ProjectCore(initial, {
+    prepare: (next, previous) => sync.prepare(next, previous)?.project ?? next,
+  });
+  const before = core.getSnapshot().project!;
+  const originalFiles = core.getNativeFiles();
+  const result = prepareParasiticsStudy(before, {
+    boardId: before.pcb!.id,
+    schematicId: before.schematic.id,
+    startId: '4eb18015-a5ca-436c-95f8-a2e6ac45ec49',
+    endId: '6ddd3a08-31ff-42e9-bb51-3e362f1da33e',
+    copperThicknessMm: 0.035,
+    viaPlatingMm: 0.025,
+  });
+  assert.deepEqual(
+    schematicPCBPhysicalNets(result.project.schematic, result.project.pcb!),
+    schematicPCBPhysicalNets(before.schematic, before.pcb!),
+  );
+  assert.notDeepEqual(result.project.schematic.wires, before.schematic.wires);
+  assert.equal(
+    runSchematicERC(result.project.schematic).issues.filter(
+      (issue) => issue.ruleId === 'erc.net-name-conflict' && issue.message.includes('LP_'),
+    ).length,
+    0,
+    'Verified endpoint aliases do not conflict with the original rail name.',
+  );
+  assert.equal(core.commitProject(result.project), true);
+  assert.equal(core.getSnapshot().undoDepth, 1);
+  assert.equal(core.getSnapshot().project!.pcb, before.pcb);
+  assert.equal(sync.sources.size, 0);
+  const afterFiles = core.getNativeFiles();
+  for (const file of originalFiles.files.filter((file) => !file.name.endsWith('.kicad_sch')))
+    assert.equal(afterFiles.files.find((entry) => entry.name === file.name)!.source, file.source);
+  const reopened = projectFromNativeFiles(afterFiles);
+  assert.deepEqual(
+    schematicPCBPhysicalNets(reopened.schematic, reopened.pcb!),
+    schematicPCBPhysicalNets(before.schematic, before.pcb!),
+  );
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), originalFiles);
+  core.redo();
+  assert.deepEqual(core.getNativeFiles(), afterFiles);
+});
+
+function withVirtualIsland(project: Project): Project {
+  let island = emptyCircuit();
+  for (const id of ['Device:R', 'Device:L'])
+    if (project.schematic.libraries[id]) island.libraries[id] = project.schematic.libraries[id];
+  const resistor = createPart(island, 'R', 508, 508);
+  resistor.ref = 'R99';
+  const inductor = createPart(island, 'L', 533.4, 508);
+  inductor.ref = 'L99';
+  island.parts.push(resistor, inductor);
+  const [a, b] = pinPositions(resistor, island.libraries[resistor.libId]);
+  const [c, d] = pinPositions(inductor, island.libraries[inductor.libId]);
+  island.wires.push({ id: uid(), a: b, b: c });
+  island.labels.push(
+    { id: uid(), ...a, text: 'LP_TEST_1' },
+    { id: uid(), ...d, text: 'LP_TEST_2' },
+  );
+  island = parseCircuit(serializeCircuit(island));
+  for (const part of island.parts) child(part.raw!, 'on_board')![1] = 'no';
+  const original = project.schematic;
+  const schematic = saveAnnotation(
+    {
+      ...original,
+      parts: [...original.parts, ...island.parts],
+      wires: [...original.wires, ...island.wires],
+      labels: [...original.labels, ...island.labels],
+      libraries: { ...island.libraries, ...original.libraries },
+    },
+    'Simulation-only R/L study',
+    { x: 508, y: 533.4 },
+  ).circuit;
+  return { ...project, schematic };
+}
+
+test('same-sheet isolated virtual components preserve a loaded native board through Core and undo', async () => {
+  const project = nativeLM2596();
+  const sync = new PCBProjectSync(project);
+  const core = new ProjectCore(project, {
+    prepare: (next) => sync.prepare(next)?.project ?? next,
+  });
+  const before = core.getSnapshot();
+  const original = core.getNativeFiles();
+  const next = withVirtualIsland(before.project!);
+  assert.notEqual(
+    schematicPCBSourceFingerprint(next),
+    schematicPCBSourceFingerprint(before.project!),
+  );
+  assert.ok(schematicPCBNets(next.schematic).some((net) => net.name === 'LP_TEST_1'));
+  assert.equal(core.commitProject(next), true);
+  const after = core.getSnapshot();
+  assert.equal(after.undoDepth, 1);
+  assert.equal(after.project!.schematic.id, before.project!.schematic.id);
+  assert.equal(after.project!.pcb, before.project!.pcb);
+  assert.equal(sync.sources.size, 0);
+  assert.equal(
+    core.getNativeFiles().files.find((file) => file.name.endsWith('.kicad_pcb'))!.source,
+    original.files.find((file) => file.name.endsWith('.kicad_pcb'))!.source,
+  );
+  let loads = 0;
+  assert.equal(
+    (
+      await sync.resolve(
+        after.project!,
+        async () => {
+          loads++;
+          return detail;
+        },
+        new AbortController().signal,
+      )
+    ).project,
+    after.project,
+  );
+  assert.equal(loads, 0);
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), original);
+  core.redo();
+  assert.equal(core.getSnapshot().project!.pcb, before.project!.pcb);
+});
+
+test('physical updates ignore isolated no-board nets before and after a physical rail rename', () => {
+  const original = fixture(true);
+  const next = withVirtualIsland(original);
+  const first = updatePCBFromSchematic(next.schematic, original.pcb!, new Map());
+  assert.equal(first.changed, false);
+  assert.equal(first.board, original.pcb);
+  next.schematic.labels.find((label) => label.text === 'IN')!.text = 'VIN';
+  const second = updatePCBFromSchematic(next.schematic, first.board, new Map());
+  assert.ok(second.board.nets.some((net) => net.name === 'VIN'));
+  assert.ok(!second.board.nets.some((net) => net.name.startsWith('LP_')));
+  const third = updatePCBFromSchematic(next.schematic, second.board, new Map());
+  assert.equal(third.changed, false);
+  assert.equal(third.board, second.board);
+});
+
+test('a no-board terminal label connected to a physical pin still synchronizes its rail name', () => {
+  const project = withVirtualIsland(fixture());
+  const physical = project.schematic.parts[0];
+  const virtual = project.schematic.parts.find((part) => part.ref === 'R99')!;
+  const physicalPin = pinPositions(physical, project.schematic.libraries[physical.libId])[0];
+  const virtualPin = pinPositions(virtual, project.schematic.libraries[virtual.libId])[0];
+  project.schematic.labels = project.schematic.labels.filter((label) => label.text !== 'IN');
+  project.schematic.wires.push({ id: uid(), a: physicalPin, b: virtualPin });
+  project.pcb = updatePCBFromSchematic(
+    project.schematic,
+    undefined,
+    new Map([[detail.id, detail]]),
+  ).board;
+  assert.ok(project.pcb.nets.some((net) => net.name === 'LP_TEST_1'));
+  const sync = new PCBProjectSync(project);
+  const changed = structuredClone(project);
+  changed.schematic.labels.find((label) => label.text === 'LP_TEST_1')!.text = 'VIN';
+  const result = sync.prepare(ownProject(changed))!;
+  assert.notEqual(result.project.pcb, project.pcb);
+  assert.ok(result.project.pcb!.nets.some((net) => net.name === 'VIN'));
+  assert.ok(!result.project.pcb!.nets.some((net) => net.name === 'LP_TEST_2'));
+});
+
+test('physical equivalence never hides package, geometry or pin-library changes', () => {
+  const project = ownProject(fixture(true));
+  const changed = withVirtualIsland(project);
+  const sync = new PCBProjectSync(project);
+  assert.equal(sync.prepare(ownProject(changed))!.project.pcb, project.pcb);
+  const assignment = structuredClone(changed);
+  assignment.schematic.parts[0].fields!.Footprint = 'Test:Other';
+  assert.equal(sync.prepare(ownProject(assignment)), null);
+  const geometry = structuredClone(changed);
+  geometry.schematic.parts[0].x += 1.27;
+  assert.notEqual(sync.prepare(ownProject(geometry))!.project.pcb, project.pcb);
+  const library = structuredClone(changed);
+  const unit = children(library.schematic.libraries['Device:R'], 'symbol').find(
+    (symbol) => children(symbol, 'pin').length,
+  )!;
+  child(children(unit, 'pin')[0], 'at')![1] = '1.27';
+  assert.notEqual(sync.prepare(ownProject(library))!.project.pcb, project.pcb);
+});
+
+test('a loaded board remains viewable when its unchanged schematic cannot compile physical nets', () => {
+  const project = fixture(true);
+  project.schematic.labels.push({ ...project.schematic.labels[0], id: uid(), text: 'CONFLICT' });
+  assert.throws(() => schematicPCBNets(project.schematic), /conflicting names/);
+  const sync = new PCBProjectSync(project);
+  assert.equal(sync.prepare(project)!.project, project);
+});
 
 test('native LM2596 Value edits retain source net aliases, copper, fills and packages in one undo', () => {
   const project = nativeLM2596();

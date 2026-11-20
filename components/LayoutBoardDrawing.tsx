@@ -37,7 +37,11 @@ export const LayoutTrackDrawing = memo(function LayoutTrackDrawing({
         strokeWidth={track.width}
         aria-hidden="true"
       />
-      <PCBSelectionPaint color={pcbLayerColor(track.layer)} selected={selected}>
+      <PCBSelectionPaint
+        color={pcbLayerColor(track.layer)}
+        selected={selected}
+        locked={track.locked}
+      >
         {(color) => (
           <line
             x1={track.start.x}
@@ -83,7 +87,7 @@ export const LayoutViaDrawing = memo(function LayoutViaDrawing({
         fill="transparent"
         aria-hidden="true"
       />
-      <PCBSelectionPaint color="var(--pcb-through)" selected={selected}>
+      <PCBSelectionPaint color="var(--pcb-through)" selected={selected} locked={via.locked}>
         {(color) => <circle cx={via.x} cy={via.y} r={via.diameter / 2} fill={color} />}
       </PCBSelectionPaint>
       {!deferDrills && <circle cx={via.x} cy={via.y} r={via.drill / 2} fill="var(--pcb-hole)" />}
@@ -118,6 +122,7 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
   ownerId,
   path,
   preview,
+  locked,
   selection,
   highlightNets,
 }: Paint & {
@@ -126,6 +131,7 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
   netId: string | null;
   ownerId: string;
   path: string;
+  locked?: boolean;
   preview?: {
     id: string;
     outline: string;
@@ -163,7 +169,7 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
           </mask>
         </defs>
       )}
-      <PCBSelectionPaint color={pcbLayerColor(layer, true)} selected={selected}>
+      <PCBSelectionPaint color={pcbLayerColor(layer, true)} selected={selected} locked={locked}>
         {(color, selection) => (
           <path
             data-copper-zone={selection ? undefined : zoneId}
@@ -184,12 +190,14 @@ export const LayoutZoneOutlineDrawing = memo(function LayoutZoneOutlineDrawing({
   layer,
   path,
   target,
+  locked,
   selection,
 }: {
   zoneId: string;
   layer: BoardLayer;
   path: string;
   target?: string;
+  locked?: boolean;
   selection: LayoutSelection;
 }) {
   const selected = useLayoutSelection(selection, zoneId);
@@ -205,7 +213,7 @@ export const LayoutZoneOutlineDrawing = memo(function LayoutZoneOutlineDrawing({
           data-export-exclude
         />
       )}
-      <PCBSelectionPaint color={pcbLayerColor(layer)} selected={selected}>
+      <PCBSelectionPaint color={pcbLayerColor(layer)} selected={selected} locked={locked}>
         {(color) => (
           <path
             d={path}
@@ -235,7 +243,11 @@ export const LayoutGraphicDrawing = memo(function LayoutGraphicDrawing({
       <g data-layout-graphic-target={graphic.width} aria-hidden="true">
         <PCBGraphic graphic={graphic} color="transparent" width={graphic.width} />
       </g>
-      <PCBSelectionPaint color={pcbLayerColor(graphic.layer)} selected={selected}>
+      <PCBSelectionPaint
+        color={pcbLayerColor(graphic.layer)}
+        selected={selected}
+        locked={graphic.locked}
+      >
         {(color) => (
           <PCBGraphic
             graphic={graphic}

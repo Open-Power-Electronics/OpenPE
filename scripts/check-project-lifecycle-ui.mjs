@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+
 import { fillSource, readSource } from './source-editor-test-helpers.mjs';
 
 // Isolated real React editors with in-memory native/service adapters only.
@@ -17,6 +18,7 @@ const { switchingStageFixture } = await tsImport(
   '../tests/fixtures/switching-stage.ts',
   import.meta.url,
 );
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const files = projectNativeFiles(createProject(), 'circuit.kicad_pro');
 const project = projectFromNativeFiles(files);
 project.name = 'Power stage';
@@ -40,7 +42,7 @@ let recovery = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: defaultAgentPreferences.models,
 };
 const entry = async (contents, name) =>
   build({
@@ -60,7 +62,7 @@ const [workspaceBundle, simulationBundle] = await Promise.all([
   ),
   entry(
     `import React,{useState,useRef} from 'react';import{createRoot}from'react-dom/client';
-     import Simulation from './components/SimulationDialog';
+     import Simulation from './plugins/spice-simulation/renderer/SimulationDialog';
      const project=${JSON.stringify(createProject(switchingStageFixture()))};
      function Harness(){const[visible,setVisible]=useState(true);const settings=useRef(null);
        const waveforms=useRef(null);const context=useRef(null);
@@ -109,6 +111,10 @@ try {
         window.lifecycleGrants.push(grant);
         return grant;
       },
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -147,7 +153,9 @@ try {
   };
   await page.getByTestId('schematic-canvas').waitFor();
   await rename('Power stage review');
-  await page.getByRole('tab', { name: /^Power stage review(?:,|$)/ }).waitFor();
+  await navigation()
+    .getByRole('button', { name: /^Power stage review, Project 1(?:,|$)/ })
+    .waitFor();
   assert.equal(await navigation().count(), 1);
   await button('Source').click();
   const originalText = await readSource(page);

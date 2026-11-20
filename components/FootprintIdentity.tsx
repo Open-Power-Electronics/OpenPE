@@ -1,5 +1,6 @@
 'use client';
 
+import { PadDrillGraphic } from './PadDrillGraphic';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Footprint } from '@/lib/pcb';
 import { pcbPadPath } from '@/lib/pcb-geometry';
@@ -69,14 +70,7 @@ export default function FootprintIdentity({
                 ) : (
                   <path d={pcbPadPath(pad)} />
                 )}
-                {pad.drill && (
-                  <circle
-                    cx={pad.drillOffset?.x ?? 0}
-                    cy={pad.drillOffset?.y ?? 0}
-                    r={pad.drill / 2}
-                    fill="var(--panel)"
-                  />
-                )}
+                {pad.drill && <PadDrillGraphic pad={pad} fill="var(--panel)" />}
               </g>
             ))}
           </g>

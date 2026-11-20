@@ -3,21 +3,16 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SpiceDeck } from '../lib/spice';
+import type { SpiceDeck } from '../plugins/spice-simulation/domain/spice';
 import { createProject, serializeProject } from '../lib/project';
-import { defaultTransient } from '../lib/spice';
-import { adaptSpiceModels } from '../server/spice-model-adapters.mjs';
-import { registerSpice } from '../server/spice.mjs';
+import { defaultTransient } from '../plugins/spice-simulation/domain/spice';
+import { adaptSpiceModels } from '../plugins/spice-simulation/host/spice-model-adapters.mjs';
+import { registerSpice } from '../plugins/spice-simulation/host/spice.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
 
 const id = 'reference-lmr70503';
 const digest = '1d661a243a8a44cab8f6e67448dfdafcc96249dea54f35927b25283e01e7aba9';
-const preparedModel = path.resolve(
-  'examples',
-  'lmr70503-bga8-buckboost',
-  'circuits',
-  'LMR70503.lib',
-);
+const preparedModel = path.resolve('examples', 'lmr70503-bga8-buckboost', 'models', 'LMR70503.lib');
 const deck = (): SpiceDeck => ({
   modelIds: [id],
   compatibility: 'ps',
@@ -166,7 +161,14 @@ test('simulation route rejects renderer adapter flags and private netlists befor
     {
       get() {},
       post(route: string, callback: typeof handler) {
-        assert.ok(['/api/simulation/transient', '/api/simulation/result'].includes(route));
+        assert.ok(
+          [
+            '/api/simulation/transient',
+            '/api/simulation/result',
+            '/api/simulation/ti-model',
+            '/api/simulation/ti-model-search',
+          ].includes(route),
+        );
         if (route === '/api/simulation/transient') handler = callback;
       },
     },

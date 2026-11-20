@@ -1,9 +1,12 @@
 'use client';
 import CanvasContextMenu, { type CanvasMenuAction } from './CanvasContextMenu';
+import type { ModelComponentFocus } from './component-highlight';
+import { useModelPanelFind, modelFindChangedEvent, type ModelFindTarget } from './model-panel-find';
 import { createPortal } from 'react-dom';
 import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
+import WorkspaceLoading from './WorkspaceLoading';
 import PropertyDeleteButton from './PropertyDeleteButton';
 import { PropertyActionRow } from './PropertyTabs';
 import { NumberField } from './LayoutPropertyFields';
@@ -81,14 +84,17 @@ import { pcbSilkscreen } from '@/lib/pcb-silkscreen';
 import { pcbStrokeText } from '@/lib/pcb-stroke-text';
 import { solderMaskOpenings } from '@/lib/pcb-solder-mask';
 import { saveDrawingPNG } from '@/lib/drawing-export';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { previewFootprint, previewModel, type PreviewFootprint } from '@/lib/pcb-preview-cache';
 import { modelPlacement, resolveFootprintModels } from '@/lib/pcb-models';
-import { pcbBounds, footprintPoint, padDrillPosition, createEmptyPCB } from '@/lib/pcb-layout';
+import { pcbBounds, footprintPoint, createEmptyPCB } from '@/lib/pcb-layout';
 import { padCopperLayers } from '@/lib/pcb-connectivity';
+import { padHasElectricalPin } from '@/lib/pcb-pad-role';
 import { copperFillOpacity } from '@/lib/pcb-display';
 import {
   modelBoardPolygons,
   circlePolygon,
+  padDrillPolygon,
   filledCopperPolygons,
   graphicPolygons,
   padPolygon,
@@ -219,6 +225,7 @@ function PCBModelPreview({
   viewState,
   schematic: latestSchematic,
   active = true,
+  visible = true,
   readOnly = false,
   grid = true,
   gridSpacing = 5,
@@ -249,6 +256,8 @@ function PCBModelPreview({
   onToggleSidebar,
   onModelChecksChange,
   modelCheckFocus,
+  getComponentActions,
+  componentFocus,
 }: {
   board: PCB;
   fileId?: string;
@@ -287,6 +296,8 @@ function PCBModelPreview({
   onToggleSidebar?: () => void;
   onModelChecksChange?: (report: ModelCheckReport) => void;
   modelCheckFocus?: ModelCheckFocus | null;
+  getComponentActions?: (id: string) => CanvasMenuAction[];
+  componentFocus?: ModelComponentFocus | null;
 }) {
   const sceneImplementation = modelViewImplementation(viewState);
   const gridOptions = useRef({ visible: grid, spacing: gridSpacing });
@@ -342,6 +353,10 @@ function PCBModelPreview({
   const host = useRef<HTMLDivElement>(null),
     fit = useRef(() => {});
   const locateFootprint = useRef<(_: string) => void>(() => {});
+  const locateSolid = useRef<(_: string) => boolean>(() => false);
+  const searchableSolids = useRef<() => Set<string>>(() => new Set());
+  const searchableFootprints = useRef<() => Set<string>>(() => new Set());
+  const modelFindBoard = useRef<PCB | null>(null);
   const issueComposition = useRef(false);
   function previewNavigationBlocked() {
     const element = host.current;
@@ -460,7 +475,19 @@ function PCBModelPreview({
   displayRef.current = boardDisplay;
   const redraw = useRef(() => {});
   const applyDisplay = useRef(() => {});
-  const exportPNG = useRef<() => Promise<void>>(async () => {});
+  const exportPNG = useRef<((check: () => void) => Promise<string | null>) | null>(null);
+  const saveImage = useDrawingImageExport(
+    readOnly ? undefined : capabilityHost,
+    'Model',
+    revision,
+    active && visible && ready && !failed && !sourcePending,
+    setExporting,
+    async (check) => {
+      if (!exportPNG.current) throw new Error('The 3D preview is not ready.');
+      setExportStatus('');
+      return exportPNG.current(check);
+    },
+  );
   const modelsVisibleRef = useRef(modelsVisible);
   modelsVisibleRef.current = modelsVisible;
   const models = useRef(new THREE.Group());
@@ -674,6 +701,14 @@ function PCBModelPreview({
     cadVisible,
     cadSelectable,
   };
+  const annotationSelection = useRef<string[]>([]);
+  const selectAnnotation = useCallback((ids: string[]) => {
+    annotationSelection.current = ids;
+    setSelection(
+      ids.filter((id) => !cadState.current.modelCad?.objects.some((body) => body.id === id)),
+    );
+    redraw.current();
+  }, []);
   function changeModelFilters(next: ModelCadSelectionFilters) {
     if (cad.selectionBlocked) return;
     if (
@@ -933,6 +968,7 @@ function PCBModelPreview({
           if (host.current) host.current.dataset.cadObjects = String(cadGroup.children.length);
           updateAnnotationView.current();
           redraw.current();
+          host.current?.dispatchEvent(new Event(modelFindChangedEvent));
         }),
       onError: (message) => {
         cadImportError = message;
@@ -1039,9 +1075,7 @@ function PCBModelPreview({
             new THREE.Vector3(boardFrame.max.x, -boardFrame.min.y, 0),
           );
       const holes: Polygon[] = board.footprints.flatMap((f) =>
-        f.pads
-          .filter((p) => p.drill)
-          .map((p) => ({ outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2), holes: [] })),
+        f.pads.filter((p) => p.drill).map((p) => ({ outer: padDrillPolygon(f, p), holes: [] })),
       );
       holes.push(...board.vias.map((v) => ({ outer: circlePolygon(v, v.drill / 2), holes: [] })));
       const body = subtractPolygons(boundary, holes);
@@ -1300,7 +1334,7 @@ function PCBModelPreview({
           await yieldBuild();
           estimateTask = performance.now();
         }
-        if (!footprint.pads.some((p) => p.type !== 'np_thru_hole')) continue;
+        if (!footprint.pads.some(padHasElectricalPin)) continue;
         const drawings = footprint.graphics.filter(
           (g) => !g.text && (g.layer.endsWith('.Fab') || g.layer.endsWith('.CrtYd')),
         );
@@ -1392,6 +1426,23 @@ function PCBModelPreview({
       let shadersReady = false;
       const clippingSphere = new THREE.Sphere();
       const clippingBounds = new THREE.Box3();
+      const canAnnotateCad = () => cadGroup.visible && modelsSelectableRef.current;
+      const annotationSolids = () =>
+        canAnnotateCad()
+          ? cadGroup.children.filter((object) => object.visible && !object.userData.modelCadPending)
+          : [];
+      const annotationMeshes = (ids: string[]) => {
+        if (!ids.length) return [];
+        const selected = new Set(ids);
+        return [
+          ...(components.visible && modelsSelectableRef.current
+            ? components.children.filter(
+                (object) => object.visible && selected.has(object.userData.footprintId),
+              )
+            : []),
+          ...annotationSolids().filter((object) => selected.has(object.userData.modelCadId)),
+        ];
+      };
       const drawScene = (
         selected: THREE.Object3D[] = [],
         moving = false,
@@ -1602,13 +1653,7 @@ function PCBModelPreview({
           }
           try {
             drawScene(
-              annotatingRef.current && components.visible
-                ? components.children.filter(
-                    (object) =>
-                      object.visible &&
-                      selectionRef.current.ids.includes(object.userData.footprintId),
-                  )
-                : [],
+              annotatingRef.current ? annotationMeshes(annotationSelection.current) : [],
               Boolean(changing || pressedPointers.current.size),
               false,
               !updateView,
@@ -1654,7 +1699,7 @@ function PCBModelPreview({
             'The render changed or was stopped. Try exporting the current view again.',
           );
       };
-      const waitForRender = async () => {
+      const waitForRender = async (check?: () => void) => {
         requireCaptureView();
         if (!renderEnabledRef.current) return;
         const importEpoch = renderEpoch;
@@ -1665,6 +1710,7 @@ function PCBModelPreview({
               'Model import failed. Retry the failed models before exporting Render.',
             );
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          check?.();
           requireCaptureView();
           if (!renderEnabledRef.current || importEpoch !== renderEpoch)
             throw new Error(
@@ -1681,6 +1727,7 @@ function PCBModelPreview({
         scheduleRender();
         while (!studioComplete) {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          check?.();
           if (
             control.signal.aborted ||
             !activeRef.current ||
@@ -1829,6 +1876,22 @@ function PCBModelPreview({
         resize();
         applyView('isometric', center, distance);
       };
+      const focusBounds = (bounds: THREE.Box3) => {
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
+        const aspect = (host.current?.clientWidth || 1) / (host.current?.clientHeight || 1);
+        const height = Math.max(20, Math.max(size.x / aspect, size.y, size.z) * 2.4);
+        const damping = orbit!.enableDamping;
+        orbit!.enableDamping = false;
+        orbit!.update();
+        camera.position.add(center.clone().sub(orbit!.target));
+        orbit!.target.copy(center);
+        zoom.current(visibleHeight() / height);
+        orbit!.enableDamping = damping;
+        clippingBoundsDirty.current = true;
+        saveView();
+        render();
+      };
       locateFootprint.current = (id) => {
         const footprint = board.footprints.find((item) => item.id === id);
         if (!footprint || !activeRef.current) return;
@@ -1846,20 +1909,38 @@ function PCBModelPreview({
             new THREE.Vector3(box.maxX, -box.minY, z),
           );
         }
-        const center = bounds.getCenter(new THREE.Vector3());
-        const size = bounds.getSize(new THREE.Vector3());
-        const aspect = (host.current?.clientWidth || 1) / (host.current?.clientHeight || 1);
-        const height = Math.max(20, Math.max(size.x / aspect, size.y, size.z) * 2.4);
-        const damping = orbit!.enableDamping;
-        orbit!.enableDamping = false;
-        orbit!.update();
-        camera.position.add(center.clone().sub(orbit!.target));
-        orbit!.target.copy(center);
-        zoom.current(visibleHeight() / height);
-        orbit!.enableDamping = damping;
-        clippingBoundsDirty.current = true;
-        saveView();
-        render();
+        focusBounds(bounds);
+      };
+      searchableSolids.current = () =>
+        new Set(
+          cadGroup.visible
+            ? cadGroup.children
+                .filter((child) => child.visible && !child.userData.modelCadPending)
+                .map((child) => child.userData.modelCadId as string)
+            : [],
+        );
+      modelFindBoard.current = board;
+      searchableFootprints.current = () =>
+        new Set(
+          components.visible
+            ? components.children
+                .filter((child) => child.visible)
+                .map((child) => child.userData.footprintId as string)
+            : [],
+        );
+      locateSolid.current = (id) => {
+        const object = cadGroup.children.find((child) => child.userData.modelCadId === id);
+        if (
+          !activeRef.current ||
+          !cadGroup.visible ||
+          !object?.visible ||
+          object.userData.modelCadPending
+        )
+          return false;
+        const bounds = modelVisibleBounds(object);
+        if (bounds.isEmpty()) return false;
+        focusBounds(bounds);
+        return true;
       };
       orient.current = (direction) => {
         const target = orbit!.target.clone();
@@ -2111,35 +2192,44 @@ function PCBModelPreview({
           : null;
       };
       const pick = (point: { x: number; y: number }) => {
-        return pickAt(point, {
-          cad: false,
+        const hit = pickAt(point, {
+          cad: canAnnotateCad(),
           components: modelsSelectableRef.current,
-        }).footprint;
+        });
+        return hit.cad?.id ?? hit.footprint;
       };
       pickAnnotation.current = pick;
       updateAnnotationView.current = () => {
         if (!host.current || !renderer || !annotatingRef.current) return;
         const ratio = host.current.clientHeight / host.current.clientWidth;
         const elements: ObjectAnnotationView['elements'] = [];
+        const projectBounds = (object: THREE.Object3D) => {
+          const box = new THREE.Box3().setFromObject(object);
+          if (box.isEmpty()) return null;
+          const points = [box.min.x, box.max.x].flatMap((x) =>
+            [box.min.y, box.max.y].flatMap((y) =>
+              [box.min.z, box.max.z].map((z) => new THREE.Vector3(x, y, z).project(camera)),
+            ),
+          );
+          const x = Math.max(0, Math.min(...points.map((p) => (p.x + 1) * 500)));
+          const y = Math.max(0, Math.min(...points.map((p) => (1 - p.y) * 500 * ratio)));
+          const width = Math.min(1000, Math.max(...points.map((p) => (p.x + 1) * 500))) - x;
+          const height =
+            Math.min(1000 * ratio, Math.max(...points.map((p) => (1 - p.y) * 500 * ratio))) - y;
+          return width > 0 && height > 0 ? { x, y, width, height } : null;
+        };
+        for (const object of annotationSolids()) {
+          const bounds = projectBounds(object);
+          if (bounds) elements.push({ id: object.userData.modelCadId, bounds, pointOnly: true });
+        }
         if (components.visible && modelsSelectableRef.current)
           for (const object of components.children) {
             if (!object.visible || !object.userData.footprintId) continue;
-            const box = new THREE.Box3().setFromObject(object);
-            if (box.isEmpty()) continue;
-            const points = [box.min.x, box.max.x].flatMap((x) =>
-              [box.min.y, box.max.y].flatMap((y) =>
-                [box.min.z, box.max.z].map((z) => new THREE.Vector3(x, y, z).project(camera)),
-              ),
-            );
-            const x = Math.max(0, Math.min(...points.map((p) => (p.x + 1) * 500)));
-            const y = Math.max(0, Math.min(...points.map((p) => (1 - p.y) * 500 * ratio)));
-            const width = Math.min(1000, Math.max(...points.map((p) => (p.x + 1) * 500))) - x;
-            const height =
-              Math.min(1000 * ratio, Math.max(...points.map((p) => (1 - p.y) * 500 * ratio))) - y;
+            const bounds = projectBounds(object);
+            if (!bounds) continue;
+            const { x, y, width, height } = bounds;
             const id = object.userData.footprintId as string;
             if (
-              width > 0 &&
-              height > 0 &&
               [
                 [0.5, 0.5],
                 [0.25, 0.25],
@@ -2157,7 +2247,7 @@ function PCBModelPreview({
                   width: Math.max(x + width, b.x + b.width) - Math.min(x, b.x),
                   height: Math.max(y + height, b.y + b.height) - Math.min(y, b.y),
                 };
-              } else elements.push({ id, bounds: { x, y, width, height } });
+              } else elements.push({ id, bounds });
             }
           }
         const basis = pcbObjectViewFingerprint({
@@ -2206,15 +2296,7 @@ function PCBModelPreview({
         try {
           return selectionPaint.withoutSelection(() =>
             cadPaint.withoutSelection(() => {
-              drawScene(
-                components.visible
-                  ? components.children.filter(
-                      (object) => object.visible && ids.includes(object.userData.footprintId),
-                    )
-                  : [],
-                false,
-                true,
-              );
+              drawScene(annotationMeshes(ids), false, true);
               return captureObjectAnnotationImage(renderer!.domElement, bounds, markup);
             }),
           );
@@ -2238,10 +2320,11 @@ function PCBModelPreview({
         render();
       };
       applyDisplay.current();
-      exportPNG.current = async () => {
-        if (!renderer) return;
+      exportPNG.current = async (check) => {
+        if (!renderer) throw new Error('The 3D preview is not ready.');
         if (!annotatingRef.current && !renderEnabledRef.current) orbit?.update();
-        await waitForRender();
+        await waitForRender(check);
+        check();
         requireCaptureView();
         const previewVisible = previewGroup.visible;
         const sketchVisible = sketchGroup.visible;
@@ -2286,6 +2369,7 @@ function PCBModelPreview({
         render();
         const name = await saveDrawingPNG(image, schematicRef.current?.title ?? 'board');
         if (name && !control.signal.aborted) setExportStatus(`Exported ${name}`);
+        return name;
       };
       await prepareModelShaders({
         compile: () => renderer!.compileAsync(scene, camera),
@@ -2485,6 +2569,10 @@ function PCBModelPreview({
       renderer?.domElement.remove();
       fit.current = () => {};
       locateFootprint.current = () => {};
+      locateSolid.current = () => false;
+      searchableSolids.current = () => new Set();
+      searchableFootprints.current = () => new Set();
+      modelFindBoard.current = null;
       zoom.current = () => {};
       orient.current = () => {};
       redraw.current = () => {};
@@ -2518,7 +2606,7 @@ function PCBModelPreview({
       applyProjection.current = () => {};
       applyRenderMode.current = () => {};
       updateActivity.current = () => {};
-      exportPNG.current = async () => {};
+      exportPNG.current = null;
       updateAnnotationView.current = () => {};
       pickAnnotation.current = () => null;
       captureAnnotation.current = async () => {
@@ -2572,6 +2660,68 @@ function PCBModelPreview({
     />
   );
   const interacting = !measuring && !annotating && !cad.tool && !cad.pan;
+  useModelPanelFind(
+    host,
+    () => {
+      if (
+        !active ||
+        !visible ||
+        !ready ||
+        failed ||
+        readOnly ||
+        board !== latestBoard ||
+        modelFindBoard.current !== board
+      )
+        return [];
+      const targets: ModelFindTarget[] = [];
+      if (modelsVisible && modelsSelectable) {
+        const parts = new Map(schematic?.parts.map((part) => [part.id, part]));
+        const rendered = searchableFootprints.current();
+        for (const footprint of board.footprints) {
+          if (
+            !rendered.has(footprint.id) &&
+            !footprint.pads.some((pad) => pad.type === 'np_thru_hole')
+          )
+            continue;
+          const part = parts.get(footprint.symbolId ?? '');
+          targets.push({
+            kind: 'footprint',
+            id: footprint.id,
+            label: [
+              part?.ref ?? footprint.reference ?? '',
+              part?.value ?? footprint.value ?? '',
+              footprint.libraryId,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          });
+        }
+      }
+      if (cadVisible && selectionFilters.bodies) {
+        const rendered = searchableSolids.current();
+        for (const object of modelCad?.objects ?? [])
+          if (object.opacity > 0 && rendered.has(object.id))
+            targets.push({
+              kind: 'solid',
+              id: object.id,
+              label: `${object.name} · ${object.kind}`,
+            });
+      }
+      return targets;
+    },
+    (target) => {
+      if (sourcePending || !interacting || cad.selectionBlocked || previewNavigationBlocked())
+        return;
+      if (target.kind === 'solid') {
+        if (locateSolid.current(target.id)) cad.select(target.id);
+      } else {
+        cad.select(null);
+        setBoardSelected(false);
+        setSelection([target.id]);
+        locateFootprint.current(target.id);
+      }
+    },
+  );
   const interactionDisabled = cad.selectionBlocked;
   const issueNavigationBlocked =
     sourcePending ||
@@ -2596,6 +2746,55 @@ function PCBModelPreview({
     locateFootprint.current(id);
     return true;
   }
+  const handledComponentFocus = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      !componentFocus ||
+      handledComponentFocus.current === componentFocus.request ||
+      !active ||
+      !ready ||
+      failed ||
+      componentFocus.board !== board
+    )
+      return;
+    handledComponentFocus.current = componentFocus.request;
+    if (
+      readOnly ||
+      sourcePending ||
+      cad.selectionBlocked ||
+      cad.tool ||
+      measuring ||
+      annotating ||
+      previewNavigationBlocked()
+    ) {
+      setExportStatus('Finish the current Model tool or draft before highlighting a component.');
+      return;
+    }
+    if (!board.footprints.some((footprint) => footprint.id === componentFocus.footprintId)) return;
+    cad.select(null);
+    setBoardSelected(false);
+    if (modelsVisible && modelsSelectable) setSelection([componentFocus.footprintId]);
+    else
+      setExportStatus(
+        'Component located. Show models and enable component selection to display its highlight.',
+      );
+    locateFootprint.current(componentFocus.footprintId);
+    host.current?.focus({ preventScroll: true });
+  }, [
+    componentFocus,
+    board,
+    active,
+    ready,
+    failed,
+    readOnly,
+    sourcePending,
+    cad.selectionBlocked,
+    cad.tool,
+    measuring,
+    annotating,
+    modelsVisible,
+    modelsSelectable,
+  ]);
   useEffect(() => {
     const complete =
       completedCheckBasis.current?.board === board &&
@@ -2718,7 +2917,7 @@ function PCBModelPreview({
     <span className="pcb-model-status" role="status">
       Exporting image…
     </span>
-  ) : status && !failed ? (
+  ) : status && !failed && ready ? (
     status === componentLoadingStatus ? (
       <ModelLoadingStatus progress={loadingProgress} update={updateLoadingProgress} />
     ) : (
@@ -2730,6 +2929,8 @@ function PCBModelPreview({
   const contextHasSelection = Boolean(selection.length || boardSelected || cad.selection.length);
   const contextToolActive = Boolean(cad.tool || cad.pan || measuring || annotating);
   const contextActions: CanvasMenuAction[] = measuring || annotating ? [] : [...cad.contextActions];
+  if (interacting && selectedFootprint && selection.length === 1 && getComponentActions)
+    contextActions.push(...getComponentActions(selectedFootprint.id));
   if (interacting && (boardSelected || (selectedFootprint && selection.length === 1)))
     contextActions.push({
       id: 'properties',
@@ -2805,6 +3006,11 @@ function PCBModelPreview({
             </div>
           )}
           <div className="pcb-object-stage">
+            {!ready && !failed && (
+              <div className="model-loading-overlay">
+                <WorkspaceLoading panel label="Loading 3D board" />
+              </div>
+            )}
             {!readOnly && cad.placementPanel}
             {!readOnly && cad.error}
             <div
@@ -2816,6 +3022,16 @@ function PCBModelPreview({
               data-cad-tool={cad.tool ?? 'select'}
               data-cad-selected-edges={cad.edgeSelection?.ids.length ?? 0}
               data-cad-selection-count={cad.selection.length}
+              data-cad-delete-available={
+                !readOnly &&
+                !sourcePending &&
+                !measuring &&
+                !cad.tool &&
+                !cad.selectionBlocked &&
+                cad.selectedBodyIds.length === 1
+                  ? 'true'
+                  : undefined
+              }
               data-sketch-plane={cad.sketch?.plane}
               data-sketch-phase={cad.sketchPhase ?? undefined}
               style={{
@@ -3126,13 +3342,14 @@ function PCBModelPreview({
               <PCB3DAnnotations
                 board={board}
                 schematic={schematic}
+                modelCad={modelCad}
                 active={active && annotating && ready && !failed && !annotationProps.disabled}
                 view={annotationView}
                 {...annotationProps}
                 pick={(point) => pickAnnotation.current(point)}
                 captureImage={(...args) => captureAnnotation.current(...args)}
                 onExit={() => setAnnotating(false)}
-                onSelection={setSelection}
+                onSelection={selectAnnotation}
               />
             )}
             {!readOnly && (
@@ -3179,14 +3396,10 @@ function PCBModelPreview({
                           icon: ImageDown,
                           disabled: !ready || exporting || failed,
                           run: async () => {
-                            setExporting(true);
-                            setExportStatus('');
                             try {
-                              await exportPNG.current();
+                              await saveImage();
                             } catch (error) {
                               setExportStatus((error as Error).message);
-                            } finally {
-                              setExporting(false);
                             }
                           },
                         },

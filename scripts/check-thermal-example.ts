@@ -13,9 +13,12 @@ import {
   validateThermalResult,
   type ThermalConfig,
   type ThermalResult,
-} from '../lib/thermal';
-import { thermalColor, thermalSurface } from '../lib/thermal-view';
-import { detectThermal, runThermalSimulation } from '../server/thermal-runtime.mjs';
+} from '../plugins/layout-thermal/domain/thermal';
+import { thermalColor, thermalSurface } from '../plugins/layout-thermal/domain/thermal-view';
+import {
+  detectThermal,
+  runThermalSimulation,
+} from '../plugins/layout-thermal/host/thermal-runtime.mjs';
 import { startServer } from '../server/index.mjs';
 
 // Explicit, offline real-solver check. This is never invoked by npm test.

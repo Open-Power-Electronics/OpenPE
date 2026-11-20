@@ -5,6 +5,6 @@
   },
   "text_variables": {
     "OPENPE_PROJECT_NAME": "LM5001 Boost",
-    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM5001.lib\"]"
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM5001.lib\"]"
   }
 }

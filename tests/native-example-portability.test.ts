@@ -15,9 +15,16 @@ import {
 import { modelCadFromProject } from '../lib/model-cad';
 import { partFields } from '../lib/library';
 import { child, children, quote } from '../lib/sexpr';
-import { buildSpiceDeck, defaultTransient, simulationSupportError } from '../lib/spice';
-import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
-import { defaultThermalConfig, prepareThermalModel } from '../lib/thermal';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  simulationSupportError,
+} from '../plugins/spice-simulation/domain/spice';
+import { buildSpiceDeck as serviceDeck } from '../plugins/spice-simulation/host/spice-format.mjs';
+import {
+  defaultThermalConfig,
+  prepareThermalModel,
+} from '../plugins/layout-thermal/domain/thermal';
 import { atomicWrite } from '../server/atomic-write.mjs';
 import { readProjectModelFile } from '../server/project-model-files.mjs';
 import { projectDatasheetContext } from '../lib/example-datasheets';
@@ -153,7 +160,7 @@ for (const entry of homeExampleCatalog.filter((item) => item.id.startsWith('refe
 
     for (const [field, value] of [
       ['Sim.Name', 'CUSTOM_UNREVIEWED_MODEL'],
-      ['Sim.Library', 'circuits/custom.lib'],
+      ['Sim.Library', 'models/custom.lib'],
       ['Sim.Pins', '1=2 2=1'],
     ]) {
       const invalid = structuredClone(reopened);

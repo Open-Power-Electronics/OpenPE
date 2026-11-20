@@ -56,6 +56,7 @@ function fixture(active: boolean) {
     datasheetReader: null,
     screen: 'workspace',
     view: 'canvas',
+    schematicSection: 'hardware',
     tool: 'select',
     selection: [],
     inspectedPartId: null,
@@ -81,7 +82,9 @@ function fixture(active: boolean) {
       return presentation;
     },
     circuitFingerprint,
-  }) as () => Promise<{ ui: { active: boolean; presentation: { text: string } } }>;
+  }) as () => Promise<{
+    ui: { active: boolean; schematicSection: string; presentation: { text: string } };
+  }>;
   return { core, read, ready, contextActive, captures: () => captures, presentation };
 }
 
@@ -108,6 +111,7 @@ test('stable active and inactive observations retain their presentation boundary
     state.ready();
     const context = await pending;
     assert.equal(context.ui.active, active);
+    assert.equal(context.ui.schematicSection, 'hardware');
     assert.equal(state.captures(), active ? 1 : 0);
     assert.equal(context.ui.presentation.text, active ? state.presentation.text : '');
   }

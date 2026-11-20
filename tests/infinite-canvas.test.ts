@@ -14,7 +14,6 @@ import {
 } from '../lib/project';
 import { child, parseSExpr, writeSExpr } from '../lib/sexpr';
 import { parseProject as parseServiceProject } from '../server/project-format.mjs';
-import kicadSnapshots from '../lib/kicad-examples.json';
 import referenceSnapshots from '../lib/reference-examples.json';
 
 test('infinite-canvas schematics retain off-page coordinates without paper in projects or exports', () => {
@@ -89,10 +88,6 @@ test('all editable examples and bundled snapshots are paper-free and native expo
       .map((name) => path.join('tests/fixtures/reference', name)),
   );
   assert.equal(files.length, 9, 'Private snapshots cover the nine Home projects.');
-  visit('tests/fixtures/kicad');
-  visit('tests/fixtures/ti');
-  files.push('tests/fixtures/rc-filter.openpe.json');
-  assert.equal(files.length, 25);
   for (const file of files) {
     const project = parseProject(readFileSync(file, 'utf8'));
     assert.equal(
@@ -114,8 +109,6 @@ test('all editable examples and bundled snapshots are paper-free and native expo
       file,
     );
   }
-  for (const source of Object.values(kicadSnapshots))
-    assert.equal(child(parseSExpr(source), 'paper'), undefined);
   for (const source of Object.values(referenceSnapshots))
     assert.doesNotThrow(() => parseProject(source));
 });

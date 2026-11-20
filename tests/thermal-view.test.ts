@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ThermalModel, ThermalResult } from '../lib/thermal';
-import { thermalPadReadouts } from '../lib/thermal-pad-view';
+import type { ThermalModel, ThermalResult } from '../plugins/layout-thermal/domain/thermal';
+import { thermalPadReadouts } from '../plugins/layout-thermal/domain/thermal-pad-view';
 import {
   closestThermalNode,
   hottestThermalNode,
@@ -9,7 +9,7 @@ import {
   rasterizeThermalSurface,
   thermalColor,
   thermalSurface,
-} from '../lib/thermal-view';
+} from '../plugins/layout-thermal/domain/thermal-view';
 import {
   agentThermalContext,
   validateAgentThermalContext,

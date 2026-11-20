@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createExample, projectExamples } from '../lib/examples';
+import { createReferenceExample, referenceExamples } from '../lib/reference-examples';
 import {
   appendSchematic,
   createProject,
@@ -17,8 +17,8 @@ import { symbolAnnotation } from '../lib/library';
 import { schematicTexts } from '../lib/schematic-text';
 
 test('project files contain design sections, with no editor snapshots or application state', () => {
-  for (const { id } of projectExamples) {
-    const project = createExample(id);
+  for (const { id } of referenceExamples) {
+    const project = createReferenceExample(id);
     const document = JSON.parse(serializeProject(project));
     assert.equal(document.format, 'openpe');
     assert.deepEqual(Object.keys(document), [
@@ -27,8 +27,10 @@ test('project files contain design sections, with no editor snapshots or applica
       'units',
       'project',
       'schematic',
+      ...(project.pcb ? ['pcb'] : []),
       'libraries',
       'extensions',
+      ...(project.nativeFiles ? ['nativeFiles'] : []),
       ...(project.simulationModels?.length ? ['simulationModels'] : []),
     ]);
     assert.equal(document.project.id, project.id);
@@ -167,7 +169,7 @@ test('optional fields reject invalid explicit values and missing required design
 });
 
 test('compact JSON keeps Unicode, escaped strings, arrays and coordinates lossless', () => {
-  const project = createExample('kicad-buck');
+  const project = createReferenceExample('reference-lm2598-to220-7-buck');
   project.extensions.strings = ['汉字 Ω', '"quoted"', '\\path\\', 'line\nfeed', '\t', '[null,{}]'];
   const source = serializeProject(project);
   const document = JSON.parse(source);
@@ -179,7 +181,9 @@ test('compact JSON keeps Unicode, escaped strings, arrays and coordinates lossle
 
 test('instance defaults compact identically across files without changing libraries or board data', () => {
   const project = exampleProject();
-  project.additionalSchematics = [createExample('kicad-rectifier').schematic];
+  project.additionalSchematics = [
+    createReferenceExample('reference-lm2596-to220-5-buck').schematic,
+  ];
   const before = structuredClone(project);
   const source = serializeProject(project);
   const document = JSON.parse(source);
@@ -194,6 +198,8 @@ test('instance defaults compact identically across files without changing librar
         ['in_pos_files', 'yes'],
         ['dnp', 'no'],
       ]) {
+        if (node[0] === 'exclude_from_sim' && component.simulation?.excluded !== undefined)
+          continue;
         if (!native.some((n: string[]) => n[0] === node[0])) native.push(node);
       }
       for (const layout of Object.values(component.fieldLayout ?? {}) as string[][][])
@@ -427,11 +433,11 @@ test('old structures, unknown fields and redundant authoritative native data are
 });
 
 test('native metadata conversion rejects duplicate fields and unsupported atoms instead of losing them', () => {
-  const duplicate = createExample('kicad-rectifier');
+  const duplicate = createReferenceExample('reference-lm2596-to220-5-buck');
   const part = duplicate.schematic.parts[0];
   part.raw!.push(structuredClone(children(part.raw!, 'property')[0]));
   assert.throws(() => serializeProject(duplicate), /Duplicate KiCad component fields/);
-  const unsupported = createExample('kicad-rectifier');
+  const unsupported = createReferenceExample('reference-lm2596-to220-5-buck');
   unsupported.schematic.parts[0].raw!.push('unsupported_attribute');
   assert.throws(() => serializeProject(unsupported), /Unsupported KiCad metadata atom/);
 });

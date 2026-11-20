@@ -39,12 +39,13 @@ try {
   await page.addStyleTag({ content: '#root{padding:20px}.layout-properties{width:340px}' });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const browse = () => page.getByRole('button', { name: 'Browse models', exact: true });
+  const manage = () => page.getByRole('button', { name: 'Manage assigned models', exact: true });
   await browse().waitFor();
   const before = await page.evaluate(() => window.nativePCB());
   for (const view of ['Schematic', 'Layout', 'Model']) {
     await page.getByRole('button', { name: view, exact: true }).click();
     await browse().waitFor();
-    const model = page.getByLabel('Model', { exact: true }),
+    const model = manage(),
       footprint = page.getByRole('button', { name: 'Browse footprints', exact: true });
     const side = page.getByRole('combobox', { name: 'Footprint side', exact: true });
     const properties = page.locator('.layout-properties');
@@ -82,7 +83,7 @@ try {
       );
     }
   }
-  await browse().click();
+  await manage().press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Component models', exact: true });
   await dialog.waitFor();
   await dialog.getByRole('button', { name: 'Browse STEP for model 1', exact: true }).click();
@@ -93,13 +94,12 @@ try {
   for (const view of ['Schematic', 'Layout', 'Model']) {
     await page.getByRole('button', { name: view, exact: true }).click();
     assert.ok(
-      (await page.getByLabel('Model', { exact: true }).inputValue()).includes('b'.repeat(64)),
+      (await manage().textContent()).includes('b'.repeat(64)),
     );
   }
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   assert.equal(await page.evaluate(() => window.nativePCB()), before);
-  await browse().click();
-  await dialog.waitFor();
+  await manage().click();
   await page.evaluate(() => {
     window.openpe.chooseComponentModel = () =>
       new Promise((resolve) => {
@@ -121,8 +121,8 @@ try {
   );
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/component-properties-main.png' });
-  await browse().click();
-  await page.getByRole('dialog', { name: 'Component models', exact: true }).waitFor();
+  await manage().click();
+  await dialog.waitFor();
   await page.screenshot({ path: 'test-results/component-properties-model-dialog.png' });
   assert.deepEqual(errors, []);
   console.log(

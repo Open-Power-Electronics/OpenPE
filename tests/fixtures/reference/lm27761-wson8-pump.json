@@ -5780,7 +5780,7 @@
     "files": [
       {
         "name": "lm27761-wson8-pump.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm27761-wson8-pump.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM27761 Charge Pump\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM27761.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm27761-wson8-pump.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM27761 Charge Pump\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"models/LM27761.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "symbols/lm27761-wson8-pump.kicad_sym",
@@ -5804,7 +5804,7 @@
     {
       "id": "reference-lm27761",
       "sha256": "31aa4d227d83b8fc6da2e7303652bc1c2b8c26eaebd309573b11f2fb34768ec1",
-      "file": "circuits/LM27761.lib"
+      "file": "models/LM27761.lib"
     }
   ]
 }

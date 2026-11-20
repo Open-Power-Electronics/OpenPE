@@ -7,7 +7,12 @@ import { uid } from '../lib/circuit';
 import { createProject, serializeProject } from '../lib/project';
 import { startServer } from '../server/index.mjs';
 import { createEmptyPCB } from '../lib/pcb-layout';
-import { buildSpiceDeck, defaultTransient, spiceNets, type SimulationResult } from '../lib/spice';
+import {
+  buildSpiceDeck,
+  defaultTransient,
+  spiceNets,
+  type SimulationResult,
+} from '../plugins/spice-simulation/domain/spice';
 import {
   deriveThermalSpiceSources,
   defaultThermalConfig,
@@ -15,7 +20,7 @@ import {
   validateThermalSpiceImport,
   type ThermalModel,
   type ThermalResult,
-} from '../lib/thermal';
+} from '../plugins/layout-thermal/domain/thermal';
 import { switchingStageFixture } from './fixtures/switching-stage';
 
 export function thermalSpiceFixture() {

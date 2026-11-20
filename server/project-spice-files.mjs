@@ -1,7 +1,8 @@
+import { spiceProjectDirectory } from './plugin-project-format.cjs';
 import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, open, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validatedSimulationResult } from './spice-format.mjs';
+import { validatedSimulationResult } from '../plugins/spice-simulation/host/spice-format.mjs';
 import {
   analysisFilename,
   createAnalysisStaging,
@@ -196,12 +197,12 @@ export function createProjectSpiceStore(resolveFile) {
     if (!logicalSuffixOfCanonical(logical, parent))
       throw new Error('The project spice folders must be real directories without links.');
     nativeParent = parent;
-    return directory(parent, 'spice', create);
+    return directory(parent, spiceProjectDirectory, create);
   }
   async function locked(signal, operation) {
     signal.throwIfAborted();
     const parent = await root(false);
-    return withAnalysisFiles(parent ?? path.join(nativeParent, 'spice'), () => {
+    return withAnalysisFiles(parent ?? path.join(nativeParent, spiceProjectDirectory), () => {
       signal.throwIfAborted();
       return operation();
     });

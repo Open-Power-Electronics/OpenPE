@@ -250,7 +250,7 @@ try {
   const codeViewport = first.locator('pre');
   const goDialog = page.getByRole('dialog', { name: 'Go to line', exact: true });
   const lineInput = goDialog.getByRole('textbox', { name: 'Line number', exact: true });
-  const jump = goDialog.getByRole('button', { name: 'Go to line', exact: true });
+  const jump = goDialog.getByRole('button', { name: 'Jump', exact: true });
   await codeViewport.press('Control+g');
   await lineInput.waitFor();
   assert.ok(await lineInput.evaluate((element) => element === document.activeElement));

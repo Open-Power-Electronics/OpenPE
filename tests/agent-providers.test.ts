@@ -37,6 +37,7 @@ test('the Agent catalog exposes every supported provider independently of local 
 test('workspace recovery retains each selected Agent and its independent model preference', () => {
   assert.deepEqual(Object.keys(defaultAgentPreferences.models), agentProviderIds);
   const models = Object.fromEntries(agentProviderIds.map((id) => [id, `fixture/${id}-model`]));
+  models.deepseek = '["fixture-provider","vendor/model:v2"]';
   for (const provider of agentProviderIds) {
     const state = {
       version: 2,
@@ -72,7 +73,7 @@ test('new Agent preferences default to medium and recovery preserves every nativ
 
 test('recovery rejects invalid or missing provider and model choices without defaulting', () => {
   for (const restore of [restoreWorkspace, restoreServiceWorkspace]) {
-    for (const invalid of [undefined, null, '--help', 'bad\nmodel', 42, 'x'.repeat(201)]) {
+    for (const invalid of [undefined, null, 'bad\nmodel', 42, 'x'.repeat(513)]) {
       const models = Object.fromEntries(agentProviderIds.map((id) => [id, `fixture/${id}`]));
       for (const provider of agentProviderIds) {
         const state = {
@@ -88,6 +89,17 @@ test('recovery rejects invalid or missing provider and model choices without def
         assert.deepEqual(state, before);
       }
     }
+    for (const invalid of ['--help', 'x'.repeat(201), '["fixture-provider","vendor/model:v2"]'])
+      assert.throws(
+        () => restore({
+          version: 2,
+          documents: [],
+          activeDocumentId: null,
+          ...defaultAgentPreferences,
+          models: { ...defaultAgentPreferences.models, claude: invalid },
+        }),
+        /Invalid saved Agent model/,
+      );
     for (const provider of [undefined, null, '', 'unknown', '--help', ['pi'], { id: 'pi' }]) {
       assert.throws(
         () =>
@@ -116,6 +128,8 @@ test('recovery rejects invalid or missing provider and model choices without def
 test('authenticated Agent routes dispatch only catalog IDs to the selected provider adapter', async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-agent-providers-'));
   const modelCalls: string[] = [];
+  const modelId = (provider: string) =>
+    provider === 'deepseek' ? '["fixture-provider","vendor/model:v2"]' : `fixture/${provider}`;
   const runCalls: { provider: string; request: unknown }[] = [];
   const service = await startServer({
     dataDir,
@@ -126,7 +140,7 @@ test('authenticated Agent routes dispatch only catalog IDs to the selected provi
     },
     modelLister: async (provider) => {
       modelCalls.push(provider);
-      return { models: [{ id: `fixture/${provider}`, label: `Fixture ${provider}` }] };
+      return { models: [{ id: modelId(provider), label: `Fixture ${provider}` }] };
     },
   });
   const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
@@ -141,9 +155,9 @@ test('authenticated Agent routes dispatch only catalog IDs to the selected provi
       const models = await fetch(`${service.base}/api/models?provider=${provider}`, { headers });
       assert.equal(models.status, 200);
       assert.deepEqual(await models.json(), {
-        models: [{ id: `fixture/${provider}`, label: `Fixture ${provider}` }],
+        models: [{ id: modelId(provider), label: `Fixture ${provider}` }],
       });
-      const body = { ...request, provider, sessionId: `fixture-${provider}` };
+      const body = { ...request, provider, model: modelId(provider), sessionId: `fixture-${provider}` };
       const response = await fetch(`${service.base}/api/chat`, {
         method: 'POST',
         headers,

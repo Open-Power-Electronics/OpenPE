@@ -21,7 +21,7 @@ const bundle = await build({
     import {parseProject} from './lib/project';
     import {partFields} from './lib/library';
     import {defaultSchematicLayers} from './lib/schematic-layers';
-    import {buildSpiceDeck,defaultTransient} from './lib/spice';
+    import {buildSpiceDeck,defaultTransient} from './plugins/spice-simulation/domain/spice';
     import SchematicDrawing from './components/SchematicDrawing';
     import PartProperties from './components/PartProperties';
     const core=new ProjectCore(parseProject(window.testbenchSource));
