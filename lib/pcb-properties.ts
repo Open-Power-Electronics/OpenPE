@@ -1,7 +1,7 @@
 import { invalidatePCBFill, type Pad, type PCB, type Footprint, type BoardZone } from './pcb';
 import { flipPCBFootprint } from './pcb-layout';
 
-export type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
+type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
 
 /** Undefined clears an optional override; omitted fields and native identity survive. */
 export function preparePCBZoneProperties(zone: BoardZone, changes: PCBZoneProperties): BoardZone {

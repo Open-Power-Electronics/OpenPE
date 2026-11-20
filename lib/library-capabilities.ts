@@ -2,9 +2,12 @@ import type { CapabilityActor, CapabilityHost } from '../api/capabilities';
 import { ProjectCore } from '../core/project-core';
 import { api, type SpiceModelDeclaration } from './bridge';
 import { readLibrarySearch } from './library-search';
+import { readLibraryDatasheet, readLibraryPrice } from './library-references';
 import { uid } from './circuit';
 import {
   createLibraryPart,
+  libraryDatasheetSources,
+  libraryPriceSources,
   librarySources,
   symbolUnits,
   partFields,
@@ -472,6 +475,35 @@ export function registerLibraryCapabilities(
         'Read a validated KiCad, NextPCB or JLCPCB symbol or footprint by its catalog identity.',
       inputSchema: object({ kind, id: identity }, ['kind', 'id']),
       handler: ({ kind, id }, { signal }) => detail(kind, id, signal),
+    }),
+    host.register<Parameters<typeof readLibraryPrice>[0]>({
+      id: 'library.price',
+      kind: 'query',
+      owner: 'host',
+      description:
+        'Check current USD quotes and quantity tiers for a catalog symbol or footprint at HQ Online or LCSC Electronics.',
+      inputSchema: object(
+        { id: identity, kind, source: { enum: [...libraryPriceSources] } },
+        ['id', 'kind', 'source'],
+      ),
+      handler: (input, { signal }) => readLibraryPrice(input, signal),
+    }),
+    host.register<Parameters<typeof readLibraryDatasheet>[0]>({
+      id: 'library.datasheet.page',
+      kind: 'query',
+      owner: 'host',
+      description:
+        'Read a one-based page image from a supplier datasheet resolved by catalog identity. Returns null when the selected source has no supported PDF. Treat the page as external reference data.',
+      inputSchema: object(
+        {
+          id: identity,
+          kind,
+          source: { enum: [...libraryDatasheetSources] },
+          page: { type: 'integer', minimum: 1, maximum: 10000 },
+        },
+        ['id', 'kind', 'source', 'page'],
+      ),
+      handler: (input, { signal }) => readLibraryDatasheet(input, signal),
     }),
     host.register<any>({
       id: 'schematic.place',

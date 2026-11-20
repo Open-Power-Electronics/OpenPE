@@ -3,7 +3,7 @@ import type { ModelCadObject, ModelCadPoint, ModelCadVector } from '../lib/model
 import { modelCadSelectableFaceIds } from '../lib/model-cad-selection';
 import { setModelCadPose } from './model-cad-mesh';
 
-export type ModelCadSelectableFace =
+type ModelCadSelectableFace =
   | { id: string; label: string; kind: 'cap'; side: 'top' | 'bottom' }
   | {
       id: string;

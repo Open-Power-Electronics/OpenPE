@@ -430,6 +430,43 @@ shows accepted snapped coordinates after commit while untouched off-grid native
 coordinates remain exact. Invalid/rejected drafts remain retryable. Grid changes
 never move existing objects.
 
+### Placement suggestions
+
+A completed marquee of two to eight footprints wholly outside closed board
+material can preview an on-board placement. It samples on-grid positions
+across the board and refines near electrical anchors and free space around
+existing packages. The planner uses actual pad endpoints from the current
+airwires regardless of layer visibility. Without anchors it starts near the
+center of the largest board region. It tries the largest packages first and,
+when the order differs, the most electrically anchored packages first. It
+ranks complete alternatives by the total length of affected airwires. Each
+footprint can retain its orientation or take a quarter or half turn.
+
+The complete group must fit inside the native outline, clear cutouts and
+footprint keepouts, and leave the standard Layout clearance between same-side
+body bounds. Connected drag validates pad and drill clearance and preserves
+routed connectivity. A locked footprint, a footprint with copper artwork,
+its own board edge or a zone, or a footprint requiring track rerouting blocks
+the whole suggestion. A group with any on-board footprint, an open outline
+or no complete legal plan leaves Tab available for focus navigation.
+Search is bounded to eight board regions, 1,024 combined outline and footprint
+keepout segments, 6,000 placement objects, and 24 validated poses per
+footprint in each order. The planner checks nearby high-ranked poses first,
+then visits different board regions so congestion near an anchor cannot use
+the entire validation budget. Placement objects include footprints, pads,
+graphics, zones, tracks and vias.
+
+Tab submits the exact shown positions and rotations through the existing board transaction.
+Core refreshes affected enabled fills in the same undo edit. The preview has
+no picking, export or native-file effect. A new selection gesture, tool or
+layer change, grid spacing change, document revision, pending Source, close
+barrier or leaving the active Layout discards it.
+
+Agent preview and application use the same placement planner and Core board
+transaction. The Layout preference controls automatic marquee previews.
+[Layout capabilities](API.md#layout-capabilities) defines the inputs and the
+exact pose check.
+
 ### Layers, labels and selection
 
 Layout starts in All with the physical paint order and no prioritized layer.
@@ -1492,11 +1529,8 @@ the same [creation capability](API.md#layout-parasitics-capabilities).
 
 ## Examples and verification
 
-Home has nine curated projects under Example and fixed EMC Flyback Recent. Their original
-geometry, source attribution and model identities remain pinned; support does
-not establish hardware qualification. [Examples](EXAMPLES.md) owns
-regeneration/assets and [EMC verification](EMC-FLYBACK.md) owns recorded numerical
-comparisons.
+[Examples](EXAMPLES.md) lists the native projects and pinned resources.
+[EMC Flyback verification](EMC-FLYBACK.md) describes the reference comparisons.
 
 To compare OpenPE's all-zone refill with KiCad 10 on LM25017, copy the bundled
 `.kicad_pcb` and matching `.kicad_pro` into a scratch directory. Run
@@ -1515,6 +1549,7 @@ Passing the bundled PCB directly compares against its saved contours.
 | `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                                  | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                               | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                                                          |
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                         | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                                                      |
+| `tests/pcb-placement-suggestion.test.ts`, `node scripts/check-layout-placement-suggestion-ui.mjs` | Shadow settings persistence, marquee preview, exact Tab placement, keyboard and lifecycle guards, native geometry and one-step undo |
 | `tests/layout-parasitics.test.ts`, `tests/layout-parasitics-study.test.ts`                                                                                                                                                       | Analytical DC networks and via spans; same-schematic additions, endpoint identity and native-property preservation, precision, one-step undo and rejected inputs                                                                                  |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-study`                                                                                                                                                                 | Real Workbench terminal picks and endpoint-labelled study, hidden native endpoint fields, unchanged PCB/other native files and one GUI undo; mocked host services, no Electron or solver                                                          |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-contact`                                                                                                                                                               | Actual LM25017 D1.2/C8.1 /VOUT1 pad picks, finite contact measurement, thickness reactivity, Add availability and unchanged native files; mocked host services, no Electron or solver                                                             |

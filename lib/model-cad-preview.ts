@@ -2,7 +2,7 @@ import { api } from './bridge';
 import { modelCadGeometryKey, validateModelCadObject, type ModelCadObject } from './model-cad';
 import type { MeshData } from './model-mesh';
 
-export type ModelCadPreview = { shapeKey: string; meshes: MeshData[] };
+type ModelCadPreview = { shapeKey: string; meshes: MeshData[] };
 
 /** Bound service observations before they enter retained geometry or a Core preparation. */
 export function validateModelCadPreview(input: unknown, shapeKey: string): ModelCadPreview {

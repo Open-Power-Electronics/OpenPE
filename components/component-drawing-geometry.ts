@@ -5,8 +5,8 @@ import type { BoardLine } from '@/lib/pcb';
 import { pcbGraphicPoints, transformPCBGraphic } from '@/lib/pcb-geometry';
 import type { SymbolDrawing } from '@/lib/symbol-drawing';
 
-export type DrawingBounds = { minX: number; minY: number; maxX: number; maxY: number };
-export type DrawingSelection = { kind: 'graphic' | 'pin' | 'pad'; index: number };
+type DrawingBounds = { minX: number; minY: number; maxX: number; maxY: number };
+type DrawingSelection = { kind: 'graphic' | 'pin' | 'pad'; index: number };
 type DrawingKind = 'symbol' | 'footprint';
 type Drawing = SymbolDrawing | FootprintDrawing;
 

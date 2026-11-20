@@ -58,7 +58,7 @@ export const pcbDesignRuleScopes = {
 
 export type PCBDesignRuleLimit = keyof typeof pcbDesignRuleLimits;
 export type PCBDesignRuleThresholds = Record<PCBDesignRuleLimit, number>;
-export type PCBDesignRuleScope = keyof typeof pcbDesignRuleScopes;
+type PCBDesignRuleScope = keyof typeof pcbDesignRuleScopes;
 export type PCBDesignRuleId = (typeof pcbDesignRuleScopes)[PCBDesignRuleScope][number];
 export const pcbDesignRuleIds = Object.values(pcbDesignRuleScopes).flat();
 export const designRuleSeverities = ['error', 'warning', 'ignore'] as const;
@@ -84,7 +84,7 @@ export const schematicRuleDefinitions = {
 export type SchematicRuleId = keyof typeof schematicRuleDefinitions;
 export const schematicRuleIds = Object.keys(schematicRuleDefinitions) as SchematicRuleId[];
 export type SchematicRuleSeverities = Partial<Record<SchematicRuleId, DesignRuleSeverity>>;
-export type PCBClearanceOverride = { key: string; clearance: number; enabled?: boolean };
+type PCBClearanceOverride = { key: string; clearance: number; enabled?: boolean };
 export const maxPCBClearanceOverrides = 512;
 export type PCBDesignRuleConfig = PCBDesignRuleThresholds & {
   scopes: readonly PCBDesignRuleScope[];

@@ -136,6 +136,9 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
   } else if (route === 'model-cad/preview' && options.method === 'POST') {
     endpoint = 'cad';
     body = options.body;
+  } else if (route === 'library-datasheet' && method === 'POST') {
+    endpoint = 'datasheet';
+    body = options.body;
   } else {
     const prefix = route.startsWith('libraries/footprints?')
       ? 'libraries/footprints?'

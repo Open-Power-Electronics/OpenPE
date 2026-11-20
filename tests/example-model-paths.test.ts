@@ -22,11 +22,7 @@ test('flat STEP filenames retain pinned identities and disambiguate different by
     assert.equal(modelReferenceKey('$' + '{KIPRJMOD}/' + file), entry.sha256);
     for (const prefix of ['models/', 'footprints/models/'])
       assert.equal(modelReferenceKey('$' + '{KIPRJMOD}/' + prefix + relative), entry.sha256);
-    for (const prefix of ['footprints/', '3D/']) {
-      const legacy = '$' + '{KIPRJMOD}/' + prefix + file.slice('models/'.length);
-      assert.equal(modelReferenceKey(legacy), entry.sha256);
-      assert.equal(resolveExampleModelRelative([relative], legacy), relative);
-    }
+    assert.equal(resolveExampleModelRelative([relative], '$' + '{KIPRJMOD}/' + file), relative);
   }
   const name = 'SOIC-8_3.9x4.9mm_P1.27mm.step';
   assert.notEqual(
@@ -42,17 +38,14 @@ test('build-only model relocation normalizes exact pinned aliases while retainin
   const portable = exampleModelPath(relative);
   const preserved =
     '(offset (xyz 1.25 -2.5 3.75)) (scale (xyz 1 2 3)) (rotate (xyz 90 0 180)) hide';
-  for (const alias of [
-    'models/' + relative,
-    'footprints/models/' + relative,
-    'footprints/' + portable.slice('models/'.length),
-    '3D/' + portable.slice('models/'.length),
-    portable,
-  ])
+  for (const alias of ['models/' + relative, 'footprints/models/' + relative, portable])
     assert.equal(
       portableExampleModelSource(`(model "\${KIPRJMOD}/${alias}" ${preserved})`),
       `(model "\${KIPRJMOD}/${portable}" ${preserved})`,
     );
-  const unknown = '(model "${KIPRJMOD}/footprints/personal.step" (offset (xyz 1 2 3)))';
-  assert.equal(portableExampleModelSource(unknown), unknown);
+  for (const unknown of [
+    '(model "${KIPRJMOD}/footprints/personal.step" (offset (xyz 1 2 3)))',
+    `(model "\${KIPRJMOD}/3D/${portable.slice('models/'.length)}")`,
+  ])
+    assert.equal(portableExampleModelSource(unknown), unknown);
 });

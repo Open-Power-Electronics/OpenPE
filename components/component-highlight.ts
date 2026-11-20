@@ -6,7 +6,7 @@ export type ComponentMode = 'canvas' | 'layout' | '3d';
 export type ComponentHighlightOrigin =
   { view: 'canvas'; sheetId: string; id: string } | { view: 'layout' | '3d'; id: string };
 export type ModelComponentFocus = { request: number; board: PCB; footprintId: string };
-export type ComponentHighlightTarget =
+type ComponentHighlightTarget =
   | { view: 'canvas'; sheetId: string; partId: string; location: Point }
   | { view: 'layout' | '3d'; board: PCB; footprintId: string; location: Point };
 

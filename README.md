@@ -2,7 +2,7 @@
 
 **Power electronics, from conversation to circuit.**
 
-OpenPE · Electrical Engineering Studio is a local desktop workbench that brings Agent conversations and editable electrical designs together. Discuss a design on the left; build and inspect it on the right.
+OpenPE · Electrical Engineering Studio places Agent conversations beside editable electrical designs in a local desktop workbench.
 
 ![OpenPE Home](assets/home.png)
 
@@ -26,9 +26,7 @@ Use Node.js 24 and Git to [run from source](docs/DEVELOPMENT.md#run-from-source)
 
 ## Learn more
 
-[Documentation](docs/README.md) · [Examples](docs/EXAMPLES.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](AGENTS.md)
-
-OpenPE supports bounded KiCad 10 and Model CAD workflows. See [coverage and limits](docs/README.md#coverage-and-limits) before relying on analysis or manufacturing output.
+[Documentation](docs/README.md) · [Examples](docs/EXAMPLES.md) · [Architecture](docs/ARCHITECTURE.md) · [Coverage and limits](docs/README.md#coverage-and-limits) · [Contributing](AGENTS.md)
 
 ## License
 

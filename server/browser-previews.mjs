@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
 import { createLibraryService, createStepParserPool } from './libraries.mjs';
 import { libraryAssetFailure } from './library-asset-error.mjs';
+import { registerLibraryDatasheetPreview } from './library-datasheets.mjs';
 import { isLibraryPriceRequest } from './library-prices.mjs';
 import { createWorkbenchPlugins, registerWorkbenchPlugins } from './workbench-plugins.mjs';
 
@@ -107,7 +108,7 @@ function mountBrowserPlugins(app, providerService) {
  * @param {{origin?: string, previewFactory?: typeof createModelCadPreviewService,
  * providerPluginService?: ReturnType<typeof createPluginService>,
  * libraryFactory?: (options: Parameters<typeof createLibraryService>[0]) =>
- * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'price' | 'close'>}} [options]
+ * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'price' | 'datasheet' | 'close'>}} [options]
  */
 export async function startBrowserPreviewServer({
   origin = 'http://127.0.0.1:3000',
@@ -215,6 +216,7 @@ export async function startBrowserPreviewServer({
       if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));
     }
   });
+  registerLibraryDatasheetPreview(app, '/api/browser-preview/datasheet', libraries);
   for (const kind of ['footprint', 'model']) {
     app.post(`/api/browser-preview/${kind}`, express.json({ limit: '1kb' }), async (req, res) => {
       const body = req.body;

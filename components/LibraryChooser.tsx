@@ -23,6 +23,7 @@ import {
   SquareCheck,
 } from 'lucide-react';
 import { api } from '@/lib/bridge';
+import { readLibraryPrice } from '@/lib/library-references';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
   catalogSource,
@@ -53,6 +54,7 @@ import { footprintModels } from '@/lib/pcb-models';
 import { previewProjectComponentModel } from '@/lib/pcb-preview-cache';
 import { modelReferenceKey } from '@/lib/example-model-paths';
 import Dialog from './Dialog';
+import LibraryDatasheet from './LibraryDatasheet';
 import Select from './Select';
 import LibrarySourceSelect, {
   type LibraryCategoryReload,
@@ -195,15 +197,15 @@ function LibraryPreviewStage({
   previews,
   fallback,
 }: {
-  active: PreviewTab;
+  active: PreviewTab | null;
   className: string;
   previews: Partial<Record<PreviewTab, ReactNode>>;
   fallback?: ReactNode;
 }) {
-  const [visited, setVisited] = useState(() => new Set([active]));
-  if (!visited.has(active)) setVisited(new Set([...visited, active]));
+  const [visited, setVisited] = useState(() => new Set(active ? [active] : []));
+  if (active && !visited.has(active)) setVisited(new Set([...visited, active]));
   return (
-    <div className={className}>
+    <div className={className} hidden={!active}>
       {previewTabs.map((tab) =>
         visited.has(tab) && previews[tab] ? (
           <div key={tab} className="library-preview-pane" hidden={tab !== active}>
@@ -223,6 +225,9 @@ function LibrarySymbolPreview({
   error,
   onError,
   retry,
+  pdfActive,
+  pdfTab,
+  onSelectDrawing,
 }: {
   detail: SymbolDetail;
   unit: number;
@@ -230,6 +235,9 @@ function LibrarySymbolPreview({
   error: string;
   onError: (message: string) => void;
   retry: number;
+  pdfActive: boolean;
+  pdfTab: ReactNode;
+  onSelectDrawing: () => boolean;
 }) {
   const [tab, setTab] = useState<PreviewTab>('symbol');
   const [footprint, setFootprint] = useState<FootprintDetail | null>(null);
@@ -252,7 +260,7 @@ function LibrarySymbolPreview({
   let activeTab = tab;
   if (activeTab === '3d' && modelReason) activeTab = 'footprint';
   if (activeTab === 'footprint' && footprintReason) activeTab = 'symbol';
-  const showPackage = activeTab !== 'symbol';
+  const showPackage = !pdfActive && activeTab !== 'symbol';
   const previewNotice =
     modelUnavailable ||
     (tab === '3d' && hasNoModel && noModel) ||
@@ -278,8 +286,9 @@ function LibrarySymbolPreview({
     <>
       <div className="preview-tabs">
         <button
-          aria-pressed={activeTab === 'symbol'}
+          aria-pressed={!pdfActive && activeTab === 'symbol'}
           onClick={() => {
+            if (!onSelectDrawing()) return;
             onError('');
             setTab('symbol');
           }}
@@ -287,24 +296,31 @@ function LibrarySymbolPreview({
           Symbol
         </button>
         <button
-          aria-pressed={activeTab === 'footprint'}
+          aria-pressed={!pdfActive && activeTab === 'footprint'}
           disabled={!!footprintReason}
           title={footprintReason || undefined}
-          onClick={() => setTab('footprint')}
+          onClick={() => {
+            if (!onSelectDrawing()) return;
+            setTab('footprint');
+          }}
         >
           Footprint
         </button>
         <button
-          aria-pressed={activeTab === '3d'}
+          aria-pressed={!pdfActive && activeTab === '3d'}
           disabled={!!modelReason}
           title={modelReason || undefined}
-          onClick={() => setTab('3d')}
+          onClick={() => {
+            if (!onSelectDrawing()) return;
+            setTab('3d');
+          }}
         >
           3D model
         </button>
+        {pdfTab}
       </div>
       <LibraryPreviewStage
-        active={activeTab}
+        active={pdfActive ? null : activeTab}
         className="symbol-detail-preview"
         previews={{
           symbol: <SymbolPreview library={detail.symbol} unit={unit} interactive />,
@@ -315,7 +331,7 @@ function LibrarySymbolPreview({
                 key={modelIndex}
                 id={footprint.id}
                 index={modelIndex}
-                active={activeTab === '3d'}
+                active={!pdfActive && activeTab === '3d'}
                 onUnavailable={(message) =>
                   setUnavailableModels((current) => ({ ...current, [modelIndex]: message }))
                 }
@@ -329,7 +345,7 @@ function LibrarySymbolPreview({
           !footprint && <WorkspaceLoading panel label="Loading footprint preview" />
         }
       />
-      {activeTab === '3d' && footprint && footprint.models.length > 1 && (
+      {!pdfActive && activeTab === '3d' && footprint && footprint.models.length > 1 && (
         <LibraryModelSelect
           models={footprint.models}
           index={modelIndex}
@@ -337,7 +353,7 @@ function LibrarySymbolPreview({
           onChange={setModelIndex}
         />
       )}
-      {previewNotice && <p role="status">{previewNotice}</p>}
+      {!pdfActive && previewNotice && <p role="status">{previewNotice}</p>}
     </>
   );
 }
@@ -449,42 +465,6 @@ function LibraryInfoRows({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
-function isLibraryPrice(value: unknown, source: LibraryPriceSource): value is LibraryPrice {
-  const quote = value as Partial<LibraryPrice> | null;
-  return (
-    quote?.source === source &&
-    quote.currency === 'USD' &&
-    typeof quote.checkedAt === 'number' &&
-    Number.isSafeInteger(quote.checkedAt) &&
-    quote.checkedAt > 0 &&
-    quote.checkedAt <= 8.64e15 &&
-    Array.isArray(quote.offers) &&
-    quote.offers.length <= 4 &&
-    quote.offers.every(
-      (offer) =>
-        offer &&
-        typeof offer.sku === 'string' &&
-        /^[A-Za-z0-9_-]{1,64}$/.test(offer.sku) &&
-        (offer.manufacturer === null ||
-          (typeof offer.manufacturer === 'string' &&
-            offer.manufacturer.trim().length > 0 &&
-            offer.manufacturer.length <= 200)) &&
-        (offer.stock === undefined || (Number.isSafeInteger(offer.stock) && offer.stock >= 0)) &&
-        Array.isArray(offer.tiers) &&
-        offer.tiers.length > 0 &&
-        offer.tiers.length <= 32 &&
-        offer.tiers.every(
-          (tier: LibraryPrice['offers'][number]['tiers'][number]) =>
-            tier &&
-            Number.isSafeInteger(tier.quantity) &&
-            tier.quantity > 0 &&
-            Number.isFinite(tier.unitPrice) &&
-            tier.unitPrice > 0,
-        ),
-    )
-  );
-}
-
 const priceCurrency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -501,19 +481,18 @@ const priceSourceNames = priceSourceOptions.map(({ label }) => label);
 function LibraryPricing({
   id,
   kind,
-  source,
-  onSourceChange,
+  defaultSource,
   composing,
   onKeyDown,
 }: {
   id: string;
   kind: 'symbols' | 'footprints';
-  source: LibraryPriceSource;
-  onSourceChange: (source: LibraryPriceSource) => void;
+  defaultSource: LibraryPriceSource;
   composing: () => boolean;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const pending = useRef<AbortController | null>(null);
+  const [source, setSource] = useState(defaultSource);
   const [quotes, setQuotes] = useState<Partial<Record<LibraryPriceSource, LibraryPrice>>>({});
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<'service' | 'quote' | null>(null);
@@ -527,7 +506,7 @@ function LibraryPricing({
     pending.current = null;
     setLoading(false);
     setFailure(null);
-    onSourceChange(value);
+    setSource(value);
   }
 
   async function refresh() {
@@ -537,26 +516,15 @@ function LibraryPricing({
     setLoading(true);
     setFailure(null);
     try {
-      const query = new URLSearchParams({ id, kind, source });
-      const response = await api(`library-price?${query}`, {
-        signal: request.signal,
-        cache: 'no-store',
-      });
-      const mediaType = response.headers
-        .get('content-type')
-        ?.split(';', 1)[0]
-        ?.trim()
-        .toLowerCase();
-      if (mediaType !== 'application/json') {
-        if (!request.signal.aborted) setFailure('service');
-        return;
-      }
-      const data: unknown = await response.json();
-      if (request.signal.aborted) return;
-      if (isLibraryPrice(data, source)) setQuotes((previous) => ({ ...previous, [source]: data }));
-      else setFailure('quote');
-    } catch {
-      if (!request.signal.aborted) setFailure('quote');
+      const data = await readLibraryPrice({ id, kind, source }, request.signal);
+      if (!request.signal.aborted) setQuotes((previous) => ({ ...previous, [source]: data }));
+    } catch (error) {
+      if (!request.signal.aborted)
+        setFailure(
+          error instanceof Error && 'code' in error && error.code === 'LIBRARY_PRICE_SERVICE'
+            ? 'service'
+            : 'quote',
+        );
     } finally {
       if (pending.current === request) {
         pending.current = null;
@@ -664,8 +632,6 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
   const footprint = symbol
     ? symbol.footprint || propertyValue(symbol.symbol, 'Footprint')
     : detail.id;
-  const datasheet = symbol ? propertyValue(symbol.symbol, 'Datasheet') : '';
-  const hasDatasheet = datasheet !== '' && datasheet !== '~';
   const pins = symbol
     ? new Set(
         unitGraphics(symbol.symbol, unit).flatMap((node) =>
@@ -719,10 +685,9 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
           />
         </LibraryInfoSection>
       )}
-      {(detail.description || hasDatasheet) && (
+      {detail.description && (
         <LibraryInfoSection title="Description" wide>
-          {detail.description && <p>{detail.description}</p>}
-          {hasDatasheet && <LibraryInfoRows rows={[['Datasheet', datasheet]]} />}
+          <p>{detail.description}</p>
         </LibraryInfoSection>
       )}
     </div>
@@ -790,7 +755,7 @@ export default function LibraryChooser({
     [library, setLibrary] = useState(initialLibrary);
   const [category, setCategory] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState(initialSearch);
-  const [priceSource, setPriceSource] = useState<LibraryPriceSource>('huaqiu');
+  const [pdfSelected, setPdfSelected] = useState(false);
   const [symbolSort, setSymbolSort] = useState<SymbolSort | null>(null);
   const [entries, setEntries] = useState<LibraryEntry[]>([]),
     [libraries, setLibraries] = useState<string[]>([]);
@@ -846,6 +811,11 @@ export default function LibraryChooser({
   }, [detail, entries, exactFootprint, kind, symbolResultLimit, symbolSort]);
   const selectedEntry =
     detail?.id === selected ? detail : entries.find((entry) => entry.id === selected);
+  const pdfEntry =
+    selectedEntry && (kind === 'symbols' || isOnlineLibrary(selectedEntry.library))
+      ? selectedEntry
+      : undefined;
+  const pdfActive = pdfSelected && !!pdfEntry;
   const failedPreviewEntry = error ? selectedEntry : undefined;
   const detailHeading =
     detail?.id === selected || selectedEntry?.library === 'NextPCB'
@@ -881,6 +851,24 @@ export default function LibraryChooser({
       event.stopPropagation();
     }
   }
+  const canUsePdf = () => !composing.current && !confirming;
+  const selectDrawing = () => {
+    if (!canUsePdf()) return false;
+    setPdfSelected(false);
+    return true;
+  };
+  const pdfTab = pdfEntry && (
+    <button
+      type="button"
+      aria-pressed={pdfActive}
+      onKeyDown={blockComposingActivation}
+      onClick={() => {
+        if (canUsePdf()) setPdfSelected(true);
+      }}
+    >
+      PDF
+    </button>
+  );
   function sortSymbols(column: SymbolColumn) {
     if (composing.current) return;
     setSymbolSort((previous) => {
@@ -898,6 +886,7 @@ export default function LibraryChooser({
     setResultsError('');
     setPackagePreviewError('');
     setFootprintUnavailable(false);
+    setPdfSelected(false);
     setModelAvailability(null);
     setEntries([]);
     setSymbolResultLimit(symbolBatchSize);
@@ -921,6 +910,7 @@ export default function LibraryChooser({
     if (id === selected) return;
     setPackagePreviewError('');
     setFootprintUnavailable(false);
+    setPdfSelected(false);
     setModelAvailability(null);
     setDetail(null);
     setSelected(id);
@@ -1528,8 +1518,11 @@ export default function LibraryChooser({
                       error={packagePreviewError}
                       onError={setPackagePreviewError}
                       retry={packagePreviewRetry}
+                      pdfActive={pdfActive}
+                      pdfTab={pdfTab}
+                      onSelectDrawing={selectDrawing}
                     />
-                    {detail.units > 1 && (
+                    {!pdfActive && detail.units > 1 && (
                       <Select
                         label="Symbol unit"
                         value={String(unit)}
@@ -1545,25 +1538,32 @@ export default function LibraryChooser({
                   <>
                     <div className="preview-tabs">
                       <button
-                        aria-pressed={!show3d && !footprintReason}
+                        aria-pressed={!pdfActive && !show3d && !footprintReason}
                         disabled={!!footprintReason}
                         title={footprintReason || undefined}
-                        onClick={() => setTab('2d')}
+                        onClick={() => {
+                          if (!selectDrawing()) return;
+                          setTab('2d');
+                        }}
                       >
                         Footprint
                       </button>
                       <button
-                        aria-pressed={show3d}
+                        aria-pressed={!pdfActive && show3d}
                         disabled={!!modelReason}
                         title={modelReason}
-                        onClick={() => setTab('3d')}
+                        onClick={() => {
+                          if (!selectDrawing()) return;
+                          setTab('3d');
+                        }}
                       >
                         3D model
                       </button>
+                      {pdfTab}
                     </div>
                     <LibraryPreviewStage
                       key={detail.id}
-                      active={show3d ? '3d' : 'footprint'}
+                      active={pdfActive ? null : show3d ? '3d' : 'footprint'}
                       className="library-preview-stage assignment-preview-stage"
                       previews={{
                         footprint: <FootprintPreview footprint={detail.footprint} />,
@@ -1575,7 +1575,7 @@ export default function LibraryChooser({
                               index={model}
                               load={projectLibraryId ? loadProjectModel : undefined}
                               model={projectModel}
-                              active={show3d}
+                              active={!pdfActive && show3d}
                               onReady={
                                 requireModel
                                   ? () => setVerifiedModel({ detail, index: model })
@@ -1597,8 +1597,8 @@ export default function LibraryChooser({
                         ),
                       }}
                     />
-                    {modelError && <p role="status">{modelError}</p>}
-                    {show3d && detail.models.length > 1 && (
+                    {!pdfActive && modelError && <p role="status">{modelError}</p>}
+                    {!pdfActive && show3d && detail.models.length > 1 && (
                       <LibraryModelSelect
                         models={detail.models}
                         index={model}
@@ -1611,6 +1611,33 @@ export default function LibraryChooser({
                     )}
                   </>
                 )}
+              </>
+            ) : (
+              (footprintUnavailable || pdfTab) && (
+                <div className="preview-tabs">
+                  {footprintUnavailable && (
+                    <>
+                      <button disabled title={error}>Footprint</button>
+                      <button disabled title={error}>3D model</button>
+                    </>
+                  )}
+                  {pdfTab}
+                </div>
+              )
+            )}
+            {pdfEntry && (
+              <LibraryDatasheet
+                key={`pdf:${kind}:${pdfEntry.id}`}
+                id={pdfEntry.id}
+                kind={kind}
+                name={pdfEntry.name}
+                active={pdfActive}
+                canOperate={canUsePdf}
+                source={pdfEntry.library === 'JLCPCB' ? 'jlcpcb' : 'huaqiu'}
+              />
+            )}
+            {detail ? (
+              <>
                 <LibraryInformation detail={detail} unit={unit} />
                 {detail.library === 'JLCPCB' && detail.attribution && (
                   <JlcpcbAttribution key={detail.id} notice={detail.attribution.notice} />
@@ -1618,16 +1645,6 @@ export default function LibraryChooser({
               </>
             ) : failedPreviewEntry ? (
               <>
-                {footprintUnavailable && (
-                  <div className="preview-tabs">
-                    <button disabled title={error}>
-                      Footprint
-                    </button>
-                    <button disabled title={error}>
-                      3D model
-                    </button>
-                  </div>
-                )}
                 <div className="library-detail-sections">
                   <LibraryInfoSection title="Basic information" wide>
                     <LibraryInfoRows
@@ -1654,7 +1671,7 @@ export default function LibraryChooser({
                   )}
                 </div>
               </>
-            ) : !error && selected ? (
+            ) : !pdfActive && !error && selected ? (
               <WorkspaceLoading panel label="Loading preview" />
             ) : null}
             {selectedEntry && (
@@ -1662,8 +1679,7 @@ export default function LibraryChooser({
                 key={`${kind}:${selectedEntry.id}`}
                 id={selectedEntry.id}
                 kind={kind}
-                source={priceSource}
-                onSourceChange={setPriceSource}
+                defaultSource={selectedEntry.library === 'JLCPCB' ? 'lcsc' : 'huaqiu'}
                 composing={() => composing.current}
                 onKeyDown={blockComposingActivation}
               />

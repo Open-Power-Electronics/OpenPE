@@ -646,6 +646,10 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
       active--;
     }
   }
+  async function matchingParts(part, signal) {
+    const { entries } = await search({ kind: 'symbols', query: part.mpn }, signal, false);
+    return entries.filter(({ name, manufacturer }) => matchesPricePart(part, name, manufacturer));
+  }
   return {
     async price(id, signal) {
       return run(signal, async (signal) => {
@@ -656,11 +660,19 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
       });
     },
     pricingPart: (id, signal) => run(signal, (signal) => pricingPart(id, signal)),
+    datasheetReference: (id, signal) =>
+      run(signal, async (signal) => (await componentRecord(id, signal)).datasheet),
+    searchDatasheet(part, signal) {
+      return run(signal, async (signal) => {
+        const matches = await matchingParts(part, signal);
+        if (matches.length !== 1) return undefined;
+        const result = await componentRecord(matches[0].id, signal);
+        if (matchesPricePart(part, result.mpn, result.mfg)) return result.datasheet;
+      });
+    },
     searchPrices(part, signal) {
       return run(signal, async (signal) => {
-        const { entries } = await search({ kind: 'symbols', query: part.mpn }, signal, false);
-        const matches = entries
-          .filter(({ name, manufacturer }) => matchesPricePart(part, name, manufacturer))
+        const matches = (await matchingParts(part, signal))
           .slice(0, 4)
           .map(({ id }) => decodeIdentity(id));
         if (!matches.length) return [];

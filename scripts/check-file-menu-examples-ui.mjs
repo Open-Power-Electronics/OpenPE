@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 import { parseProject } from '../server/project-format.mjs';
 import { readOriginalExamples } from './original-example-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
-
+import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 // Real workspace/Core with in-memory native ports. No Electron, providers,
@@ -28,7 +28,27 @@ const examples = await Promise.all(
   }),
 );
 const rcSource = formatTestProjectSource();
-const preferences = { provider: 'codex', effort: 'low', approvalMode: 'review', models: {} };
+const preferences = {
+  provider: 'codex',
+  effort: 'low',
+  approvalMode: 'review',
+  models: { ...defaultAgentPreferences.models },
+};
+// Host listings: catalog discovery by resource root and the pinned EMC shortcut.
+const home = {
+  examples: [...manifest.recent, ...manifest.examples].map(({ id, title, description, root }) => ({
+    id,
+    title,
+    description,
+    section: root,
+  })),
+  recent: manifest.recent.map(({ id, title, directory, file }) => ({
+    id,
+    title,
+    description: `/fixture/examples/project/${directory}/${file}.kicad_pro`,
+    pinned: true,
+  })),
+};
 await mkdir('test-results', { recursive: true });
 const bundle = await build({
   stdin: {
@@ -90,7 +110,7 @@ async function mount(titleBarOverlay, atLimit = false) {
     ...preferences,
   };
   await page.addInitScript(
-    ({ titleBarOverlay, examples }) => {
+    ({ titleBarOverlay, examples, home }) => {
       window.exampleMenuCalls = { opens: [], saves: [], allocations: 0, releases: [] };
       window.openpe = {
         titleBarOverlay,
@@ -107,6 +127,10 @@ async function mount(titleBarOverlay, atLimit = false) {
           window.exampleMenuCalls.allocations++;
           return crypto.randomUUID();
         },
+        listExamples: async () => ({ entries: home.examples, warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: home.recent, warnings: [] }),
+        onRecentChanged: () => () => {},
+        projectDirectory: async () => ({ entries: [], truncated: false }),
         releaseFile: async (id) => window.exampleMenuCalls.releases.push(id),
         setDirty: async () => {},
         onCloseRequested: () => () => {},
@@ -127,7 +151,7 @@ async function mount(titleBarOverlay, atLimit = false) {
         },
       };
     },
-    { titleBarOverlay, examples },
+    { titleBarOverlay, examples, home },
   );
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
@@ -246,8 +270,8 @@ try {
         })),
       );
       assert.ok(
-        labels.length > 0 && labels.every((label) => label.whiteSpace === 'normal' && label.fits),
-        'Menu labels display their complete text.',
+        labels.length > 0 && labels.every((label) => label.whiteSpace === 'nowrap' && label.fits),
+        'Menu labels display their complete single-line text.',
       );
     }
     assert.deepEqual(

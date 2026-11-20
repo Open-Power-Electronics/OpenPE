@@ -16,7 +16,7 @@ export const modelBoardDisplayLayers = [
   { key: 'mask', label: 'Solder mask', color: 0x418c7c, order: 1 },
   { key: 'silkscreen', label: 'Silkscreen', color: 0xf2f2f0, order: 2 },
 ] as const;
-export type ModelBoardDisplayKey = (typeof modelBoardDisplayLayers)[number]['key'];
+type ModelBoardDisplayKey = (typeof modelBoardDisplayLayers)[number]['key'];
 export type ModelBoardDisplay = Record<ModelBoardDisplayKey, boolean>;
 export type ModelBoardDisplayGroups = Record<ModelBoardDisplayKey, Group>;
 export const modelBoardDisplayColors = Object.fromEntries(

@@ -148,8 +148,11 @@ footprint assignment uses Core. [DESIGN.md](../DESIGN.md) owns presentation.
 ### Component pricing
 
 The **Price source** dropdown offers LCSC Electronics and HQ Online for selected
-KiCad, NextPCB and JLCPCB entries. It defaults to HQ Online and keeps the user's choice
-while the chooser is open. **Check price** or **Refresh price** starts a request.
+KiCad, NextPCB and JLCPCB entries. A NextPCB selection starts with HQ Online,
+and a JLCPCB selection starts with LCSC Electronics, which shares its part codes.
+KiCad starts with HQ Online. A manual choice applies to the selected entry until
+the selection changes or the chooser closes. **Check price** or **Refresh price**
+starts a request.
 Search, selection, switching price sources and CAD previews issue no price
 requests. A source or selection change cancels pending requests. Each source's
 last successful result and check time stay with the selected entry through
@@ -187,6 +190,37 @@ quantity, the manufacturer's label and stock where available. No matching
 priced offer yields an empty result. Provider failures and malformed responses
 remain retryable. Provider requests use fixed HTTPS endpoints with bounded
 responses and no quote cache.
+
+### Component datasheet preview
+
+The selected component's **PDF** tab loads page one from **HQ Online** for
+NextPCB and KiCad entries, and from **JLCPCB** for JLCPCB entries. Catalog
+browsing, selection and CAD previews do not download PDFs.
+
+HQ Online uses the NextPCB component detail record. JLCPCB reads a fresh
+catalog page and keeps the signed PDF locator in the host. For their own catalog
+entries the host uses the exact provider identity. For other entries it shares the
+[pricing identity rules](#component-pricing), then requires a unique full
+part-number and available manufacturer match on the first provider page. The
+host checks the JLCPCB PDF locator against the resolved component code.
+Online footprint entries share their component's identity.
+
+The host accepts direct PDF references on approved manufacturer literature
+paths and the documented vendors' dedicated asset hosts. It upgrades supported
+legacy HTTP links to HTTPS, preserves JLCPCB's signed query, and rejects
+redirects. Missing or unsupported references show an empty preview. Download
+and parse failures allow retry.
+
+Each PDF is limited to 32 MiB. A cancellable worker rasterizes only the
+requested page, up to 2,400 pixels on the longest side and 8 MiB per PNG.
+The service allows two concurrent previews with a 45-second deadline and
+briefly retains up to two successfully parsed PDFs in memory for paging.
+Leaving the PDF tab, changing the component or closing the chooser cancels
+pending work. The inline and expanded views share the same reader while the
+component remains selected. The reader retains up to two rendered pages for
+back/forward navigation.
+The preview stays outside design data and Agent context. [Reviewed example
+datasheets](DATASHEETS.md) have a separate binding and verification contract.
 
 ### NextPCB online catalog
 
@@ -537,10 +571,8 @@ sources and packaged notices. Portable SPICE files follow the
 packages, `symbols/` holds `.kicad_sym` libraries and `models/` holds STEP files.
 Flat STEP basename collisions use an eight-character content hash
 suffix. Stable registry IDs and model bytes are unchanged.
-Example generation (`npm run examples`) checks for byte-matching retired asset
-copies and notices after publishing the complete native set. It removes only
-those verified copies and any resulting empty directories. Asset operations reject
-links and preserve differing or unknown files, including local solver results.
+Asset preparation rejects links, never deletes files and fails on an existing
+differing asset instead of overwriting it.
 
 `occt-import-js` 0.0.23 tessellates STEP in workers for Three.js. Conversion is
 cancellable with a 45-second timeout, two service jobs and one conversion per
@@ -655,6 +687,7 @@ results and retry the remaining identities in a new output directory.
 | `npm run examples:check-models -- --render`                                                                         | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices                                                                                       |
 | `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts`                           | Catalog/access boundaries, placement/assignment and atomic synchronization                                                                                                                                               |
 | `tests/library-prices.test.ts`                                                                                   | Mocked pricing across the three CAD catalogs and both suppliers, with exact match filtering and reviewed LM2596 orderable identities.                                                                                     |
+| `tests/datasheet-pages.test.ts`, `tests/browser-previews.test.ts`, `node scripts/check-nextpcb-library-ui.mjs` | Exact datasheet identities, bounded fetching, PDF rasterization and chooser paging, retry and focus with mocked catalog responses |
 | `tests/nextpcb-library.test.ts`, `node scripts/check-nextpcb-library-ui.mjs`                                        | Mocked online catalog boundaries, native validation, retry/cancellation and chooser/IME behavior                                                                                                                         |
 | `node scripts/check-nextpcb-models.mjs --count 10000`                                                               | Opt-in live NextPCB sweep of unique catalog identities, native symbols, footprints and each supported STEP reference. Records per-asset outcomes in `test-results/nextpcb-models/` and resumes from recorded components. |
 | `node scripts/check-nextpcb-prices.mjs --cad test-results/nextpcb-models/components.jsonl`                         | Opt-in live HQ Online quote audit for identities with validated NextPCB symbols and footprints. Repeat `--cad` for additional reports. |

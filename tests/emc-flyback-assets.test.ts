@@ -127,14 +127,8 @@ test('every EMC board model resolves and its exact bytes travel with a whole-pro
       }
     assert.equal(expected.size, 29);
     const assets = await emcProjectAssets(project);
-    assert.equal(assets.filter((asset) => asset.file.startsWith('models/')).length, 29);
-    for (const entry of emcManifest.supplementalLicenses)
-      assert.ok(
-        assets.some(
-          (asset) => asset.file === `licenses/emc-flyback-demo/manufacturer/${entry.file}`,
-        ),
-        'Manufacturer source and license notices accompany their models.',
-      );
+    assert.equal(assets.length, 29);
+    assert.ok(assets.every((asset) => /^models\/[^/]+\.step$/.test(asset.file)));
     await prepareExampleFootprints(project, path.join(directory, 'flyback.kicad_pro'));
     await assert.rejects(readFile(path.join(directory, 'NOTICE.txt')), { code: 'ENOENT' });
     await assert.rejects(readFile(path.join(directory, 'licenses/emc-flyback-demo/LICENSE')), {

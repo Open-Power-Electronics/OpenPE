@@ -87,7 +87,7 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 | Path                         | Contents                                                                                                                      |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `.openpe/`                   | Development and test caches, temporary fixtures, local inputs and optional app data overrides                                 |
-| `test-results/`              | Check outputs, temporary profiles, saved audit inputs and [retained benchmark snapshots](LAYOUT.md#examples-and-verification) |
+| `test-results/`              | Check outputs, temporary profiles, audit inputs and [benchmark snapshots](LAYOUT.md#examples-and-verification)                 |
 | `.next/`, `out/`, `release/` | Renderer builds, packages and maintainer solver archives                                                                      |
 | `promotion/`                 | Separate local Remotion workspace with source, recordings and renders                                                         |
 | `tmp/`                       | Local experiments                                                                                                             |

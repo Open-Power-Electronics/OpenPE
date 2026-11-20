@@ -146,15 +146,6 @@ The reproducible LM2596 Buck benchmark prescribes 1 W into U1 pads at ambient 25
 
 ### EMC Flyback comparison
 
-`npm run simulation:check-emc-flyback`, then
-`npm run thermal:check-emc-flyback`, imports 17 final-20% dissipative paths from
-the 100 Ω resistor plus retained 0.5 A load-step bench into PCB pads using the
-default material/convection assumptions. Add
-`-- --mesh-size-mm=3` for the separate coarser comparison. Reports retain mesh,
-solver artifacts, fields and pad temperatures under `test-results/`.
-
-[EMC Flyback verification](EMC-FLYBACK.md#thermal-comparison) defines the current
-bench and report evidence. Two mesh sizes check agreement, not convergence.
-The upstream load, enclosure, package and radiation model differ from this
-board-only analysis. OpenPE pad temperatures cannot stand for its junction
-temperatures or establish agreement with its case-coupled result.
+The EMC Flyback comparison uses matching SPICE terminal power as PCB heat
+input. See [EMC Flyback verification](EMC-FLYBACK.md#thermal-comparison) for
+commands, mesh settings and comparison limits.

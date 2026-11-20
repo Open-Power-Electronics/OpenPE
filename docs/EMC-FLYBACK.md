@@ -1,6 +1,6 @@
 # EMC Flyback verification
 
-EMC Flyback is Home's default Recent entry before desktop opening and Save history exists. It is converted from [AI-PCB-layout's EMC Flyback demo](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo), pinned at commit `e1b9a64ac9ac306647fa30094932fb792d17e373`. Original design, simulation bench, notices and SHA-256 identities remain under `resources/example-catalog/sources/emc-flyback/`. The editable project is [emc-flyback.kicad_pro](../examples/project/emc-flyback/emc-flyback.kicad_pro). Source attribution is CC BY 4.0.
+EMC Flyback is converted from [AI-PCB-layout's EMC Flyback demo](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo), pinned at commit `e1b9a64ac9ac306647fa30094932fb792d17e373`. Original design, simulation bench, notices and SHA-256 identities remain under `resources/example-catalog/sources/emc-flyback/`. The editable project is [emc-flyback.kicad_pro](../examples/project/emc-flyback/emc-flyback.kicad_pro). Source attribution is CC BY 4.0.
 
 ## Native conversion
 
@@ -32,7 +32,7 @@ Thermal inputs use the final 20% of the original accepted native SPICE samples. 
 
 ## Thermal comparison
 
-`npm run thermal:check-emc-flyback` runs bundled Gmsh and Elmer with the matching completed 100 Ω SPICE heat inputs. It records the actual mesh, temperature field, energy balance and area-weighted pad temperatures under `test-results/`. The default mesh setting is 2 mm; `-- --mesh-size-mm=3` requests a separate coarser comparison. Two resolutions alone do not establish mesh convergence.
+Run `npm run simulation:check-emc-flyback` to prepare the matching 100 Ω SPICE heat inputs, then `npm run thermal:check-emc-flyback` to solve with bundled Gmsh and Elmer. The default 2 mm run records the mesh, temperature field, energy balance and area-weighted pad temperatures in `test-results/emc-flyback-thermal/`. Add `-- --mesh-size-mm=3` for a coarser run. Use additional refinement to assess convergence.
 
 OpenPE uses constant isotropic FR4 at 0.3 W/(m·K), copper at 400 W/(m·K), 35 µm copper layers, 25 µm plating and prescribed front/back/edge convection of 10/10/5 W/(m²·K). Supported losses enter the PCB through their actual pads. The [upstream design report](https://github.com/ChengminLi/AI-PCB-layout/blob/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo/report/EMC_flyback_design_report.pdf), pages 18–19, includes an aluminium case, Q1 thermal contact, radiation, anisotropic FR4, temperature-dependent cooling/losses and additional prescribed device losses. Its load and thermal assumptions differ from the Home bench.
 

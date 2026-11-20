@@ -3,6 +3,7 @@ import { convertJlcpcbComponent } from './jlcpcb-cad.mjs';
 import { libraryPackageQuery, matchesLibraryPackage } from './library-format.mjs';
 import { CatalogHttpError, readCatalogBytes } from './online-library-fetch.mjs';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { matchesPricePart } from './library-prices.mjs';
 
 const catalogUrl =
   'https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList/v2';
@@ -168,10 +169,7 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     return categories;
   }
 
-  async function loadPage(keyword, currentPage, filter, signal) {
-    const key = JSON.stringify([keyword, currentPage, filter]);
-    const saved = recall(pages, key);
-    if (saved) return saved;
+  async function readPage(keyword, currentPage, filter, signal) {
     const response = await catalogRequest({ keyword, currentPage, pageSize, ...filter }, signal);
     const data = response?.data?.componentPageInfo;
     const emptyPage =
@@ -188,10 +186,18 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
           data.pageSize !== pageSize))
     )
       throw new Error('JLCPCB returned an invalid search page.');
-    const entries = emptyPage ? [] : data.list.map(entryFor);
+    return { rows: emptyPage ? [] : data.list, total: data.total };
+  }
+
+  async function loadPage(keyword, currentPage, filter, signal) {
+    const key = JSON.stringify([keyword, currentPage, filter]);
+    const saved = recall(pages, key);
+    if (saved) return saved;
+    const { rows, total } = await readPage(keyword, currentPage, filter, signal);
+    const entries = rows.map(entryFor);
     if (new Set(entries.map((entry) => entry.id)).size !== entries.length)
       throw new Error('JLCPCB returned duplicate component identities.');
-    const page = { entries, total: data.total };
+    const page = { entries, total };
     signal.throwIfAborted();
     remember(pages, key, page, 16);
     return page;
@@ -392,6 +398,25 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
       return run(signal, async (signal) => {
         const { entry, code } = await catalogPart(id, signal);
         return { mpn: entry.name, manufacturer: entry.manufacturer, lcscSku: code };
+      });
+    },
+    datasheetReference({ id, part }, signal) {
+      return run(signal, async (signal) => {
+        const code = id && /^JLCPCB:(C[1-9]\d{0,11})$/.exec(id)?.[1];
+        if (id && !code) throw new Error('Invalid JLCPCB component identity.');
+        const { rows } = await readPage(code || part.mpn, 1, undefined, signal);
+        const matches = rows.filter((row) =>
+          code
+            ? row?.componentCode === code
+            : typeof row?.componentCode === 'string' &&
+              partCode.test(row.componentCode) &&
+              matchesPricePart(part, row.componentModelEn, row.componentBrandEn),
+        );
+        if (new Set(matches.map((row) => row.componentCode)).size !== matches.length)
+          throw new Error('JLCPCB returned duplicate component identities.');
+        const matched = matches[0];
+        if (matches.length === 1)
+          return { value: matched.dataManualFileAccessIdUrl, code: matched.componentCode };
       });
     },
     async modelBytes(reference, signal) {

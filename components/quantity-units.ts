@@ -1,4 +1,4 @@
-export type QuantityUnit = { label: string; factor: number; offset?: number };
+type QuantityUnit = { label: string; factor: number; offset?: number };
 
 export function formatFixedQuantity(value: number, decimalPlaces = 2): string {
   const display = value.toFixed(decimalPlaces);

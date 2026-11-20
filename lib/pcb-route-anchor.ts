@@ -13,7 +13,7 @@ import { padPolygon, type Polygon } from './pcb-polygons';
 
 type Track = PCB['tracks'][number];
 type Via = PCB['vias'][number];
-export type PCBRouteAnchorTarget =
+type PCBRouteAnchorTarget =
   | {
       kind: 'pad';
       id: string;

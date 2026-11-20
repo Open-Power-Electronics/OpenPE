@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
+import { fileMenuAction } from './file-menu-test-helpers.mjs';
 
 // A real Workbench/Core in an isolated renderer. All native and service actions
 // stay in memory; this never opens Electron or writes a user's project.
@@ -116,6 +117,7 @@ const bundle = await build({
               .replace(
                 '  const capabilityPorts = useRef<WorkbenchCapabilityPorts>(null!);',
                 `window.readNativeSourceContext = readWorkspaceContext;
+              window.nativeSourceHost = capabilityHost;
               const capabilityPorts = useRef<WorkbenchCapabilityPorts>(null!);`,
               ),
             resolveDir: path.dirname(file),
@@ -141,6 +143,7 @@ try {
   });
   await page.addInitScript(() => {
     window.nativeSaveRequests = [];
+    window.nativeImageExports = [];
     window.openpe = {
       titleBarOverlay: false,
       writeWorkspaceRecovery: async (content) => {
@@ -162,6 +165,10 @@ try {
       save: async (options) => {
         window.nativeSaveRequests.push(options);
         return { name: 'circuit.kicad_pro' };
+      },
+      exportImage: async (image) => {
+        window.nativeImageExports.push(image);
+        return { name: 'schematic.png' };
       },
     };
   });
@@ -316,12 +323,24 @@ try {
   );
   await selectFile(secondary.name);
   await button('Schematic').click();
-  await page.evaluate(() => {
-    const core = window.nativeSourceCore;
-    core.execute('schematic.remove', {
-      schematicId: core.getSnapshot().project.additionalSchematics[0].id,
-    });
+  await page.getByRole('tab', { name: 'Control schematic', exact: true }).click();
+  await fileMenuAction(page, 'Remove schematic');
+  const removeDialog = page.getByRole('dialog', { name: 'Remove schematic?' });
+  await removeDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  assert.equal(await page.getByRole('tab', { name: 'Control schematic', exact: true }).count(), 1);
+  await fileMenuAction(page, 'Remove schematic');
+  await removeDialog.getByRole('button', { name: 'Remove', exact: true }).click();
+  await removeDialog.waitFor({ state: 'hidden' });
+  const imageExport = await page.evaluate(async () => {
+    const host = window.nativeSourceHost;
+    const options = { actor: 'agent' };
+    return host.execute('workbench.exportSchematicImage', {}, options);
   });
+  assert.deepEqual(imageExport, { status: 'exported', name: 'schematic.png' });
+  const images = await page.evaluate(() => window.nativeImageExports);
+  assert.equal(images.length, 1);
+  assert.match(images[0].dataUrl, /^data:image\/png;base64,/);
+  assert.ok(images[0].width > 0 && images[0].height > 0);
   await settle();
   const removedContext = await page.evaluate(() => window.readNativeSourceContext());
   assert.equal(
@@ -581,7 +600,7 @@ try {
   await page.screenshot({ path: 'test-results/native-source-ui.png' });
   assert.deepEqual(errors, []);
   console.log(
-    'Native Source UI passed: all project files, exact copy, JSON/S-expression syntax, per-file drafts/history and atomic Apply/Undo.',
+    'Native Source UI passed: native files, exact copy, per-file drafts, atomic Apply/Undo, schematic removal and Agent PNG export.',
   );
 } finally {
   await browser.close();

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import sharp from 'sharp';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 
 // Isolated chooser fixtures: no Electron, provider, remote library or user data.
@@ -200,6 +201,8 @@ try {
   const errors = [];
   const priceRequests = [];
   let priceReply;
+  const datasheetRequests = [];
+  let datasheetReply;
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -208,6 +211,10 @@ try {
     if (request.url() === 'http://localhost/api/browser-preview/price') {
       priceRequests.push(request.postDataJSON());
       return route.fulfill(await priceReply);
+    }
+    if (request.url() === 'http://localhost/api/browser-preview/datasheet') {
+      datasheetRequests.push(request.postDataJSON());
+      return route.fulfill(await datasheetReply);
     }
     if (request.url() === 'http://localhost/brand/openpe-mark.svg')
       return route.fulfill({
@@ -281,7 +288,10 @@ try {
   }
 
   await waitForDetail('Device:R');
-  assert.equal(await chooser.getByRole('combobox', { name: 'Price source' }).isVisible(), true);
+  assert.equal(
+    await chooser.getByRole('combobox', { name: 'Price source' }).innerText(),
+    'HQ Online',
+  );
   assert.equal(await categoryLevel(2).isDisabled(), true);
   assert.equal(
     await page.getByRole('button', { name: 'Footprint', exact: true }).isDisabled(),
@@ -473,14 +483,150 @@ try {
     .getByText('No USD quote from HQ Online for this component.', { exact: true })
     .waitFor();
   assert.equal(await pricing.getByRole('table').count(), 0);
+  await priceSource.press('Enter');
+  await option('Price source', 'LCSC Electronics').click();
+  assert.equal(await priceSource.innerText(), 'LCSC Electronics');
   await rows.nth(1).click();
   await waitForDetail('NextPCB:1002');
+  assert.equal(await priceSource.innerText(), 'HQ Online');
   assert.equal(await checkPrice.isEnabled(), true);
   assert.equal(await pricing.locator('time').count(), 0);
   await rows.first().click();
   await waitForDetail('NextPCB:1001');
   assert.equal(await checkPrice.isEnabled(), true);
   assert.equal(priceRequests.length, 5);
+
+  const pdfTab = chooser.getByRole('button', { name: 'PDF', exact: true });
+  const pdfInline = chooser.locator('.library-pdf-inline');
+  const pdfDialog = page.getByRole('dialog', { name: 'Online amplifier 1', exact: true });
+  const expandPdf = pdfInline.getByRole('button', { name: 'Open PDF in window' });
+  assert.equal(datasheetRequests.length, 0);
+  await pdfTab.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  assert.equal(await pdfInline.count(), 0);
+  const pendingPdf = Promise.withResolvers();
+  datasheetReply = pendingPdf.promise;
+  await pdfTab.press('Enter');
+  await pdfInline.getByRole('status', { name: 'Loading PDF' }).waitFor();
+  assert.equal(await pdfDialog.count(), 0);
+  assert.deepEqual(datasheetRequests, [
+    { id: 'NextPCB:1001', kind: 'symbols', source: 'huaqiu', page: 1 },
+  ]);
+  pendingPdf.resolve({ status: 422, json: { error: 'Fixture failed' } });
+  await pdfInline.getByRole('alert').getByText('Could not load the PDF.').waitFor();
+  const pdfPng = await sharp({
+    create: { width: 612, height: 792, channels: 3, background: 'white' },
+  }).png().toBuffer();
+  const rasterPage = (page, pageCount = 2) => ({
+    json: {
+      page,
+      pageCount,
+      image: {
+        mimeType: 'image/png',
+        width: 612,
+        height: 792,
+        data: pdfPng.toString('base64'),
+      },
+    },
+  });
+  datasheetReply = rasterPage(1);
+  await pdfInline.getByRole('button', { name: 'Retry', exact: true }).click();
+  const firstPdfPage = pdfInline.getByRole('img', { name: 'Online amplifier 1, page 1' });
+  await firstPdfPage.evaluate((image) => image.decode());
+  const pdfToolbar = pdfInline.locator('.library-pdf-toolbar');
+  assert.equal(await pdfToolbar.getByRole('combobox').count(), 1, 'Only zoom has a dropdown.');
+  assert.equal(await expandPdf.locator('svg.lucide-maximize').count(), 1);
+  assert.ok(
+    await pdfToolbar.evaluate((toolbar) => {
+      const bounds = toolbar.getBoundingClientRect();
+      const reading = toolbar.querySelector('.library-pdf-reading-controls').getBoundingClientRect();
+      const controls = [...toolbar.querySelectorAll('[role="group"], .library-pdf-open')];
+      const [pages, zoom, expand] = controls.map((control) => control.getBoundingClientRect());
+      return (
+        [zoom, expand].every((rect) => rect.height === pages.height && rect.top === pages.top) &&
+        pages.right < zoom.left &&
+        zoom.right < expand.left &&
+        Math.abs(reading.left + reading.right - bounds.left - bounds.right) <= 1
+      );
+    }),
+    'Page navigation and zoom are centered together, with expand at the edge.',
+  );
+  await pdfToolbar.screenshot({ path: 'test-results/library-chooser-ui/pdf-toolbar.png' });
+  const pdfViewport = page.viewportSize();
+  await page.setViewportSize({ ...pdfViewport, width: 360 });
+  assert.ok(
+    await pdfToolbar.evaluate((toolbar) => {
+      const bounds = toolbar.getBoundingClientRect();
+      return (
+        toolbar.scrollWidth <= toolbar.clientWidth &&
+        [...toolbar.querySelectorAll('button, input')].every((control) => {
+          const rect = control.getBoundingClientRect();
+          return rect.left >= bounds.left && rect.right <= bounds.right;
+        })
+      );
+    }),
+    'PDF controls wrap without clipping in a narrow chooser.',
+  );
+  await page.setViewportSize(pdfViewport);
+  async function chooseZoom(surface, optionName) {
+    await surface.getByRole('combobox', { name: 'Zoom', exact: true }).click();
+    await page.getByRole('option', { name: optionName, exact: true }).click();
+  }
+  const zoomTrigger = pdfToolbar.getByRole('combobox', { name: 'Zoom' });
+  const zoomWidth = await zoomTrigger.evaluate((trigger) => trigger.offsetWidth);
+  await chooseZoom(pdfInline, 'Fit page');
+  assert.ok(await firstPdfPage.evaluate((image) =>
+    image.getBoundingClientRect().height <= image.closest('.library-pdf-viewport').clientHeight));
+  await chooseZoom(pdfInline, '200%');
+  assert.equal(await zoomTrigger.evaluate((trigger) => trigger.offsetWidth), zoomWidth);
+  assert.equal(await firstPdfPage.evaluate((image) => image.offsetWidth), 1224);
+  const pageNumber = pdfInline.getByRole('textbox', { name: 'Page number' });
+  await pageNumber.fill('99');
+  await pageNumber.press('Enter');
+  assert.equal(await pageNumber.inputValue(), '1');
+  assert.equal(datasheetRequests.length, 2);
+  await pageNumber.fill('2');
+  await pageNumber.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  assert.equal(await pageNumber.inputValue(), '2');
+  assert.equal(datasheetRequests.length, 2);
+  datasheetReply = rasterPage(2);
+  await pageNumber.press('Enter');
+  const reading = pdfInline.getByRole('region', { name: 'PDF preview, page 2 of 2' });
+  await reading.waitFor();
+  await reading.evaluate((view) => {
+    view.scrollTop = 490;
+    view.dispatchEvent(new Event('scroll'));
+  });
+  await expandPdf.click();
+  await pdfDialog.getByRole('heading', { name: 'Online amplifier 1', exact: true }).waitFor();
+  const windowPage = pdfDialog.getByRole('region', { name: 'PDF preview, page 2 of 2' });
+  assert.equal(await windowPage.evaluate((view) => view.scrollTop), 490);
+  assert.equal(await pdfDialog.getByRole('combobox').count(), 1, 'Only zoom has a dropdown.');
+  assert.equal(await pdfDialog.getByRole('combobox', { name: 'Zoom' }).innerText(), '200%');
+  assert.ok(await pdfDialog.getByRole('button', { name: 'Next page' }).isDisabled());
+  assert.equal(datasheetRequests.length, 3);
+  await page.keyboard.press('Escape');
+  await pdfDialog.waitFor({ state: 'detached' });
+  assert.ok(await expandPdf.evaluate((button) => document.activeElement === button));
+  assert.equal(await reading.evaluate((view) => view.scrollTop), 490);
+  await reading.press('PageUp');
+  await firstPdfPage.waitFor();
+  await chooser.getByRole('button', { name: 'Symbol', exact: true }).click();
+  assert.equal(await pdfInline.count(), 0);
+  await pdfTab.click();
+  await firstPdfPage.waitFor();
+  assert.equal(datasheetRequests.length, 3);
+  assert.equal(await resultCount.textContent(), '16 results loaded');
+  await rows.nth(1).click();
+  await waitForDetail('NextPCB:1002');
+  datasheetReply = { body: 'null', contentType: 'application/json' };
+  await pdfTab.click();
+  await pdfInline.getByText('No PDF is available from HQ Online for this component.').waitFor();
+  assert.equal(await pdfInline.getByRole('combobox').count(), 0);
+  assert.deepEqual(datasheetRequests.at(-1), {
+    id: 'NextPCB:1002', kind: 'symbols', source: 'huaqiu', page: 1,
+  });
+  await rows.first().click();
+  await waitForDetail('NextPCB:1001');
 
   const catalogSearches = () =>
     page.evaluate(() =>
@@ -1120,7 +1266,7 @@ try {
   await chooseSource('JLCPCB');
   await page.waitForFunction(() => Boolean(fixture.releaseJlcPage));
   await waitForDetail('JLCPCB:C8000');
-  assert.equal(await chooser.getByRole('combobox', { name: 'Price source' }).isVisible(), true);
+  assert.equal(await priceSource.innerText(), 'LCSC Electronics');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   assert.equal(await search.inputValue(), '');
   assert.equal(await rows.count(), 12, 'The first page is visible and usable during the append.');
@@ -1381,9 +1527,23 @@ try {
   await waitForBrowseRows(1);
   await waitForDetail('JLCPCB:C7593');
   assert.equal(await rows.first().locator('.library-result-package').textContent(), 'SOIC-8');
+  assert.equal(await priceSource.innerText(), 'LCSC Electronics');
+  assert.equal(priceRequests.length, 5, 'Catalog and part selection leave quotes on demand.');
+  priceReply = {
+    json: { ...quote, source: 'lcsc', offers: [{ ...quote.offers[0], sku: 'C7593' }] },
+  };
+  await checkPrice.press('Enter');
+  await pricing.getByRole('cell', { name: '$0.08', exact: true }).waitFor();
+  assert.deepEqual(priceRequests.at(-1), { id: 'JLCPCB:C7593', kind: 'symbols', source: 'lcsc' });
+  datasheetReply = rasterPage(1, 4);
+  await pdfTab.click();
+  await pdfInline.getByRole('region', { name: 'PDF preview, page 1 of 4' }).waitFor();
+  assert.deepEqual(datasheetRequests.at(-1), {
+    id: 'JLCPCB:C7593', kind: 'symbols', source: 'jlcpcb', page: 1,
+  });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: default online browsing, overlapping-page deduplication/raw cursor/restoration/retry, failed-search count reset, append-error retention, source/category hierarchy, explicit search, metadata, native single placement, stale preview, IME and cancellation (mocked isolated browser).',
+    'PASS: catalog browsing, search and paging, CAD selection and placement, price checks, datasheet preview and paging, retry, focus return, IME and cancellation (mocked isolated browser).',
   );
 } finally {
   await browser.close();

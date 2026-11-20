@@ -2,7 +2,7 @@ import type { Project } from './project';
 import { validPCBDesignRuleLimit } from './design-rule-checks';
 import { parseSExpr, val, type SExpr } from './sexpr';
 
-export type ClearanceSource = {
+type ClearanceSource = {
   key: string;
   label: string;
   clearance: number;

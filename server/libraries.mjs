@@ -7,6 +7,7 @@ import { appendEmcFootprintModels } from './emc-flyback-assets.mjs';
 import { createNextPcbLibrary } from './nextpcb-library.mjs';
 import { createJlcpcbLibrary } from './jlcpcb-library.mjs';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { createLibraryDatasheetReader } from './library-datasheets.mjs';
 import { isLibraryPriceRequest, kiCadPricePart, readLcscPrices } from './library-prices.mjs';
 import { CatalogHttpError } from './online-library-fetch.mjs';
 import { isOnlineLibrary, librarySources, onlineFootprintLibrary } from './library-format.mjs';
@@ -167,7 +168,8 @@ export function createStepParserPool({
 
 /** @param {{root?: string, dataDir?: string, allowModelDownloads?: boolean,
  * stepParserPool?: ReturnType<typeof createStepParserPool>, nextpcbFetcher?: typeof fetch,
- * modelFetcher?: typeof fetch, jlcpcbFetcher?: typeof fetch, priceFetcher?: typeof fetch}} options */
+ * modelFetcher?: typeof fetch, jlcpcbFetcher?: typeof fetch, priceFetcher?: typeof fetch,
+ * datasheetFetcher?: typeof fetch}} options */
 export function createLibraryService({
   root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -181,6 +183,7 @@ export function createLibraryService({
   jlcpcbFetcher,
   modelFetcher = fetch,
   priceFetcher = fetch,
+  datasheetFetcher = fetch,
 }) {
   let worker,
     serial = 0,
@@ -194,6 +197,22 @@ export function createLibraryService({
   const nextpcb = createNextPcbLibrary({ fetcher: nextpcbFetcher });
   const jlcpcb = createJlcpcbLibrary({ fetcher: jlcpcbFetcher });
   const online = { NextPCB: nextpcb, JLCPCB: jlcpcb };
+  const datasheet = createLibraryDatasheetReader({
+    shutdown: shutdown.signal,
+    fetcher: datasheetFetcher,
+    async reference({ id, kind, source }, signal) {
+      const catalog = onlineFootprintLibrary(id);
+      if (catalog === 'NextPCB' && source === 'huaqiu')
+        return { value: await nextpcb.datasheetReference(id, signal) };
+      if (catalog === 'JLCPCB' && source === 'jlcpcb')
+        return jlcpcb.datasheetReference({ id }, signal);
+      const part = await catalogPart(id, kind, catalog, signal);
+      if (!part?.mpn) return undefined;
+      return source === 'huaqiu'
+        ? { value: await nextpcb.searchDatasheet(part, signal) }
+        : jlcpcb.datasheetReference({ part }, signal);
+    },
+  });
   /** @param {{signal?: AbortSignal, onProgress?: (progress: {completed: number, total: number}) => void, [key: string]: any}} input */
   function request({ signal, onProgress, ...message }) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
@@ -276,6 +295,11 @@ export function createLibraryService({
     signal?.throwIfAborted();
     return appendEmcFootprintModels(message.id, example ?? (await workerRequest(message, signal)));
   }
+  async function catalogPart(id, kind, catalog, signal) {
+    if (catalog) return online[catalog].pricingPart(id, signal);
+    const detail = await request({ action: 'detail', kind, id, signal });
+    if (detail.symbol) return kiCadPricePart(detail);
+  }
   /** @returns {Promise<import('../lib/library').LibraryPrice>} */
   async function price(input, requestSignal) {
     if (!isLibraryPriceRequest(input)) throw new Error('Invalid component price request.');
@@ -296,13 +320,7 @@ export function createLibraryService({
         signal.throwIfAborted();
         return { source, ...quote };
       }
-      let part;
-      if (catalog) {
-        part = await online[catalog].pricingPart(id, signal);
-      } else {
-        const detail = await request({ action: 'detail', kind, id, signal });
-        if (detail.symbol) part = kiCadPricePart(detail);
-      }
+      const part = await catalogPart(id, kind, catalog, signal);
       signal.throwIfAborted();
       let offers = [];
       if (part?.mpn) {
@@ -467,6 +485,7 @@ export function createLibraryService({
   return {
     request,
     price,
+    datasheet,
     componentModelBytes,
     parseStep: (bytes, signal) => stepParsers.run(bytes, signal),
     async modelPath(reference, signal) {

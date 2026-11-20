@@ -18,7 +18,8 @@ const bundle = await build({
     import{appearanceVariables,defaultAppearance}from'./lib/appearance';
     const core=new ProjectCore(createBlankProject()),host=createCapabilityHost();registerProjectCapabilities(host,core);
     const footprint={id:'fixture',models:[]};
-    const appearance={appearance:defaultAppearance,update:()=>{},ready:true,error:'',resolvedTheme:'light'};
+    const appearance={appearance:defaultAppearance,update:()=>{},ready:true,error:'',resolvedTheme:'light',
+      layoutPreferences:{enabled:false,busy:false,error:'',update:()=>{}}};
     window.theme=value=>{document.documentElement.dataset.theme=value;for(const[key,color]of Object.entries(appearanceVariables(defaultAppearance,value)))document.documentElement.style.setProperty(key,color)};
     function App(){const[mode,setMode]=useState('chooser');window.show=setMode;
       if(['generic','compact','wide'].includes(mode))return <Dialog title="Generic" compact={mode==='compact'} wide={mode==='wide'} onClose={()=>{}}>Content</Dialog>;

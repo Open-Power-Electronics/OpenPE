@@ -93,7 +93,7 @@ import {
 
 /** Private editor models are confined to the in-process adapter. Public queries
  * and project.replace use the existing canonical document format. */
-export type ProjectCoreSnapshot = {
+type ProjectCoreSnapshot = {
   project: Project | null;
   source: string;
   sourceDraft: string | null;
@@ -124,7 +124,7 @@ export type CoreDefinition = {
   inputSchema: Record<string, unknown>;
   level?: CapabilityLevel;
 };
-export type ProjectCoreOptions = {
+type ProjectCoreOptions = {
   draft?: string | null;
   nativeEntryName?: string;
   /** Pure preparation of a validated immutable snapshot. Library I/O belongs to the host adapter. */
@@ -1229,6 +1229,7 @@ export class ProjectCore {
       return { boardId: project.pcb.id, modelCad: structuredClone(modelCadFromProject(project)) };
     }
     if (id.startsWith('layout.')) {
+      if (id === 'layout.placement.preview') this.requireAppliedSource();
       const result = queryLayout(project.pcb, id, args);
       return id === 'layout.get' ? { ...result, project: JSON.parse(this.source) } : result;
     }

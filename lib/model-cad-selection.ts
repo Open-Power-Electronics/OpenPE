@@ -4,7 +4,7 @@ export type ModelCadSelection =
   | { kind: 'body'; objectId: string }
   | { kind: 'face'; objectId: string; faceId: string }
   | { kind: 'edge' | 'line'; objectId: string; edgeId: string };
-export type ModelCadSelectionMode = ModelCadSelection['kind'];
+type ModelCadSelectionMode = ModelCadSelection['kind'];
 export type ModelCadSelectionFilters = {
   bodies: boolean;
   faces: boolean;

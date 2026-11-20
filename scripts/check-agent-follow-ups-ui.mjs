@@ -23,7 +23,8 @@ const bundle = await build({
         approvalMode="review" setApprovalMode={noop} model={model} setModel={setModel} messages={session.messages} setMessages={v=>update(session.id,'messages',v)}
         input={session.draft} setInput={v=>update(session.id,'draft',v)} annotations={[]} setAnnotations={noop}
         onSettings={()=>setSettings(true)} onApply={()=>false} active={session.id===active} sessionId={session.id} conversationTitle={session.id} onRunningChange={noop}/>)}</main>
-      {settings&&<Settings appearance={{appearance:defaultAppearance,update:noop,error:'',ready:true,resolvedTheme:'light'}} agents={agents}
+      {settings&&<Settings appearance={{appearance:defaultAppearance,update:noop,error:'',ready:true,resolvedTheme:'light',
+        layoutPreferences:{enabled:false,busy:false,error:'',update:noop}}} agents={agents}
         detecting={false} error="" onDetect={async()=>{}} onClose={()=>setSettings(false)}/>}</>;
   }createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);
 `,
@@ -713,7 +714,7 @@ try {
   await page.evaluate(() => window.ready(2));
   // Configure once in Settings; subsequent sends directly steer the active turn.
   await button('Settings').click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
+  await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
   await page.getByRole('combobox', { name: 'Messages sent while running', exact: true }).click();
   await page.getByRole('option', { name: /^Steer/ }).click();
   await button('Done').click();
@@ -821,7 +822,7 @@ try {
   await waitRequests(5);
   await page.evaluate(() => window.ready(4));
   await button('Settings').click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
+  await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
   await page.getByRole('combobox', { name: 'Messages sent while running', exact: true }).click();
   await page.getByRole('option', { name: /^Queue/ }).click();
   await button('Done').click();

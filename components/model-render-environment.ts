@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type ModelRenderEnvironment = {
+type ModelRenderEnvironment = {
   map: THREE.DataTexture;
   marginalWeights: THREE.DataTexture;
   conditionalWeights: THREE.DataTexture;

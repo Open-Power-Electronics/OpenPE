@@ -212,6 +212,43 @@ test('appearance persists across service origins without creating or changing pr
   }
 });
 
+test('Layout preference is authenticated, strictly validated and persists independently', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-layout-preferences-'));
+  const file = path.join(dir, 'layout-preferences-v1.json');
+  let server = await startServer({ dataDir: dir });
+  const request = (body?: unknown, origin?: string) =>
+    fetch(server.base + '/api/layout-preferences', {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        'X-OpenPE-Token': server.token,
+        'Content-Type': 'application/json',
+        ...(origin ? { Origin: origin } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  try {
+    assert.equal((await fetch(server.base + '/api/layout-preferences')).status, 401);
+    assert.deepEqual(await (await request()).json(), { placementSuggestions: false });
+    const enabled = { placementSuggestions: true };
+    assert.equal((await request(enabled, 'https://example.com')).status, 403);
+    assert.deepEqual(await (await request(enabled)).json(), enabled);
+    for (const invalid of [{}, { placementSuggestions: 'true' }, { ...enabled, extra: true }])
+      assert.equal((await request(invalid)).status, 400);
+    const nextServer = await startServer({ dataDir: dir });
+    server.close();
+    server = nextServer;
+    assert.deepEqual(await (await request()).json(), enabled);
+    const files = await readdir(dir);
+    assert.ok(!files.includes('appearance-v1.json'));
+    assert.ok(!files.includes('openpe-workspace-v2.json'));
+    await writeFile(file, '{}');
+    assert.equal((await request()).status, 500);
+    assert.equal(await readFile(file, 'utf8'), '{}');
+  } finally {
+    server.close();
+  }
+});
+
 test('appearance profiles, independent typography and reset produce isolated style variables', () => {
   const a = structuredClone(defaultAppearance);
   assert.deepEqual(appearanceSizes(a), { ui: 15, content: 15, code: 14 });

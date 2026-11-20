@@ -19,6 +19,21 @@ const firstExampleButton = `Open ${manifest.examples[0].title} example`;
 const secondExampleButton = `Open ${manifest.examples[1].title} example`;
 const defaults = await readOriginalExamples();
 const firstOriginal = defaults.find((entry) => entry.key === `example:${manifest.examples[0].id}`);
+// Host listings: catalog discovery by resource root and the pinned EMC shortcut.
+const homeManifest = JSON.parse(
+  await readFile('resources/example-catalog/home-manifest.json', 'utf8'),
+);
+const home = {
+  examples: [...homeManifest.recent, ...homeManifest.examples].map(
+    ({ id, title, description, root }) => ({ id, title, description, section: root }),
+  ),
+  recent: homeManifest.recent.map(({ id, title, directory, file }) => ({
+    id,
+    title,
+    description: `/fixture/examples/project/${directory}/${file}.kicad_pro`,
+    pinned: true,
+  })),
+};
 const bundle = await build({
   stdin: {
     contents:
@@ -44,7 +59,7 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   page.setDefaultTimeout(10000);
   await page.addInitScript(
-    ({ source, defaults }) => {
+    ({ source, defaults, home }) => {
       window.grants = [];
       window.revealedFiles = [];
       window.savedFiles = [];
@@ -76,6 +91,10 @@ try {
           window.savedFiles.push(fileId);
           return { ...entry, fileId };
         },
+        listExamples: async () => ({ entries: home.examples, warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: home.recent, warnings: [] }),
+        onRecentChanged: () => () => {},
+        projectDirectory: async () => ({ entries: [], truncated: false }),
         releaseFile: async (id) => {
           window.grants = window.grants.filter((v) => v !== id);
         },
@@ -99,7 +118,7 @@ try {
         onCloseRequested: () => () => {},
       };
     },
-    { source, defaults },
+    { source, defaults, home },
   );
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
@@ -195,7 +214,11 @@ try {
     'Reopening from another project retains pending Source.',
   );
   await fillNativeProject(page, changed);
-  await button('Apply').click();
+  assert.equal(
+    await button('Apply').isDisabled(),
+    true,
+    'Restoring the applied native text leaves no pending Source.',
+  );
   await projects().first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Reference review');

@@ -76,9 +76,9 @@ Windows reference waveforms are not stored in this repository, so a numeric diff
 
 ## Home profiles and verification scope
 
-Home's Example section offers nine curated schematic/Layout projects with distinct controller models from `resources/example-catalog/manifest.json`. Recent includes EMC Flyback as a default pin alongside native history until explicitly unpinned; it has a [separate bounded behavioural model](#emc-flyback-behavioural-model). The reference projects' embedded pin signatures, model identities and explicit mappings determine support; reference changes or placement of supported passives do not by themselves remove it. A controller copied into a project-local symbol library retains support only with the same reviewed model library/name, electrical pin signature, controller value and simulation mapping. A symbol library name alone cannot grant model support. Values, sources, loads and initial conditions follow the current schematic. Source-embedded symbols and loaded PCB packages remain authoritative, including the source WE-DD package; model support does not authorize package substitution.
+The [Home catalog](EXAMPLES.md#catalog) includes nine projects with reviewed controller models and EMC Flyback with a [separate behavioural model](#emc-flyback-behavioural-model). Simulation support follows embedded pin signatures, model identities and explicit mappings. A controller copied into a project-local symbol library retains support only with the same reviewed model library/name, electrical pin signature, controller value and simulation mapping. Values, sources, loads and initial conditions follow the current schematic. Embedded symbols and loaded PCB packages retain their [native authority](FORMAT.md#document-ownership).
 
-TPS61046 uses a visible **1 kΩ** output resistor for approximately 19 mA at 19 V. The other Home output resistors are **100 Ω**, including both LM25017 rails and EMC Flyback's external RLOAD. EMC retains its separate 0.5 A current step. TPS61046 and LM27761 default to **2 ms**, and the other seven reference profiles to **10 ms**. LM5001 uses a **10 ns** maximum step; the other reference profiles use **200 ns**. These settings declare a simulation scenario; they do not establish regulation, component ratings or thermal qualification at the selected load.
+TPS61046 uses a visible **1 kΩ** output resistor for approximately 19 mA at 19 V. The other reference output resistors are **100 Ω**, including both LM25017 rails. The [EMC Flyback bench](#emc-flyback-behavioural-model) has its own load definition. These simulation scenarios cannot establish regulation, component ratings or thermal qualification at the selected load.
 
 All nine reference model bindings share
 `itl4=50 reltol=0.005 method=gear`: Gear integration
@@ -114,9 +114,8 @@ results computed with different numerical settings.
 | LMR70503 Buck-Boost | `LMR70503_TRANS` with scoped event-state approximation | 10 ms    | 0.2 µs         |
 | LM2598 Buck         | `LM2598_ADJ_TRANS`                                     | 10 ms    | 0.2 µs         |
 
-Recorded results apply only to matching source, compiler, adapter, settings,
-models and solver identities. Reports under `test-results/` are ignored evidence,
-not application inputs or shipped results.
+Verification reports apply to the source, compiler, adapter, settings, models
+and solver identities they record.
 
 `scripts/home-simulation-verification.ts` checks the final 20% of the requested
 duration, the same interval used for SPICE heat input. The time-weighted output

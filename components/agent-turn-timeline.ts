@@ -8,7 +8,7 @@ export type ActivityAnchor = {
   id: string;
   offset: number;
 };
-export type TurnPart =
+type TurnPart =
   | { kind: 'text'; key: string; text: string }
   | { kind: 'process'; key: string; entry: AgentProcessEntry }
   | { kind: 'tools'; key: string; entries: AgentToolActivity[] };

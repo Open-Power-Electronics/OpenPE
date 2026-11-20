@@ -38,7 +38,6 @@ import {
   qpcClockBracket,
   validateNativeOwnerIdentity,
 } from './editor-experience-native-input.mjs';
-import { installLayoutCompositorPrototype } from './layout-camera-compositor-prototype.mjs';
 import { createNodeInputDiagnostics } from './editor-experience-node-diagnostics.mjs';
 import {
   experienceTraceMode,
@@ -173,7 +172,6 @@ assert.ok(
       'no-promotion-grid-off',
       'layout-containment',
       'deferred-hit-targets',
-      'compositor-camera',
     ].includes(value),
   ),
   'Unknown navigation variant',
@@ -2768,10 +2766,9 @@ try {
               'no-promotion-grid-off',
               'layout-containment',
               'deferred-hit-targets',
-              'compositor-camera',
             ].includes(variant),
           );
-          let variantState = await layout.evaluate((svg, variant) => {
+          const variantState = await layout.evaluate((svg, variant) => {
             window.navigationVariantCleanup?.();
             window.navigationVariantCleanup = null;
             for (const [node, style] of window.navigationVariantStyles ?? []) {
@@ -2897,8 +2894,6 @@ try {
               };
             }
           }, variant);
-          if (variant === 'compositor-camera')
-            variantState = await layout.evaluate(installLayoutCompositorPrototype);
           if (variantState) {
             assert.deepEqual(
               variantState.after,
@@ -2914,14 +2909,6 @@ try {
             console.log(JSON.stringify(variantState));
           }
           await navigation(layout, `layout-${variant}`);
-          if (variant === 'compositor-camera') {
-            const details = await layout.evaluate(() => window.layoutCompositorPrototype.finish());
-            reports.push({ name: 'layout-compositor-prototype', ...details });
-            assert.ok(
-              details.maximumMatrixError < 0.001,
-              'Transient CSS camera and exact native rebase retain the world-to-screen transform.',
-            );
-          }
         }
         await measure('layout-pick', async () => {
           const point = await layout.evaluate((svg) => {

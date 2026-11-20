@@ -12,7 +12,7 @@ GUI/Agent parity covers design, simulation and project-file operations through s
 | PCB footprint drawing, placement, routing, pickup, Properties, zones and board drawings           | `layout.*`                                                                         | Same geometry preparation, collision checks, fills and single undo result                       |
 | Model CAD and component model selection                                                           | `modelCad.*`, `enclosure.exportStep`, `layout.model.*`                             | Exact host-prepared geometry/resource identities, then Core validation                          |
 | SPICE and Layout Thermal settings, probes, Run/Stop and supported result operations               | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
-| Native Source, Save/Save as, export and local history                                             | `source.*`, `project.save`, `project.export`, `versions.*`                         | Same Source/revision gates, native grants and history restoration                               |
+| Native Source, Save/Save as, export and local history                                             | `source.*`, `project.save`, `project.export`, `workbench.export*Image`, `versions.*` | Same Source/revision gates, native grants and history restoration                               |
 | New/open/example/close/Explorer and ordinary project text                                         | `project.new/open/openExample/close/reveal`, `project.examples`, `project.files.*` | Origin-bound workspace actions and existing file drafts/native pickers                          |
 
 Model contents and logs remain unavailable to Agents, including explicit project-file reads/writes. Ordinary files are never added automatically to Agent context. Credentials, unrelated projects and arbitrary host paths remain outside these interfaces. Display settings and provider/plugin management are separate from this parity scope. Codex, Claude Code and Cursor have live scoped tools; DeepSeek Harness and Pi use restricted context/proposals. See [Agent tools](#agent-tools) for provider transport limits.
@@ -185,7 +185,7 @@ Owner is `core`, except `capabilities.list` (`api`). Queries have mutation `fals
 | `history.undo`      | command | `{}`                                                                            | `boolean`; undo one complete project edit. Host availability rejects when no undo is available.                                                       |
 | `history.redo`      | command | `{}`                                                                            | `boolean`; redo one complete project edit.                                                                                                            |
 
-Pending Source blocks non-Source document commands, undo/redo, sheet switching and version creation/restoration. Read queries remain usable except `schematic.erc` and `layout.drc`, which require applied Source. File drafts survive file selection; applying them is atomic at the project transaction level. Opaque aggregate `sourceDraft` can contain a native-file envelope; do not assume it equals the currently selected file's text. Per-file text comes from `source.files`.
+Pending Source blocks non-Source document commands, undo/redo, sheet switching and version creation/restoration. Read queries remain usable except `schematic.erc`, `layout.drc` and `layout.placement.preview`, which require applied Source. File drafts survive file selection; applying them is atomic at the project transaction level. Opaque aggregate `sourceDraft` can contain a native-file envelope; do not assume it equals the currently selected file's text. Per-file text comes from `source.files`.
 
 `project.rename` is a Core object command with input `{name:string}` and result
 `ProjectSnapshot`. It trims and validates the GUI's 1–120 character single-line
@@ -455,6 +455,17 @@ Routes contain 1–65 legs and at most 15,000 points in total. Each non-final le
 `layout.lock` is a Core object command taking `{boardId, targets:[{kind,id}], locked:boolean}` and returning `RevisionResult`. Targets cover footprint, pad, track, via, graphic and zone; text/dimensions are graphics and rule areas are zones. It changes all requested locks in one transaction. Unlock a parent footprint before changing a pad lock, or unlock both together. Canonical locks store `locked:true` or omit it. GUI Properties uses the same preparation. Source, revision and close barriers apply.
 
 Move, rotation, deletion and object-property replacements reject changes to locked objects before writes. Connected drag, corner drag and Shove keep locked neighbours fixed. Lock changes have whole-project undo and native persistence; changing only locks retains saved copper fills. Explicit unlocking may share one `layout.track.properties` transaction with a net, layer or width change. Native Source remains an explicit editing path.
+
+`layout.placement.preview` is a Core query taking `{boardId,footprintIds,spacing}`.
+It returns `{poses:[{id,x,y,rotation}]}` in board order, with an empty array when
+no complete suggestion fits. Supply two to eight distinct footprint IDs and an
+explicit Layout grid spacing of 0.1, 0.2, 0.25, 0.5 or 1 mm.
+`layout.placement.apply` is a Core operation command with review optional. It
+takes the original inputs and the nonempty `poses` array, then returns
+`{revision,poses}` after one board edit. It rechecks the current board and
+requires the recomputed poses to match every supplied coordinate and rotation
+in order. Source and close barriers apply to both operations. The
+[Layout placement planner](LAYOUT.md#placement-suggestions) owns geometry and bounds.
 
 ### Embedded footprint drawing
 
@@ -850,6 +861,15 @@ separate `image` block. Their text result retains image dimensions/MIME without
 base64. Other query results retain ordinary JSON delivery. Context-only providers
 receive the reviewed parameter excerpt and source locators in their initial prompt.
 
+`workbench.exportSchematicImage`, `workbench.exportLayoutImage` and
+`workbench.exportModelImage` are host commands with mutation `external` and
+review optional. Each takes `{}` and uses the originating project's mounted
+active drawing and the existing native PNG picker. They return
+`{status:'exported',name}` or `{status:'cancelled'}`. Open the corresponding view
+before calling the command. Closing or changing the drawing during preparation
+blocks the picker. [Drawing export](LAYOUT.md#annotations-and-png-export) owns
+capture behaviour.
+
 ### Ordinary project files
 
 These host capabilities share `useProjectDirectory` drafts and existing native preview/write handlers. They use relative names from the granted directory listing, never arbitrary paths or native grant IDs.
@@ -912,6 +932,18 @@ Component resource selection is also host-backed and shares the GUI preparation 
 | `part.sourceType`         | `{schematicId,partId,type:'DC'/'PULSE'/'SIN'}`                                                                                                                                         | Shared intrinsic-source conversion preserving levels/timing and linked native fields.                                                                                                                   |
 
 These commands declare host ownership, object level and document mutation; inspection is a read-only host query. Successful STEP selection returns `{status:'applied',revision,boardId,footprintId,index,models}`. SPICE observations contain `{status:'available',observationId,revision,path,models,issues,bindings}` with declaration names/kinds/device/pins only. The cache holds at most eight observations and invalidates on Core changes; binding rechecks the exact component, revision, library and grant. Native selection, inspection and asynchronous library preparation recheck Source, close, active-origin and cancellation gates. SPICE resource controls require the enabled SPICE plugin. Retained inactive fields survive intrinsic/external switching. No capability accepts model bodies, executable paths or arbitrary library paths.
+
+`library.price` takes `{id,kind,source}` with `source:'lcsc'/'huaqiu'` and
+returns the same bounded USD quote as [the chooser](LIBRARIES.md#component-pricing).
+`library.datasheet.page` takes `{id,kind,source,page}` with
+`source:'huaqiu'/'jlcpcb'` and a one-based page up to 10,000. It returns
+`{page,pageCount,image:{mimeType:'image/png',data,width,height}}` or `null`
+when the catalog has no supported PDF. Both are cancellable host queries using
+the chooser readers. They accept a catalog identity of 1–500 characters and
+`kind:'symbols'/'footprints'`. The Agent transport attaches the PDF raster as
+image content and keeps base64 out of the text result. Catalog pages are external
+reference material. [Component datasheets](LIBRARIES.md#component-datasheet-preview)
+owns source and worker bounds.
 
 ## Plugin lifecycle capabilities
 
@@ -1181,6 +1213,8 @@ Next.js development serves a same-origin geometry and bundled-plugin proxy at `/
 Authenticated `POST /api/browser-preview/footprint` accepts exactly `{id:string}` and returns the existing bounded footprint detail. `POST /api/browser-preview/model` accepts exactly `{id:string,index:number}` and returns the existing `{meshes,model}` library preview. IDs are nonempty and at most 256 characters; model indices are integers 0–99, matching the desktop preview range. Both request bodies are limited to 1 KiB. Only fixed bundled example identities and official KiCad library IDs/model indices resolve resources. The browser library service reads prepared resources without downloads or cache writes; project paths, native grants, model imports and model-copy routes are unavailable. CAD and component previews share a serial STEP parse queue and one bounded parser pool. The token grants only the listed development endpoints. Disconnect aborts preparation. Expired tokens fail visibly and are reacquired on the next explicit retry; failed bootstrap remains retryable. The endpoints exist only in development; packaged static builds retain Electron IPC/service startup.
 
 Authenticated `POST /api/browser-preview/price` uses the [shared price request and result](#local-http-service).
+Authenticated `POST /api/browser-preview/datasheet` uses the
+[shared datasheet request and result](#http-routes).
 
 Authenticated `POST /api/browser-preview/plugin/<action>` exposes nine fixed
 actions. `catalog`, `guide`, `spice-status`, `thermal-status` and
@@ -1219,6 +1253,7 @@ The registered method/path pairs are listed below. Inputs listed in braces are J
 | `GET /api/libraries/:kind`                             | Path `kind=symbols/footprints`; query `q?`, `library?`, `category?`, `id?`, `offset?`, `categories?`, `includeAssetStatus?` | `categories=KiCad/NextPCB/JLCPCB` returns `{categories}` and cannot combine with nondefault search/detail inputs. A nonempty `id` returns resolved detail; otherwise see the [library search result](#library-capabilities). Only symbol searches accept `includeAssetStatus=1`. Nonempty `category` is a NextPCB or JLCPCB category ID. |
 | `GET /api/library-model`                               | Query `id`, `index?`                                                                                                        | `{meshes,model}` for an existing model reference in a bundled official, pinned example or validated NextPCB or JLCPCB footprint. Index defaults to 0.                                                                                                                                                                                    |
 | `GET /api/library-price`                               | Query `id` (1–500 characters), `kind=symbols/footprints`, `source=lcsc/huaqiu`                                      | `{source, currency:'USD', checkedAt:number, offers:{sku:string, manufacturer:string\|null, stock?:number, tiers:{quantity:number, unitPrice:number}[]}[]}`. `checkedAt` is Unix time in milliseconds. An empty `offers` array means there is no matched USD offer in the bounded lookup. Authenticated development `POST /api/browser-preview/price` accepts the same fields as JSON (2 KiB maximum). Both routes are cancellable, return no-store responses and resolve the identity in the host. [Component pricing](LIBRARIES.md#component-pricing) owns source details. |
+| `POST /api/library-datasheet`                           | `{id,kind,source,page}` (2 KiB). Catalog ID is 1–500 characters, kind is `symbols` or `footprints`, source is `huaqiu` or `jlcpcb`, and page is an integer from 1 to 10,000. | `{page,pageCount,image:{mimeType:'image/png',data,width,height}}` with base64 image data, or `null` when the selected source has no supported PDF. The route is cancellable and returns no-store responses. [Component datasheets](LIBRARIES.md#component-datasheet-preview) defines source and worker limits. |
 | `POST /api/library-package`                            | `{id:string}`                                                                                                               | Prepared NextPCB or JLCPCB footprint detail with `projectAssets:true` and verified portable model references. At most eight pending requests, serialized STEP imports; disconnect cancels. No project filesystem write or document edit.                                                                                                 |
 | `POST /api/model-cad/preview`                          | `{object:ModelCadObject}`                                                                                                   | `{shapeKey:string,meshes}`; validates one local shape, constructs analytical STEP with fixed bundled Gmsh/OpenCASCADE operations and tessellates it with the bundled STEP parser. Disconnect cancels; independent of simulation plugins.                                                                                                 |
 | `GET /api/state`                                       | None                                                                                                                        | Stored recovery JSON or `null`; ordered with HTTP and Electron recovery writes. The workspace consumer validates current-format content.                                                                                                                                                                                                 |
@@ -1250,6 +1285,13 @@ confirmed check. The total is the eligible page size, at most 16. The final
 line is `{type:'result',result}` with the ordinary result, or
 `{type:'error',error,code?}` after a stream starts. Disconnect cancels the
 request. Other clients receive the ordinary JSON response.
+
+`GET /api/layout-preferences` reads the application-wide Layout preferences,
+defaulting to `{placementSuggestions:false}` when the file is absent. It reports
+and preserves malformed stored data. `POST /api/layout-preferences` accepts
+exactly `{placementSuggestions:boolean}` and returns the validated record after
+a serial atomic write. These authenticated routes are independent of project
+and appearance records.
 
 `Appearance.leftButtonDrag` is `drag-any`, `drag-selected` or `select`, shared by
 Schematic and Layout. Saved appearance settings require all current fields; incomplete records and retired values are rejected. It controls pointer selection only and grants no design mutation.

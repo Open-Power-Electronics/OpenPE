@@ -7,7 +7,13 @@ import {
   padCopperLayers,
   partitionPCBRoutingCopper,
 } from './pcb-connectivity';
-import { movePCBSelection, padDrillLine, padDrillPosition, type PCBSelection } from './pcb-layout';
+import {
+  movePCBSelection,
+  padDrillLine,
+  padDrillPosition,
+  rotatePCBSelection,
+  type PCBSelection,
+} from './pcb-layout';
 import { borrowPCBPadOutline } from './pcb-pad-contour';
 import {
   createDynamicPCBRouter,
@@ -52,7 +58,7 @@ export function createPCBFootprintDrag(
   selection: readonly PCBSelection[],
   clearance: number,
 ): {
-  preview: (delta: Point, posture?: boolean) => PCBTrackDragPreview;
+  preview: (delta: Point, posture?: boolean, turn?: number) => PCBTrackDragPreview;
   leadIds?: readonly string[];
 } {
   const failed = (error: string): PCBTrackDragPreview => ({ board: source, error, changedIds: [] });
@@ -172,12 +178,22 @@ export function createPCBFootprintDrag(
 
     return {
       leadIds: leads.map(({ track }) => track.id),
-      preview(delta, posture) {
+      preview(delta, posture, turn = 0) {
         try {
           work = 0;
-          const moved = movePCBSelection(board, targets, delta);
+          if (turn && (leads.length || selected.length !== 1))
+            return failed('Placement turns require a single footprint without attached tracks.');
+          const oriented = turn ? rotatePCBSelection(board, targets, turn) : board;
+          const moved = movePCBSelection(oriented, targets, delta);
           const poses = moved.footprints.filter(({ id }) => footprintIds.has(id));
-          if (poses.every(({ x, y }, index) => x === selected[index].x && y === selected[index].y))
+          if (
+            poses.every(
+              ({ x, y, rotation }, index) =>
+                x === selected[index].x &&
+                y === selected[index].y &&
+                rotation === selected[index].rotation,
+            )
+          )
             return { board: source, error: '', changedIds: [] };
           const byId = new Map(poses.map((pose) => [pose.id, pose]));
           const translate = (point: Point, anchor?: PCBTrackAnchor): Point => {

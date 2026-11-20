@@ -84,6 +84,7 @@ import { pcbSilkscreen } from '@/lib/pcb-silkscreen';
 import { pcbStrokeText } from '@/lib/pcb-stroke-text';
 import { solderMaskOpenings } from '@/lib/pcb-solder-mask';
 import { saveDrawingPNG } from '@/lib/drawing-export';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { previewFootprint, previewModel, type PreviewFootprint } from '@/lib/pcb-preview-cache';
 import { modelPlacement, resolveFootprintModels } from '@/lib/pcb-models';
 import { pcbBounds, footprintPoint, createEmptyPCB } from '@/lib/pcb-layout';
@@ -474,7 +475,19 @@ function PCBModelPreview({
   displayRef.current = boardDisplay;
   const redraw = useRef(() => {});
   const applyDisplay = useRef(() => {});
-  const exportPNG = useRef<() => Promise<void>>(async () => {});
+  const exportPNG = useRef<((check: () => void) => Promise<string | null>) | null>(null);
+  const saveImage = useDrawingImageExport(
+    readOnly ? undefined : capabilityHost,
+    'Model',
+    revision,
+    active && visible && ready && !failed && !sourcePending,
+    setExporting,
+    async (check) => {
+      if (!exportPNG.current) throw new Error('The 3D preview is not ready.');
+      setExportStatus('');
+      return exportPNG.current(check);
+    },
+  );
   const modelsVisibleRef = useRef(modelsVisible);
   modelsVisibleRef.current = modelsVisible;
   const models = useRef(new THREE.Group());
@@ -1686,7 +1699,7 @@ function PCBModelPreview({
             'The render changed or was stopped. Try exporting the current view again.',
           );
       };
-      const waitForRender = async () => {
+      const waitForRender = async (check?: () => void) => {
         requireCaptureView();
         if (!renderEnabledRef.current) return;
         const importEpoch = renderEpoch;
@@ -1697,6 +1710,7 @@ function PCBModelPreview({
               'Model import failed. Retry the failed models before exporting Render.',
             );
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          check?.();
           requireCaptureView();
           if (!renderEnabledRef.current || importEpoch !== renderEpoch)
             throw new Error(
@@ -1713,6 +1727,7 @@ function PCBModelPreview({
         scheduleRender();
         while (!studioComplete) {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          check?.();
           if (
             control.signal.aborted ||
             !activeRef.current ||
@@ -2305,10 +2320,11 @@ function PCBModelPreview({
         render();
       };
       applyDisplay.current();
-      exportPNG.current = async () => {
-        if (!renderer) return;
+      exportPNG.current = async (check) => {
+        if (!renderer) throw new Error('The 3D preview is not ready.');
         if (!annotatingRef.current && !renderEnabledRef.current) orbit?.update();
-        await waitForRender();
+        await waitForRender(check);
+        check();
         requireCaptureView();
         const previewVisible = previewGroup.visible;
         const sketchVisible = sketchGroup.visible;
@@ -2353,6 +2369,7 @@ function PCBModelPreview({
         render();
         const name = await saveDrawingPNG(image, schematicRef.current?.title ?? 'board');
         if (name && !control.signal.aborted) setExportStatus(`Exported ${name}`);
+        return name;
       };
       await prepareModelShaders({
         compile: () => renderer!.compileAsync(scene, camera),
@@ -2589,7 +2606,7 @@ function PCBModelPreview({
       applyProjection.current = () => {};
       applyRenderMode.current = () => {};
       updateActivity.current = () => {};
-      exportPNG.current = async () => {};
+      exportPNG.current = null;
       updateAnnotationView.current = () => {};
       pickAnnotation.current = () => null;
       captureAnnotation.current = async () => {
@@ -3379,14 +3396,10 @@ function PCBModelPreview({
                           icon: ImageDown,
                           disabled: !ready || exporting || failed,
                           run: async () => {
-                            setExporting(true);
-                            setExportStatus('');
                             try {
-                              await exportPNG.current();
+                              await saveImage();
                             } catch (error) {
                               setExportStatus((error as Error).message);
-                            } finally {
-                              setExporting(false);
                             }
                           },
                         },

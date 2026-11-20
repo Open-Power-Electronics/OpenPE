@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   appearanceKey,
   defaultAppearance,
+  defaultLayoutPreferences,
+  layoutPreferencesKey,
   parseAppearance,
+  validateLayoutPreferences,
   textSizeOptions,
   sourceWhitespaceOptions,
   activeProfile,
@@ -47,7 +50,48 @@ function ModePreview({ mode }: { mode: Appearance['theme'] }) {
   );
 }
 
+function useLayoutPreferences() {
+  const [enabled, setEnabled] = useState<boolean>(defaultLayoutPreferences.placementSuggestions);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = window.openpe
+          ? await (await api('layout-preferences')).text()
+          : localStorage.getItem(layoutPreferencesKey);
+        if (!cancelled && raw !== null)
+          setEnabled(validateLayoutPreferences(JSON.parse(raw)).placementSuggestions);
+      } catch {
+        if (!cancelled) setError('Could not load layout preferences.');
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const update = useCallback(async (placementSuggestions: boolean) => {
+    setBusy(true);
+    try {
+      const body = JSON.stringify({ placementSuggestions });
+      if (window.openpe) await api('layout-preferences', { method: 'POST', body });
+      else localStorage.setItem(layoutPreferencesKey, body);
+      setEnabled(placementSuggestions);
+      setError('');
+    } catch {
+      setError('Could not save layout preferences. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  return useMemo(() => ({ enabled, busy, error, update }), [enabled, busy, error, update]);
+}
+
 export function useAppearance() {
+  const layoutPreferences = useLayoutPreferences();
   const [appearance, setAppearance] = useState<Appearance>(defaultAppearance);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
@@ -114,8 +158,8 @@ export function useAppearance() {
     });
   }, []);
   return useMemo(
-    () => ({ appearance, update, error, ready, resolvedTheme }),
-    [appearance, update, error, ready, resolvedTheme],
+    () => ({ appearance, update, error, ready, resolvedTheme, layoutPreferences }),
+    [appearance, update, error, ready, resolvedTheme, layoutPreferences],
   );
 }
 
@@ -247,19 +291,21 @@ function ColorSetting({
   );
 }
 
-function ToggleSetting({
+export function ToggleSetting({
   label,
   checked,
   disabled,
   onChange,
+  className = 'appearance-row',
 }: {
   label: string;
   checked: boolean;
   disabled: boolean;
   onChange: (value: boolean) => void;
+  className?: string;
 }) {
   return (
-    <div className="appearance-row">
+    <div className={className}>
       <span>{label}</span>
       <button
         type="button"

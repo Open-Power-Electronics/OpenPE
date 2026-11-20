@@ -134,7 +134,7 @@ libraries use `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`.
 Project rules use `<stem>.kicad_dru`. Save as renames these project-bound paths
 and updates library-table URIs while retaining `fp-lib-table`, `sym-lib-table`
 and internal library IDs. [Libraries](LIBRARIES.md#step-access-and-previews)
-owns pinned package/STEP delivery and asset cleanup.
+owns pinned package/STEP delivery.
 
 ## Regeneration and resource preparation
 
@@ -220,9 +220,8 @@ The EMC electrical and thermal real-solver checks read
 Electrical execution reads its colocated model files. Neither check substitutes
 the generated regression snapshot or a model download for those inputs.
 
-Documentation-only edits require static content, link and format checks. The
-following commands provide distinct verification when design/runtime changes
-require it; none launches Electron or an Agent provider.
+Use the focused checks below with the
+[engineering verification requirements](../AGENTS.md#verification-and-delivery).
 
 | Command                                                            | Scope                                                                                                                                                                             |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -231,11 +230,10 @@ require it; none launches Electron or an Agent provider.
 | `python scripts/check-reference-kicad.py --cli /path/to/kicad-cli` | Actual KiCad 10 connectivity, native geometry and SVG checks; run under KiCad's Python with `pcbnew`                                                                              |
 | `npm run simulation:check-examples -- reference`                   | Offline real bundled-ngspice sweep of actual canonical Home files, canonical/renderer/service deck parity, completion and output checks                                           |
 
-Prepare the bundled solver and sidecars before the real-solver sweep; it fails
-on missing resources instead of downloading them. Desktop integration/startup
-checks require an explicit user request. [verification.json](../resources/example-catalog/verification.json)
-records structural/connectivity checks under KiCad 10.0.1; it is not simulation,
-ERC or DRC evidence and does not validate subsequent changes.
+[SPICE verification](SIMULATION.md#verification-commands) covers offline sweep
+preparation and failure handling. The pinned
+[verification.json](../resources/example-catalog/verification.json) records
+structural and connectivity checks for the generated files under KiCad 10.0.1.
 
 Example generation requires a complete OpenPE ERC report with zero issues
 for the nine schematics under `examples/` and EMC Flyback under `examples/project/`. The native portability test

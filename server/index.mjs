@@ -32,6 +32,7 @@ import {
 import { validCursorRequestParameters } from './agent-cursor.mjs';
 import { createLibraryService } from './libraries.mjs';
 import { libraryAssetFailure } from './library-asset-error.mjs';
+import { registerLibraryDatasheetPreview } from './library-datasheets.mjs';
 import { isLibraryPriceRequest } from './library-prices.mjs';
 import { isOnlineLibrary, librarySources } from './library-format.mjs';
 import { registerAppearance } from './appearance.mjs';
@@ -105,6 +106,7 @@ export async function startServer({
     jlcpcbFetcher,
     modelFetcher: libraryModelFetcher,
     priceFetcher,
+    datasheetFetcher,
   });
   const modelCadPreviews = modelCadPreviewFactory({ resourceRoot: thermalRoot });
   const componentModels = createComponentModelStore(dataDir, libraries.parseStep);
@@ -181,6 +183,7 @@ export async function startServer({
       return res.status(401).json({ error: 'Session expired. Restart OpenPE.' });
     next();
   });
+  registerLibraryDatasheetPreview(app, '/api/library-datasheet', libraries);
   // Recovery envelopes JSON-escape an already bounded project source string.
   app.use('/api/state', express.json({ limit: '96mb' }));
   // Simulation also wraps a bounded project string in a JSON request envelope.

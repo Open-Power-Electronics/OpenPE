@@ -14,7 +14,7 @@ export const schematicLayerOptions = [
   { id: 'noConnects', label: 'No-connect markers', color: '--symbol' },
   { id: 'grid', label: 'Grid', color: '--grid-dot' },
 ] as const;
-export type SchematicLayer = (typeof schematicLayerOptions)[number]['id'];
+type SchematicLayer = (typeof schematicLayerOptions)[number]['id'];
 export type SchematicLayers = Record<SchematicLayer, boolean>;
 export const defaultSchematicLayers = Object.fromEntries(
   schematicLayerOptions.map(({ id }) => [id, id !== 'fields']),

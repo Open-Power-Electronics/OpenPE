@@ -310,6 +310,7 @@ type Modal =
   | null;
 type Confirmation = {
   kind: ConfirmationKind;
+  documentTitle?: string;
   action: (saveFirst?: boolean) => void | Promise<void>;
 };
 function ToolButton({
@@ -1942,6 +1943,37 @@ export default function Workbench({
       notify((error as Error).message);
     }
   }
+  function requestSchematicRemoval() {
+    const snapshot = core.getSnapshot();
+    if (
+      !doc ||
+      nativeActionAvailability() !== true ||
+      view !== 'canvas' ||
+      modal ||
+      editComposing.current ||
+      schematicComposing.current ||
+      snapshot.sourceDraft !== null ||
+      !snapshot.project ||
+      (snapshot.project.pcb && doc.id === snapshot.project.schematic.id)
+    )
+      return;
+    if (propertiesDraftPending()) {
+      notify('Apply or discard the Properties edits before removing the schematic.');
+      return;
+    }
+    setConfirmError('');
+    setConfirmation({
+      kind: 'remove-schematic',
+      documentTitle: doc.title,
+      action: () => {
+        core.execute(
+          'schematic.remove',
+          { schematicId: doc.id },
+          { expectedRevision: snapshot.revision },
+        );
+      },
+    });
+  }
   async function closeSchematicFile(id: string) {
     if (!openSchematicFiles.some((file) => file.id === id)) return false;
     const intent = cancelPendingNavigation();
@@ -3178,6 +3210,9 @@ export default function Workbench({
     sourcePending,
   ]);
   const canAddSchematicFile = Boolean(doc && schematicFiles.length < MAX_SCHEMATIC_FILES);
+  const canRemoveSchematicFile = Boolean(
+    doc && project && view === 'canvas' && (!project.pcb || doc.id !== project.schematic.id),
+  );
   const canExportBoard = Boolean(project?.pcb);
   const canExportModel = Boolean(modelCad?.objects.length);
   function editMenu(origin: EditTarget | null, mac: boolean) {
@@ -3340,11 +3375,21 @@ export default function Workbench({
               },
             ]
           : []),
+        ...(canRemoveSchematicFile
+          ? [
+              {
+                label: 'Remove schematic',
+                separatorBefore: !canAddSchematicFile,
+                disabled: sourcePending || Boolean(coreSnapshot.editingBlocked),
+                run: requestSchematicRemoval,
+              },
+            ]
+          : []),
         ...(doc
           ? [
               {
                 label: 'Save',
-                separatorBefore: !canAddSchematicFile,
+                separatorBefore: !canAddSchematicFile && !canRemoveSchematicFile,
                 run: () => {
                   void save();
                 },
@@ -4359,7 +4404,16 @@ export default function Workbench({
   // Keep fallback labels aligned with the latest menu indices used by the guarded actions.
   const headerFileOptions = useMemo(
     () => titlebarMenuOptions(titlebarMenus[0].items),
-    [hasDocument, canAddSchematicFile, canExportBoard, canExportModel, exampleList.sections],
+    [
+      hasDocument,
+      canAddSchematicFile,
+      canRemoveSchematicFile,
+      canExportBoard,
+      canExportModel,
+      exampleList.sections,
+      sourcePending,
+      coreSnapshot.editingBlocked,
+    ],
   );
   const appHeader = useMemo(
     () => (
@@ -5058,11 +5112,12 @@ export default function Workbench({
                     </RetainedSchematicToolbar>
                     <div className="schematic-canvas-area">
                       <SchematicCanvas
+                        capabilityHost={capabilityHost}
                         getComponentActions={schematicComponentActions}
                         ruleFocus={schematicViewFocus}
                         showRuleMarker={schematicViewFocus !== canvasFocus}
                         active={active && screen === 'workspace' && view === 'canvas'}
-                        editingBlocked={sourcePending}
+                        editingBlocked={sourcePending || Boolean(coreSnapshot.editingBlocked)}
                         moveRequest={schematicMoveRequest}
                         onMoveStateChange={setSchematicMoveMode}
                         onMoveRequestHandled={onMoveRequestHandled}
@@ -5469,11 +5524,19 @@ export default function Workbench({
                         schematic={project.schematic}
                         grid={grid}
                         gridSpacing={layoutGridSpacing}
+                        placementSuggestionRevision={
+                          appearanceSettings.layoutPreferences.enabled &&
+                          !sourcePending &&
+                          !coreSnapshot.editingBlocked
+                            ? coreSnapshot.revision
+                            : undefined
+                        }
                         leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
                         gridControl={view === 'layout' ? gridDensityControl : undefined}
                         ruleStatus={view === 'layout' ? ruleStatus : undefined}
                         rulePanel={view === 'layout' ? rulePanel : undefined}
                         draftStatus={draftStatus || undefined}
+                        imageExportBlocked={sourcePending || Boolean(coreSnapshot.editingBlocked)}
                         active={
                           active &&
                           screen === 'workspace' &&
@@ -6161,7 +6224,8 @@ export default function Workbench({
         {confirmation && (
           <ConfirmationDialog
             key={confirmation.kind}
-            documentTitle={project?.name ?? project?.schematic.title}
+            kind={confirmation.kind}
+            documentTitle={confirmation.documentTitle ?? project?.name ?? project?.schematic.title}
             busy={confirmBusy}
             error={confirmError}
             onCancel={cancelConfirmation}

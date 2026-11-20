@@ -263,6 +263,10 @@ test('browser library previews resolve identities without exposing file grants, 
           calls.push(input);
           return { source: input.source, currency: 'USD', checkedAt: 1, offers: [] };
         },
+        datasheet: async (input) => {
+          calls.push(input);
+          return null;
+        },
         close: () => {
           closed = true;
         },
@@ -278,8 +282,10 @@ test('browser library previews resolve identities without exposing file grants, 
   try {
     const { token } = await (await post('session', {})).json();
     const lookup = { id: 'JLCPCB:C123', kind: 'symbols', source: 'lcsc' };
+    const datasheet = { id: lookup.id, kind: lookup.kind, source: 'jlcpcb', page: 1 };
     assert.equal((await post('footprint', { id: 'Device:Package' })).status, 401);
     assert.equal((await post('price', lookup)).status, 401);
+    assert.equal((await post('datasheet', datasheet)).status, 401);
     for (const [route, body] of [
       ['model', { id: 'Device:Package', index: -1 }],
       ['model', { id: 'Device:Package', index: 100 }],
@@ -289,6 +295,9 @@ test('browser library previews resolve identities without exposing file grants, 
       ['price', { id: 'Device:Package' }],
       ['price', { ...lookup, url: 'https://example.invalid' }],
       ['price', { ...lookup, source: 'custom' }],
+      ['datasheet', { ...datasheet, page: 0 }],
+      ['datasheet', { ...datasheet, source: 'lcsc' }],
+      ['datasheet', { ...datasheet, url: 'https://example.invalid' }],
     ] as const)
       assert.equal((await post(route, body, token)).status, 400);
     for (const route of ['component-model', 'component-model/library', 'state'])
@@ -314,10 +323,15 @@ test('browser library previews resolve identities without exposing file grants, 
       checkedAt: 1,
       offers: [],
     });
+    const preview = await post('datasheet', datasheet, token);
+    assert.equal(preview.status, 200);
+    assert.equal(preview.headers.get('cache-control'), 'no-store');
+    assert.equal(await preview.json(), null);
     assert.deepEqual(calls, [
       { action: 'detail', kind: 'footprints', id: 'Device:Package' },
       { id: 'Device:Package', index: 0 },
       lookup,
+      datasheet,
     ]);
   } finally {
     await host.close();

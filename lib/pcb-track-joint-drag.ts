@@ -16,7 +16,7 @@ import type { PCBTrackDragPreview } from './pcb-track-drag';
 type Track = PCB['tracks'][number];
 type Breakpoint = { point: Point; parameter: number; moving: boolean };
 type Link = { key: string; track: Track; anchor: Point };
-export type PCBTrackJointDrag = {
+type PCBTrackJointDrag = {
   anchor: Point;
   affectedIds: string[];
   kind: 'joint' | 'bend';

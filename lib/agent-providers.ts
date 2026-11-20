@@ -27,7 +27,7 @@ export const agentProviders = [
   },
 ] as const;
 
-export type AgentProviderId = (typeof agentProviders)[number]['id'];
+type AgentProviderId = (typeof agentProviders)[number]['id'];
 export const agentProviderIds = agentProviders.map(({ id }) => id);
 
 /** Native protocol values; providers do not share an off/none alias. */

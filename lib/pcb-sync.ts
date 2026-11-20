@@ -8,8 +8,8 @@ import { parasiticPhysicalModels } from './parasitic-model';
 import { padApertureLayers, padHasElectricalPin } from './pcb-pad-role';
 
 type Pin = { key: string; ref: string; number: string; index: number };
-export type SchematicNet = { name: string; pins: string[] };
-export type PCBUpdate = {
+type SchematicNet = { name: string; pins: string[] };
+type PCBUpdate = {
   board: PCB;
   added: number;
   replaced: number;

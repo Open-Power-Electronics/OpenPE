@@ -129,6 +129,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -543,8 +546,8 @@ try {
       await actions
         .locator('button:visible')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-      mode === 'Source' ? ['List', 'Git'] : ['List', 'Git', 'Toggle right sidebar'],
-      'List and Git precede dock visibility; Rule remains in the footer.',
+      ['Draw component', 'List', 'Git', ...(mode === 'Source' ? [] : ['Toggle right sidebar'])],
+      'Draw component, List and Git precede dock visibility; Rule remains in the footer.',
     );
   };
   const assertWindowActions = async (toolbar, plugin) => {

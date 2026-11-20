@@ -75,7 +75,7 @@ type PreparedRouter = {
  * the stationary clearance index so a later dynamic router only builds pairs
  * for records on the supplied board. The session is not a document and must be
  * dropped with the gesture. */
-export type PCBRouterSession = {
+type PCBRouterSession = {
   slices: WeakMap<object, Map<string, RouterSlice>>;
   stations: Map<string, { signature: readonly Obstacle[]; tree: ObstacleTree | undefined }>;
   prepared: Map<string, PreparedRouter>;

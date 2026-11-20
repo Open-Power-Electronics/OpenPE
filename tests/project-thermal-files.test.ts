@@ -194,7 +194,6 @@ test('Layout Thermal saves complete flat artifacts with original logical names, 
         JSON.stringify({ format: 'openpe-thermal-v1', model: f.input, solver, files: logical }),
       ),
     );
-    assert.equal(key, thermalRunKey(f.input, solver, logical));
     const manifest = JSON.parse(await readFile(path.join(f.parent, 'buck.manifest.json'), 'utf8'));
     assert.equal(manifest.format, 'openpe-thermal-v2');
     assert.equal(manifest.project, 'buck.kicad_pro');
@@ -476,10 +475,9 @@ test('flat Layout Thermal validates every artifact, project identity and physica
 test('Layout Thermal ignores retired nested records and preserves their files', async () => {
   const f = await fixture();
   try {
-    const files = (await expectedFiles(f.source, f.input, f.output)).map(
-      ({ name, size, sha256 }) => ({ name, size, sha256 }),
-    );
-    const key = thermalRunKey(f.input, solver, files);
+    const current = await expectedFiles(f.source, f.input, f.output);
+    const files = current.map(({ name, size, sha256 }) => ({ name, size, sha256 }));
+    const key = thermalRunKey(f.input, solver, current);
     const legacy = path.join(f.parent, 'buck'),
       folder = path.join(legacy, key);
     await mkdir(path.join(folder, 'mesh'), { recursive: true });

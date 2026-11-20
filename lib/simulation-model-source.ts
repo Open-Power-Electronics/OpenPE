@@ -3,8 +3,8 @@ import { partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import references from './reference-simulation.json';
 
-export type SimulationModelSource = 'basic' | 'external';
-export type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
+type SimulationModelSource = 'basic' | 'external';
+type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
 export const passiveSimulationModels = ['R', 'C', 'L'] as const;
 export const passiveConnectorSymbol = 'Connector_Generic:Conn_01x02';
 export type PassiveSimulationModel = (typeof passiveSimulationModels)[number];

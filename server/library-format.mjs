@@ -513,7 +513,7 @@ for (const [relative, entry] of records) {
   keys.set(file, entry.sha256);
 }
 function relativePath(path) {
-  return path.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, "").replace(/^\$\{KIPRJMOD\}\/(?:footprints\/)?models\//, "").replace(/^\$\{KIPRJMOD\}\/(?:3D|footprints)\//, "").replace(/\.wrl$/i, ".step");
+  return path.replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, "").replace(/^\$\{KIPRJMOD\}\/(?:footprints\/)?models\//, "").replace(/\.wrl$/i, ".step");
 }
 function exampleModelPath(relative) {
   const file = files.get(relative);
@@ -530,7 +530,7 @@ function resolveExampleModelRelative(allowed, path) {
 }
 function portableExampleModelSource(source) {
   return source.replace(
-    /\$\{KIPRJMOD\}\/(?:(?:footprints\/)?models\/|footprints\/|3D\/)([^"\r\n]+)/g,
+    /\$\{KIPRJMOD\}\/(?:footprints\/)?models\/([^"\r\n]+)/g,
     (original, relative) => {
       const portable = portablePaths.get(relative);
       return portable ? "${KIPRJMOD}/" + portable : original;
@@ -565,6 +565,10 @@ function footprintSearchTerm(id) {
 var libraryPriceSources = ["lcsc", "huaqiu"];
 function isLibraryPriceSource(value) {
   return libraryPriceSources.some((source) => source === value);
+}
+var libraryDatasheetSources = ["huaqiu", "jlcpcb"];
+function isLibraryDatasheetSource(value) {
+  return libraryDatasheetSources.some((source) => source === value);
 }
 function isLibraryAssetUnavailable(error) {
   return error instanceof Error && "code" in error && error.code === "OPENPE_LIBRARY_ASSET_UNAVAILABLE";
@@ -861,8 +865,10 @@ export {
   extraSymbolAnnotations,
   footprintSearchTerm,
   isLibraryAssetUnavailable,
+  isLibraryDatasheetSource,
   isLibraryPriceSource,
   isOnlineLibrary,
+  libraryDatasheetSources,
   libraryPackageCodeKind,
   libraryPackageQuery,
   libraryPriceSources,

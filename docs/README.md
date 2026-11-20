@@ -16,8 +16,6 @@ Choose a workflow below. Each feature contract owns its detailed behaviour and l
 
 ## Coverage and limits
 
-OpenPE supports a bounded subset of KiCad 10 and Model CAD, including manual PCB placement and routing. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and production qualification are outside its scope. Feature contracts describe supported geometry, circuits, models and incomplete checks.
+OpenPE supports a bounded subset of KiCad 10 and Model CAD, including manual PCB placement and routing. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and production qualification are outside its scope.
 
 Review CAM and assembly files before manufacturing. [Manufacturing export](FORMAT.md#manufacturing-export)
-
-Use the documented SPICE circuits and models, the stated PCB thermal assumptions and the bounded EMC review coverage. [SPICE](SIMULATION.md) · [Layout Thermal](THERMAL.md) · [EMC Analysis](EMC.md) · [EMC Flyback evidence](EMC-FLYBACK.md)

@@ -12,7 +12,7 @@ import {
   type Project,
 } from '../lib/project';
 import footprintAssets from '../resources/example-catalog/footprints/manifest.json';
-import { prepareExampleFootprints, cleanupExampleLayout } from '../server/example-footprints.mjs';
+import { prepareExampleFootprints } from '../server/example-footprints.mjs';
 import { atomicWrite } from '../server/atomic-write.mjs';
 
 export async function writeExampleFile(file: string, source: string | Buffer) {
@@ -73,5 +73,4 @@ export async function writeHomeExampleNativeFiles(project: Project, id: HomeExam
     await writeExampleFile(target, Buffer.from(file.source, file.encoding ?? 'utf8'));
   }
   await prepareExampleFootprints(project, destination);
-  await cleanupExampleLayout(project, destination, native);
 }

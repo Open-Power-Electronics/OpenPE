@@ -12,30 +12,36 @@ try {
     data: workerData.bytes,
     isEvalSupported: false,
     useSystemFonts: false,
+    ...(workerData.includeText ? {} : { canvasMaxAreaInBytes: 128 * 1024 * 1024 }),
     cMapUrl: `${root}/cmaps/`,
     cMapPacked: true,
     standardFontDataUrl: `${root}/standard_fonts/`,
     wasmUrl: `${root}/wasm/`,
   });
   const document = await loading.promise;
-  if (document.numPages !== workerData.pageCount)
+  if (workerData.pageCount !== undefined && document.numPages !== workerData.pageCount)
     throw new Error('PDF page count differs from the reviewed document.');
+  if (workerData.page > document.numPages || (!workerData.includeText && document.numPages > 10_000))
+    throw new Error('The PDF page is outside the preview bounds.');
   async function readPage(pageNumber) {
     const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : ''))
-      .join('');
-    if (text.length > 256000) throw new Error('PDF page text exceeds the reader budget.');
-    const result = { page: pageNumber, pageCount: document.numPages, text };
+    const result = { page: pageNumber, pageCount: document.numPages };
+    if (workerData.includeText) {
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : ''))
+        .join('');
+      if (text.length > 256000) throw new Error('PDF page text exceeds the reader budget.');
+      result.text = text;
+    }
     if (workerData.image) {
       const original = page.getViewport({ scale: 1 });
       const scale = Math.min(2, 2400 / Math.max(original.width, original.height));
       if (!Number.isFinite(scale) || scale <= 0) throw new Error('Invalid PDF page dimensions.');
       const viewport = page.getViewport({ scale });
       const canvas = document.canvasFactory.create(
-        Math.ceil(viewport.width),
-        Math.ceil(viewport.height),
+        Math.min(2400, Math.ceil(viewport.width)),
+        Math.min(2400, Math.ceil(viewport.height)),
       );
       try {
         await page.render({ canvasContext: canvas.context, viewport }).promise;

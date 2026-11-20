@@ -20,7 +20,7 @@ export type ModelCadSketchContour = {
   position: ModelCadPoint;
   cornerTreatment?: ModelCadSketchCornerTreatment;
 };
-export type ModelCadSketchCornerTreatment = {
+type ModelCadSketchCornerTreatment = {
   kind: 'fillet' | 'chamfer';
   distanceMm: number;
   corners: number[];

@@ -170,10 +170,8 @@ export function thermalRunKey(model, solver, files) {
     new Set(files.map((entry) => entry?.name)).size !== files.length ||
     files.some(
       (entry) =>
-        !(
-          ownKeys(entry, ['name', 'size', 'sha256']) ||
-          (ownKeys(entry, ['name', 'file', 'size', 'sha256']) && typeof entry.file === 'string')
-        ) ||
+        !ownKeys(entry, ['name', 'file', 'size', 'sha256']) ||
+        typeof entry.file !== 'string' ||
         typeof entry.name !== 'string' ||
         !Number.isSafeInteger(entry.size) ||
         entry.size < 0 ||

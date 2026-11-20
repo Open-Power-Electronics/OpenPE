@@ -1,4 +1,4 @@
-export type DesktopChrome = 'overlay' | 'inset';
+type DesktopChrome = 'overlay' | 'inset';
 
 /** Custom caption is overlay on Windows/Linux and inset for macOS traffic lights. */
 export function desktopChrome(

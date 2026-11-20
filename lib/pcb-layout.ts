@@ -1043,7 +1043,7 @@ export function flipPCBSelection(board: PCB, selection: Selection, pivot?: Point
   };
 }
 
-export type PCBMoveOperation = 'rotate' | 'rotateReverse' | 'flip';
+type PCBMoveOperation = 'rotate' | 'rotateReverse' | 'flip';
 
 /** Apply the same ordered pickup edits as the canvas, then place its exact pose. */
 export function previewPCBMove(

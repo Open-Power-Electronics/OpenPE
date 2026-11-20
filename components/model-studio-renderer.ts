@@ -113,7 +113,7 @@ const modelDirectLightContribution = /* glsl */ `
   }
 
 `;
-export type ModelStudioRenderOptions = {
+type ModelStudioRenderOptions = {
   dark: boolean;
   bounds: THREE.Box3;
   moving?: boolean;
@@ -121,7 +121,7 @@ export type ModelStudioRenderOptions = {
   /** An accumulation-only tick; explicit view updates and captures omit this. */
   continuation?: boolean;
 };
-export type ModelRenderProgress = { samples: number; complete: boolean };
+type ModelRenderProgress = { samples: number; complete: boolean };
 
 /** Show early progress, then amortize filtering across four complete samples. */
 function modelRenderPresentationSample(samples: number): number {

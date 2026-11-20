@@ -63,6 +63,13 @@ export function isLibraryPriceSource(value: unknown): value is LibraryPriceSourc
   return libraryPriceSources.some((source) => source === value);
 }
 
+export const libraryDatasheetSources = ['huaqiu', 'jlcpcb'] as const;
+export type LibraryDatasheetSource = (typeof libraryDatasheetSources)[number];
+
+export function isLibraryDatasheetSource(value: unknown): value is LibraryDatasheetSource {
+  return libraryDatasheetSources.some((source) => source === value);
+}
+
 export type LibraryPrice = {
   source: LibraryPriceSource;
   currency: 'USD';

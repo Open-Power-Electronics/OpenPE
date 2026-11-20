@@ -1,7 +1,7 @@
 import type { BoardLayer, Footprint, PCB } from '../lib/pcb';
 import { pcbPadDisplayLayers, pcbPadPaintLayer, type PCBDisplay } from '../lib/pcb-display';
 
-export type LayoutFootprintLayerPass = {
+type LayoutFootprintLayerPass = {
   id: string;
   footprint: Footprint;
   layer: BoardLayer;

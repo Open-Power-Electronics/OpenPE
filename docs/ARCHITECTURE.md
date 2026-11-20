@@ -106,6 +106,7 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - The shared STEP worker retains original tessellated geometry and recovers surface colours for four hash-pinned Würth assemblies through `server/step-appearance.mjs`. Library previews, imported component models and PCB Model view consume the same mesh format. [Libraries](LIBRARIES.md#step-access-and-previews) owns the recovery bounds.
 - `server/nextpcb-library.mjs` is a read-only host adapter behind the existing authenticated library service. Explicit NextPCB selection reads fixed HTTPS catalog endpoints and allowlisted native assets; shared validators and generated PCB preparation retain Core document authority. `server/jlcpcb-library.mjs` reads JLCPCB search metadata and resolves exact EasyEDA CAD over fixed HTTPS. Symbol chooser search pages use the same host CAD readers to check footprint and model references before delivery; STEP remains on demand. `server/jlcpcb-cad.mjs` converts the supported subset and validates symbol and footprint records independently using the generated project and PCB validators. Both online sources share the authenticated library routes, bounded response reader and Electron system-network adapter on desktop. Provider pages never run in the renderer. [Libraries](LIBRARIES.md#catalog-service-and-chooser) owns access and geometry/model limits.
 - The authenticated library service resolves KiCad, NextPCB and JLCPCB identities for explicit chooser price checks. `server/library-prices.mjs` owns LCSC Electronics transport and cross-catalog identity matching. `server/nextpcb-prices.mjs` owns HQ Online quote transport. Desktop requests use the host network adapter. [Libraries](LIBRARIES.md#component-pricing) owns quote matching and retention.
+- Chooser and scoped Agent catalog reads use `lib/library-references.ts`. The datasheet reader shares the pricing identity resolver and selects the HQ Online or JLCPCB adapter. `server/library-datasheets.mjs` checks host-resolved PDF references, bounds downloads and returns raster pages through the shared PDF worker. [Libraries](LIBRARIES.md#component-datasheet-preview) owns matching and preview limits.
 - Codex, Claude, and Cursor expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools. Cursor uses `@cursor/sdk` in the service process: MCP-only built-ins, inline OpenPE MCP, one frozen empty filesystem and MCP environment for that run, no setting sources, and a private temporary directory. Its API key is `safeStorage` ciphertext at `cursor-credential.bin` in the OpenPE data directory, outside recovery, history, and Agent context. POSIX mode is 0600; Windows relies on the per-user data-directory ACL and does not call `icacls`. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the Cursor `openpe_ask_user` MCP tool, the private DeepSeek user-question patch, and the sole explicitly loaded Pi question extension. The latter three receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
@@ -169,6 +170,12 @@ Simulation participation, model mappings and portable model references remain na
 Model CAD parameters belong to Core and native `.kicad_pro` settings. Sketches on the shared Model canvas and local tool/property previews belong to presentation. `lib/model-cad.ts` owns bounded profiles, semantic base-edge catalogues, extrusion/edge-treatment/Boolean recipes, conservative envelopes and canonical geometry keys. `lib/model-cad-selection.ts` owns pure typed selection, geometry eligibility filters and stale-entity pruning; `components/model-cad-edges.ts` and `components/model-cad-faces.ts` own visible analytic topology picking and disposable highlights. These adapters store no document mutations. Boolean operand roles remain presentation until the existing two-body Core command commits. `core/register-project.ts` wraps human/Agent commands with asynchronous host preflight; `ProjectCore` remains pure and rejects changed advanced geometry without an exact privately retained prepared key. Unchanged geometry permits pose/material edits; Source apply and whole-project replacement use the same gate. Native admission remains structural so imported data is preserved before lazy preview.
 
 File Export selects an exchange or manufacturing format independently of native Save. `lib/manufacturing-export.ts` dispatches pure exporters for the primary schematic (`lib/schematic-netlist-export.ts`), native PCB outline (`lib/pcb-dxf.ts`), PCB fabrication and assembly, and OpenSCAD (`lib/model-cad-scad.ts`). Full fabrication and standalone stencil/drill archives share layer and drill generation. `server/manufacturing-format.mjs` is the generated host facade and shares the project validator. `electron/native-export.cjs` validates requests, protects open sources and linked destinations, and writes one compiled file after a format-specific picker. Browser downloads use the same compiler. Source application remains a Core transaction. [Design exchange](FORMAT.md#design-exchange) · [Manufacturing export](FORMAT.md#manufacturing-export)
+
+Drawing PNG export uses the mounted renderer's capture callback for both the
+canvas menu and the scoped Agent command. `components/useDrawingImageExport.ts`
+binds it to the originating project and live drawing, then invokes the existing
+Electron picker through the native image port. [Drawing export](LAYOUT.md#annotations-and-png-export)
+owns capture and native output bounds.
 
 Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable. Meshes and preparation receipts stay outside native design and recovery. This host geometry service runs independently of simulation plugins. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve. Ambiguous or missing edges fail. [Model CAD limits](LAYOUT.md#model-cad)
 
@@ -375,11 +382,6 @@ native reader without granting or staging a project. `HomeProjectCard` retains
 one schematic thumbnail per mounted card and reuses `CanvasContextMenu` for
 keyboard/IME-safe Pin/Unpin and removal from the list.
 
-`tests/recent-projects.test.ts` and `tests/desktop-recent.test.ts` cover persistence,
-native acceptance, duplicate activation, cancellation and invalid locations.
-`node scripts/check-recent-ui.mjs` checks the default pinned EMC entry, Pin/Unpin,
-protected removal, refresh and failure isolation in an isolated browser without Electron.
-
 | Data                                  | Location/lifecycle                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Native design and supporting files    | User-selected KiCad directory; grant-bound Save                                                                                 |
@@ -387,7 +389,7 @@ protected removal, refresh and failure isolation in an isolated browser without 
 | Completed desktop results             | Direct `spice-simulation/<native-stem>.*` / `layout-thermal/<native-stem>.*`; project-bound v2 manifest and current success     |
 | Workspace recovery                    | App data `openpe-workspace-v2.json`; no host destinations/grants/plugin results                                                 |
 | Recent native locations and pins      | App data `recent-projects.json` and `recent-pins.json`; bounded host-only path indexes, separate from recovery and live grants  |
-| Appearance/layer preferences          | App data `appearance-v1.json`; independent settings                                                                             |
+| Appearance and Layout preferences     | App data `appearance-v1.json` and `layout-preferences-v1.json`; independent settings                                             |
 | Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                            |
 | Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                         |
 | Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/`, with any existing PDFs |
@@ -493,11 +495,6 @@ ignored `next-env.d.ts`.
 | [Panel Find](../DESIGN.md#panel-find) | `tests/panel-find.test.ts`, `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs` |
 | [Cross-mode component highlighting](../DESIGN.md#cross-mode-component-highlighting) | `tests/component-highlight.test.ts` |
 
-Run the browser scripts with `node scripts/<script>.mjs`. They use isolated
-renderer fixtures and controlled services. Native dialogs, clipboard
-permissions, CAD kernel execution and provider authentication require their own
-checks.
-
 `tests/gui-agent-parity.test.ts` compares native KiCad bytes and undo for GUI
 and Agent edits behind revision, Source and close gates. Host parity checks
 include `tests/model-resource-capabilities.test.ts`,
@@ -523,6 +520,7 @@ complete test set. Focused runs pass test paths after `npm test --`.
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                                                                                        |
 | Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                                                             |
+| Recent projects             | `tests/recent-projects.test.ts`, `tests/desktop-recent.test.ts`, `check-recent-ui.mjs`                                                                                                                           |
 | Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                                              |
 | Schematic sections          | `tests/schematic-section.test.ts`, `tests/schematic-section-views.test.ts`, `tests/schematic-section-controls.test.ts`; `check-thermal-workbench-ui.mjs --schematic-sections` (actual Workbench/Core with mocked host services)                                               |
 | Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                                                                      |
@@ -533,7 +531,11 @@ complete test set. Focused runs pass test paths after `npm test --`.
 | CAD geometry and admission  | `tests/model-cad.test.ts`; `tests/model-cad-sketch.test.ts`; `tests/model-cad-host.test.ts`; `tests/model-cad-kernel.test.ts`; `tests/model-cad-step.test.ts`; opt-in `OPENPE_TEST_MODEL_CAD=1` native-kernel tests                                                           |
 | Explicit desktop checks     | `check-desktop-startup.mjs`; `benchmark-desktop-startup.mjs`; `benchmark-desktop-interaction.mjs`; `benchmark-editor-experience.mjs`                                                                                                                                          |
 
-Script basenames are under `scripts/`. Isolated renderer checks use fixture services/native pickers and do not establish live CLI authentication, desktop dispatch latency or GPU presentation. Model performance uses pinned offline STEP assets. Runtime measurements establish only their asserted workloads.
+Run browser scripts with `node scripts/<script>.mjs`. They use isolated renderer
+fixtures and controlled services. Native dialogs, clipboard permissions,
+desktop dispatch and GPU presentation, CAD kernel execution and provider
+authentication require their own checks. Model benchmarks use pinned offline
+STEP assets.
 
 Desktop benchmarks require explicit authorization and their own isolated profiles; use `npm run dev:web` for a dev renderer, since `npm run dev` already opens Electron. Run graphical checks serially, retain bounded input/overload guards and partial evidence, and stop on desktop overload. `OPENPE_EXPERIENCE_OPERATIONS` selects experience cases; `OPENPE_EXPERIENCE_NATIVE_AX=1` enables accessibility only in that benchmark's process (unset/`0` keeps the natural environment; other values fail). Detailed protocol and measurement assumptions are in the scripts; a frame marker is not a GPU fence.
 

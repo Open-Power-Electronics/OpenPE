@@ -90,6 +90,7 @@ import { expandPCBTrackSelection } from '@/lib/pcb-track-selection';
 import { previewConstrainedPCBTrackDrag, type PCBTrackDragPreview } from '@/lib/pcb-track-drag';
 import { createPCBTrackJointDrag } from '@/lib/pcb-track-joint-drag';
 import { connectedPCBDragKind, createPCBInteractiveDrag } from '@/lib/pcb-interactive-drag';
+import { suggestPCBPlacement } from '@/lib/pcb-placement-suggestion';
 import {
   findPCBRectangle,
   pcbRectangleDragBounds,
@@ -127,6 +128,7 @@ import {
 } from '@/lib/pcb-display';
 import { padReach } from '@/lib/pcb-custom-pad';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { preparePCBFillPreview } from './pcbFillPreview';
 import { usePCBFillWorker } from './usePCBFillWorker';
 import type { PCBFillRuleContext } from '@/lib/pcb-clearance-sources';
@@ -312,11 +314,13 @@ type Props = {
   undoAction?: ReactNode;
   grid?: boolean;
   gridSpacing?: number;
+  placementSuggestionRevision?: number;
   leftButtonDrag?: LeftButtonDrag;
   gridControl?: ReactNode;
   ruleStatus?: ReactNode;
   rulePanel?: ReactNode;
   draftStatus?: string;
+  imageExportBlocked?: boolean;
   agentContextRef?: RefObject<Record<string, unknown> | null>;
 };
 
@@ -382,11 +386,13 @@ function LayoutEditor({
   undoAction,
   grid = true,
   gridSpacing = defaultLayoutGridSpacing,
+  placementSuggestionRevision,
   leftButtonDrag = defaultLeftButtonDrag,
   gridControl,
   ruleStatus,
   rulePanel,
   draftStatus,
+  imageExportBlocked = false,
   agentContextRef,
   capabilityHost,
 }: Props) {
@@ -737,9 +743,42 @@ function LayoutEditor({
     selection: Selection[];
     mode: 'replace' | 'add' | 'toggle' | 'subtract';
     basis: PCB;
+    revision: number | undefined;
     clickCandidate?: SelectionCandidate;
     clickChoices?: SelectionCandidate[];
   } | null>(null);
+  const [placementSuggestion, setPlacementSuggestion] = useState<{
+    basis: PCB;
+    revision: number | undefined;
+    selection: Selection[];
+    spacing: number;
+    preview: NonNullable<ReturnType<typeof suggestPCBPlacement>>;
+  } | null>(null);
+  const canSuggestPlacement =
+    placementSuggestionRevision !== undefined &&
+    active &&
+    visible &&
+    tool === 'select' &&
+    !analysisPanelVisible &&
+    !analysisProbing &&
+    !annotationDisabled &&
+    !fillBusy &&
+    !drag &&
+    !outlineResize;
+  const suggestion =
+    canSuggestPlacement &&
+    placementSuggestion?.basis === pcb &&
+    placementSuggestion.revision === placementSuggestionRevision &&
+    placementSuggestion.selection.length === selection.length &&
+    placementSuggestion.selection.every(
+      (item, index) => item.kind === selection[index].kind && item.id === selection[index].id,
+    ) &&
+    placementSuggestion.spacing === gridSpacing
+      ? placementSuggestion.preview
+      : null;
+  useLayoutEffect(() => {
+    if (placementSuggestion && !suggestion) setPlacementSuggestion(null);
+  }, [placementSuggestion, suggestion]);
   const [contextMenuOnBlank, setContextMenuOnBlank] = useState(false);
   const [selectionChoice, setSelectionChoice] = useState<
     (LayoutSelectionChoice & { position: { x: number; y: number } }) | null
@@ -1946,6 +1985,7 @@ function LayoutEditor({
     setDrag(null);
     setTrackDrag(null);
     setMarquee(null);
+    setPlacementSuggestion(null);
     setSelectionChoice(null);
     setGesture(null);
     setOutlineResize(null);
@@ -2025,18 +2065,26 @@ function LayoutEditor({
       setError((e as Error).message);
     }
   }
-  async function exportImage() {
-    if (!svg.current || exporting) return;
-    setExporting(true);
-    setImageStatus('');
-    try {
+  const saveImage = useDrawingImageExport(
+    capabilityHost,
+    'Layout',
+    pcb,
+    active && visible && Boolean(board) && !imageExportBlocked,
+    setExporting,
+    async (check) => {
+      if (!svg.current) throw new Error('The Layout drawing is not ready.');
+      setImageStatus('');
       const image = await captureLayoutPNG(svg.current, pcbDisplayBounds(pcb, 'board', layers));
-      const name = await saveDrawingPNG(image, schematic.title);
+      check();
+      return saveDrawingPNG(image, schematic.title);
+    },
+  );
+  async function exportImage() {
+    try {
+      const { name } = await saveImage();
       if (name) setImageStatus(`Exported ${name}`);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setExporting(false);
     }
   }
   function zoom(factor: number, at?: Point) {
@@ -3157,6 +3205,7 @@ function LayoutEditor({
       host.current?.classList.add('is-panning');
       return;
     }
+    setPlacementSuggestion(null);
     if (tool === 'measure') return;
     if (analysisProbing || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
@@ -3366,6 +3415,7 @@ function LayoutEditor({
         selection,
         mode,
         basis: pcb,
+        revision: placementSuggestionRevision,
         clickCandidate: candidate,
         clickChoices: choices,
       });
@@ -3404,6 +3454,7 @@ function LayoutEditor({
         selection,
         mode,
         basis: pcb,
+        revision: placementSuggestionRevision,
       });
     }
   }
@@ -3729,6 +3780,23 @@ function LayoutEditor({
         const next = mergePCBSelection(marquee.selection, ids, marquee.mode);
         setSelection(next);
         if (next.length) setInspector(true);
+        if (
+          moved &&
+          canSuggestPlacement &&
+          !baselineConnectivity.error &&
+          marquee.revision === placementSuggestionRevision &&
+          marquee.revision === getRevision?.()
+        ) {
+          const preview = suggestPCBPlacement(pcb, next, baselineConnectivity.edges, gridSpacing);
+          if (preview)
+            setPlacementSuggestion({
+              basis: pcb,
+              revision: marquee.revision,
+              selection: next,
+              spacing: gridSpacing,
+              preview,
+            });
+        }
       }
     }
     setMarquee(null);
@@ -3809,6 +3877,23 @@ function LayoutEditor({
       return;
     flushLayoutCamera(svg.current);
     const key = e.key.toLowerCase();
+    if (
+      key === 'tab' &&
+      suggestion &&
+      placementSuggestion?.revision === getRevision?.() &&
+      e.target === e.currentTarget &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !trackDrag &&
+      !marquee &&
+      pointer.current === null
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (commit(suggestion.board, true)) setPlacementSuggestion(null);
+      return;
+    }
     const layerKey = ['pageup', 'pagedown', '+', '-'].includes(key);
     if (tool === 'measure' && key !== ' ' && key !== 'home') {
       if (key === 'escape') {
@@ -5365,6 +5450,51 @@ function LayoutEditor({
                 {detailDrawing}
                 {footprintMotionDrawing}
               </g>
+              {suggestion && (
+                <g
+                  data-layout-placement-suggestion
+                  data-annotation-overlay
+                  pointerEvents="none"
+                  aria-hidden="true"
+                >
+                  {suggestion.board.footprints.map((footprint) => {
+                    const offset = suggestion.offsets.get(footprint.id);
+                    if (!offset) return null;
+                    return (
+                      <g
+                        key={footprint.id}
+                        data-suggested-footprint={footprint.id}
+                        data-suggested-rotation={footprint.rotation}
+                      >
+                        <line
+                          x1={footprint.x - offset.x}
+                          y1={footprint.y - offset.y}
+                          x2={footprint.x}
+                          y2={footprint.y}
+                          stroke="var(--selection-shadow)"
+                          strokeDasharray="3 3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <g opacity={0.45}>
+                          <LayoutFootprintGraphic
+                            copperLayers={pcb.layers}
+                            footprint={footprint}
+                            reference={footprint.reference}
+                            value={footprint.value}
+                            layers={layers}
+                            selection={selectionPaint}
+                            placement={false}
+                            layer={layer}
+                            inspectedPadId=""
+                            netNames={netNames}
+                            highlightNets={highlightNets}
+                          />
+                        </g>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {analysisDrawing && (
                 <g data-annotation-overlay pointerEvents="none">
                   {analysisDrawing}
@@ -6076,6 +6206,7 @@ function LayoutEditor({
             className="layout-status"
             active={active && visible}
             ruleStatus={ruleStatus}
+            center={suggestion ? <span role="status">Tab to apply placement</span> : undefined}
             centerCoordinates
             mode={
               analysisProbing

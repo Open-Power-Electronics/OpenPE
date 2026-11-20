@@ -3,7 +3,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-export type AnalysisComponent = { id: string; reference: string };
+type AnalysisComponent = { id: string; reference: string };
 
 const referenceOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 const categoryLabels: Record<string, string> = {

@@ -7,7 +7,7 @@ import { activePassiveModel, simulationModelSource } from './simulation-model-so
 import { child, children, val, type SExpr } from './sexpr';
 import { padHasElectricalPin } from './pcb-pad-role';
 
-export type ParasiticPhysicalModel = {
+type ParasiticPhysicalModel = {
   parts: Part[];
   startLabel: string;
   endLabel: string;

@@ -14,7 +14,11 @@ const { emptyCircuit, createPart, pinPositions, parseCircuit, uid } = await tsIm
 const { createProject, serializeProject } = await tsImport('../lib/project.ts', import.meta.url);
 const { projectNetGroups } = await tsImport('../lib/project-net-groups.ts', import.meta.url);
 const { onWire } = await tsImport('../lib/wiring.ts', import.meta.url);
-const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
+const { defaultAppearance, defaultLayoutPreferences } = await tsImport(
+  '../lib/appearance.ts',
+  import.meta.url,
+);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const d = emptyCircuit();
 d.parts.push(createPart(d, 'R', 25.4, 25.4), createPart(d, 'C', 76.2, 25.4));
 for (const p of d.parts) p.rotation = 180;
@@ -41,7 +45,7 @@ let state = {
       source,
       sourceDraft: null,
       dirty: false,
-      filename: null,
+      filename: 'drag.kicad_pro',
       sessions: [{ id: 'wire-drag-session', messages: [], draft: '' }],
       activeSessionId: 'wire-drag-session',
     },
@@ -50,7 +54,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: defaultAgentPreferences.models,
 };
 const bundle = await build({
   stdin: {
@@ -88,6 +92,10 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -104,6 +112,8 @@ try {
       return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance')
       return route.fulfill({ json: { ...defaultAppearance, leftButtonDrag: 'drag-any' } });
+    if (url.pathname === '/api/layout-preferences')
+      return route.fulfill({ json: defaultLayoutPreferences });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });

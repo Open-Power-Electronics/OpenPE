@@ -10,6 +10,7 @@ const entryPoints = [
   'AGENTS.md',
   'DESIGN.md',
   'assets/README.md',
+  'plugins/README.md',
   'references/README.md',
   'tests/fixtures/README.md',
 ];

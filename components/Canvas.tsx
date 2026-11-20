@@ -80,6 +80,8 @@ import {
   type SelectionMode,
 } from '@/lib/schematic-selection';
 import { captureSchematicPNG, saveDrawingPNG } from '@/lib/drawing-export';
+import type { CapabilityHost } from '@/api/capabilities';
+import { useDrawingImageExport } from './useDrawingImageExport';
 import { previewSchematicMove, type SchematicMoveOperation } from '@/lib/schematic-move';
 import {
   createSchematicWireDraft,
@@ -151,6 +153,7 @@ export type CanvasViewport = {
   zoomBaseWidth: number;
 };
 type Props = {
+  capabilityHost?: CapabilityHost;
   ruleFocus?: RuleCheckFocus | null;
   showRuleMarker?: boolean;
   initialViewport?: CanvasViewport;
@@ -192,6 +195,7 @@ type Props = {
   onNotify?: (message: string) => void;
 };
 export default function Canvas({
+  capabilityHost,
   ruleFocus,
   showRuleMarker = true,
   initialViewport,
@@ -709,18 +713,26 @@ export default function Canvas({
     if (svg.current) observer.observe(svg.current);
     return () => observer.disconnect();
   }, []);
-  async function exportImage() {
-    if (!svg.current || exporting) return;
-    setExporting(true);
-    try {
+  const saveImage = useDrawingImageExport(
+    capabilityHost,
+    'Schematic',
+    doc,
+    active && !editingBlocked,
+    setExporting,
+    async (check) => {
+      if (!svg.current) throw new Error('The schematic drawing is not ready.');
       flushSync(() => cancelGesture());
       const image = await captureSchematicPNG(svg.current);
-      const name = await saveDrawingPNG(image, doc.title);
+      check();
+      return saveDrawingPNG(image, doc.title);
+    },
+  );
+  async function exportImage() {
+    try {
+      const { name } = await saveImage();
       if (name) onNotify?.(`Exported ${name}`);
     } catch (error) {
       onNotify?.((error as Error).message);
-    } finally {
-      setExporting(false);
     }
   }
   function fit() {

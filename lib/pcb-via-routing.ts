@@ -5,7 +5,7 @@ import { pointSegmentDistance, squaredDistance } from './pcb-collision';
 import { createPCBRouter } from './pcb-routing';
 import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 
-export type PCBViaOptions = {
+type PCBViaOptions = {
   netId: string;
   diameter: number;
   drill: number;

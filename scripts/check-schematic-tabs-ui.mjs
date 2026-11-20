@@ -59,6 +59,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       releaseFile: async () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       open: async () => ({

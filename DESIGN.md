@@ -121,6 +121,11 @@ The editor has no project tab. The mode row right-aligns 30 px project actions w
 
 Selecting a schematic-file tab reveals its Schematic view, including the already selected file from Source. Leaving Source validates pending native drafts through the shared apply path; invalid drafts remain visible and block navigation.
 
+In Schematic, **File > Remove schematic** confirms removal of the active file
+through the shared document command. Undo restores the schematic. The primary
+schematic of a PCB project is protected. The tab close action leaves the file in
+the project.
+
 - All tabs share the Schematic/Layout/Model/Source visual language, including schematic files, Properties, Layout/Model Visualization, Rule settings, component drawing and library previews. Horizontal tabs use 8 px top corners and outward base curves spanning 18 px on each side and 10 px vertically. Only the Schematic/Layout/Model/Source mode row uses the contrasting neutral strip with a darkened background in dark mode; its selected surface matches the content below with semibold interface-green icons and text. Properties and Visualization tabs retain their surrounding content background; file, drawing, library-preview and Settings strips retain the standard panel background. Their selected tabs use a subdued neutral fill mixed from 45% surface and 55% tint, with matching base curves and the shared semibold interface-green text. Inactive tabs are transparent; hover/focus uses a subtler neutral fill and interface-green text with a 180 ms colour transition. Horizontal strips below the mode row keep one continuous divider under selected tabs and adjacent actions. Reduced motion makes transitions immediate. Settings categories retain their vertical layout with the same treatment rotated toward the content pane.
 - Horizontal tab targets have 44 px minimum widths, 6 px gaps and 12 px horizontal padding; text tabs may shrink or wrap within their panel. Properties, Visualization, Rule, drawing and preview targets use a compact 30 px minimum height with 4 px vertical padding and 2 px strip-top padding. Drawing and assignment-preview strips have a 34 px minimum height. Settings categories retain 38 px targets with 8 px vertical padding and 4 px row gaps. File and editor-mode targets retain their 36 px minimum height. Strips reserve 18 px on each side for the base curves. Conversation and editor headers share a 44 px minimum overall height and grow together with interface typography; the mode row accounts for its single top border so their lower dividers align. It has 4 px top, 18 px leading and 8 px trailing insets. View tabs stretch to the bottom divider without negative margins or an outward bottom shadow; their fills and base curves stay clipped within the mode frame. Project actions retain a 4 px bottom inset. View and project-action icons are 17 px and align at the vertical center of the row. Inactive views and Properties tabs show only their icons until hover/focus reveals their labels.
 - File tabs retain visible filenames, unsaved dots, horizontal scrolling and close actions. File close/action targets are at least 34 px; their hover fill is a centred 24 × 24 px surface with 10 px corners. Keyboard focus colours the file name green or highlights the close control. Keep the strip open and the exposed editor corners rounded.
@@ -225,7 +230,7 @@ The 44 px session header shows the current conversation title as a 15 px semibol
 
 Find in conversation sits beside the session title when the current conversation contains messages. It opens the same inline Agent Find bar described in [Panel find](#panel-find), searching only rendered transcript content. It does not open a dialog or search hidden/raw messages. Preserve composer drafts, folding, reader positions and the independent Preview viewport; revealing a match pauses following until the usual reading controls resume it.
 
-Composer is one rounded surface: permissions left, model/effort/Send or Stop right even at minimum width. Settings → Agents owns Messages sent while running: Queue (default) sends follow-ups in order after successful completion; Steer injects text into the active Codex turn without interrupting it. Other Agents, connecting turns and attachments use Queue. No mode picker appears in the composer. With an empty draft, a running turn shows Stop; with a draft, Send and a separate Stop remain available. The compact permission menu uses Review changes / Confirm file and design changes before applying and Auto-approve / Run supported commands automatically, with a 300 px minimum width. The permission trigger uses a green checked shield for Review and a yellow exclamation shield for Auto. Keep its 34 px target transparent and borderless. Hover and the open menu emphasize the shield stroke. Keyboard focus uses a quiet outline. Queries, observation and presentation/session controls execute directly in Review; file drafts, design edits and file writes require Apply/Reject confirmation. Agent navigation cannot implicitly apply pending Source; source.apply is a separate reviewed change. Review cards capture immutable arguments against the current project state; mode changes never run old cards. Fenced proposals retain submission mode.
+Composer is one rounded surface: permissions left, model/effort/Send or Stop right even at minimum width. Settings → Workspace owns Messages sent while running: Queue (default) sends follow-ups in order after successful completion; Steer injects text into the active Codex turn without interrupting it. Other Agents, connecting turns and attachments use Queue. No mode picker appears in the composer. With an empty draft, a running turn shows Stop; with a draft, Send and a separate Stop remain available. The compact permission menu uses Review changes / Confirm file and design changes before applying and Auto-approve / Run supported commands automatically, with a 300 px minimum width. The permission trigger uses a green checked shield for Review and a yellow exclamation shield for Auto. Keep its 34 px target transparent and borderless. Hover and the open menu emphasize the shield stroke. Keyboard focus uses a quiet outline. Queries, observation and presentation/session controls execute directly in Review; file drafts, design edits and file writes require Apply/Reject confirmation. Agent navigation cannot implicitly apply pending Source; source.apply is a separate reviewed change. Review cards capture immutable arguments against the current project state; mode changes never run old cards. Fenced proposals retain submission mode.
 
 Queued messages form an inset tray connected to the composer above its input, using neutral surfaces, a single-line text preview, a Steer action, a trash icon and a More menu with Edit message / Send next. Clip the queue row to one line with an ellipsis. Activating its text opens a read-only preview of the full literal message and an independent snapshot of its captured annotations. Long text has a focusable scroll area capped at 360 px or 45% of viewport height. Copy queued message copies the full captured text. Attachment-only entries show their captures. Preserve draft text, selection and queue order during inspection. If the item leaves the queue, keep the open snapshot with No longer queued status. Closing returns focus to the opening row or to the composer when the row has retired. Hiding the conversation dismisses the preview. Deleting via a focused Remove control moves focus to the following item's Remove control, or the preceding item when deleting the last row. When the queue becomes empty, focus the current composer without changing its draft or caret/selection. Reveal the focused control only within the queue's own scroll area. Background removals and newer focus choices never trigger restoration or move the conversation/editor. Steer promotes one text-only queued item into its originating active Codex turn and removes it only after native acknowledgment. Accepted steering messages append to the conversation after the response already in progress, preserving acceptance order for multiple inputs. Unavailable steering stays disabled. Edit restores the message and annotations only when the draft has zero characters and no attachments, then focuses that conversation's input with the caret at the end and the draft tail visible. Focus restoration does not scroll the conversation or editor, repeat on streamed updates, or transfer to an inactive session. Retain at most 16 queued messages, each bounded to 16,000 text characters and the normal annotation limits. Stop/failure pauses the remaining queue; Resume queue explicitly restarts it. Mounted sessions retain their own queue through navigation; queues are transient and do not survive reload or project closure. The shared default behavior persists separately from project recovery. The composer tracks compositionstart/compositionend as well as native isComposing and key code 229. Active composition cannot send, queue, steer or stop through its keyboard or pointer actions even when a key event omits its composition flag. Queue Preview, Remove, Steer, More and Resume controls use that same active-composition gate; blocked attempts retain composer focus, draft selection, queue contents/order and the paused state without opening a menu or starting delivery. Preserve intermediate text literally without smart-punctuation transforms; normal actions and punctuation resume after compositionend. A pending punctuation caret update cannot move a newly composing or changed draft.
 
@@ -421,10 +426,10 @@ Search/list arrows highlight. Input Enter submits search; result Enter or double
 Selected KiCad, NextPCB and JLCPCB entries show a compact Price section at the
 end of the details pane. The shared content-sized **Price source** dropdown lists
 **LCSC Electronics** and **HQ Online**. The trigger fits the longer label and
-sits at the upper right beside the keyboard-focusable refresh icon. The source
-choice stays with the chooser while the user browses its catalogs. Switching sources
-shows only that source's results and leaves the CAD preview selected. The refresh
-button's tooltip and accessible name read **Check price**,
+sits at the upper right beside the keyboard-focusable refresh icon. The
+[selected component's catalog sets the default](docs/LIBRARIES.md#component-pricing).
+Switching price sources shows the selected supplier's results and retains the
+CAD preview. The refresh button's tooltip and accessible name read **Check price**,
 **Refresh price** or **Retry price check** according to the current state. The icon
 spins while a check is pending, subject to the motion preference.
 Price status stays in the section and distinguishes a failed check from an
@@ -434,6 +439,27 @@ time as **Last checked**. Each offer shows the manufacturer when supplied,
 order quantities and USD unit prices. Stock sits below its price tiers, aligned
 to the right. The check time appears in the right-aligned footer of the last
 offer, or below the empty result.
+
+The **PDF** tab opens the document in the chooser's preview area. Symbols and
+online-catalog footprints offer this tab alongside their drawing views. The
+reader uses the shared neutral surfaces and controls, with a white page on a
+scrollable canvas. Both views read from the
+[selected component's catalog source](docs/LIBRARIES.md#component-datasheet-preview).
+The footer centers page navigation and zoom together and places the inline
+expand button at the trailing edge. Each group stays intact when the toolbar
+wraps. Previous and next flank the outlined page field, which combines the
+editable page number and total. The zoom trigger keeps its width as the label
+changes between **Fit width**, **Fit page** and percentage options. Fit width is
+the default. With the page focused,
+Page Up/Down and Home/End navigate, plus/minus change zoom, and 0 fits the width.
+
+The four-corner **Open in window** button opens the reader in a full shared dialog
+titled with the component name. Page, zoom and reading position carry between the two
+views. Close or Escape returns focus to the opener and keeps the chooser
+selection. Switching drawing tabs retains their cameras and the current
+document's reading state. Missing PDFs and retryable load failures have
+distinct states. IME composition blocks control activation and page
+submission.
 
 ## Rule and version history
 
@@ -484,6 +510,14 @@ Linked footprints share Schematic's identity strip, Reference/Value, field table
 Use shared control typography, surfaces and dimensions with soft section dividers and wrapping metadata. Valid edits commit once; invalid/rejected inputs, composition and hidden-dock drafts remain intact.
 
 ### Placement, routing and copper
+
+With [Layout shadow suggestions](#settings-and-appearance) enabled, marquee-select
+footprints outside the board to see [suggested positions](docs/LAYOUT.md#placement-suggestions)
+inside the board as translucent footprints with dashed guides from their current positions.
+The drawing footer shows **Tab to apply placement** while the suggestion is
+visible. With canvas focus, Tab applies it once. Escape dismisses it with the
+usual selection handling. Tab keeps its normal focus behavior outside an
+applicable suggestion, and IME composition cannot apply it.
 
 Place footprint opens an independent component/library chooser with 2D/3D previews. Confirmation starts canvas placement; cancelling a reopened chooser retains the current placement preview. Route tracks uses a compact upper-left nonmodal horizontal panel prefixed by Track width, followed by width, via diameter and drill in mm, with pinned Close. The Net-prefixed via strip retains net and size controls. Parameters scroll horizontally when constrained. Close/deactivation/tool changes cancel drawings but retain settings; modal suspension retains blocked drafts. Number Escape restores accepted value/canvas focus; selector Escape closes options first.
 
@@ -742,11 +776,11 @@ OS pickers grant access with English titles and format-specific filters. File Ex
 
 ## Settings and appearance
 
-**Settings → Agents → Workspace mode** uses the same label and Select layout as the follow-up setting. Its options are Workbench (default) and Raw KiCad. Selecting Raw KiCad opens a chat-only view with the current Agent and model selection. Select Workbench from the same mode menu in the chat header to return. Choose one or more KiCad files with the native picker before sending. Show the selected filenames beside Agent detection and selection. Changing the files or Agent starts a new raw conversation and retains the composer draft. Leaving the mode clears the raw selection and conversation. The regular workbench retains its open projects, conversations and drafts. Raw replies display as plain text. The composer keeps model and effort controls, Send and Stop. Keyboard and pointer actions respect IME composition.
+**Settings → Workspace → Workspace mode** uses the same label and Select layout as the follow-up setting. Its options are Workbench (default) and Raw KiCad. Selecting Raw KiCad opens a chat-only view with the current Agent and model selection. Select Workbench from the same mode menu in the chat header to return. Choose one or more KiCad files with the native picker before sending. Show the selected filenames beside Agent detection and selection. Changing the files or Agent starts a new raw conversation and retains the composer draft. Leaving the mode clears the raw selection and conversation. The regular workbench retains its open projects, conversations and drafts. Raw replies display as plain text. The composer keeps model and effort controls, Send and Stop. Keyboard and pointer actions respect IME composition.
 
-Settings uses the [shared centered dialog frame](#dialogs-and-native-actions), a category sidebar that takes 24% of the body within 100–176 px, a 640 px content maximum and a fixed footer. Appearance fields stack below their labels when the dialog content width falls below 680 px. Below 440 px the category tabs keep their text and omit their icons. The footer has a right-aligned Done button. Categories distinguish hover from selection; Appearance groups aligned label/field rows in quiet cards with standard control corners. Appearance/Agents tabs retain mounted drafts. Agents lists all five marks/names/states in softly bordered rows with a detection action, no installation small print; runtime-unavailable diagnostics remain in accessible descriptions. About uses a 20 px Signal E header mark with one OpenPE heading, the tagline “AI-Native Workbench for Power Electronic Engineer” and a concise product summary. Its Close action stays in the header. Third-party licenses use a bordered disclosure with stable readable source names and load on first expansion; expanded content scrolls within the dialog.
+Settings uses the [shared centered dialog frame](#dialogs-and-native-actions), a category sidebar that takes 24% of the body within 100–176 px, a 640 px content maximum and a fixed footer. Appearance fields stack below their labels when the dialog content width falls below 680 px. Below 440 px the category tabs keep their text and omit their icons. The footer has a right-aligned Done button. Categories distinguish hover from selection; Appearance groups aligned label/field rows in quiet cards with standard control corners. Appearance, Workspace and Agents retain their mounted state when switching categories. Agents lists all five marks/names/states in softly bordered rows with a detection action, no installation small print; runtime-unavailable diagnostics remain in accessible descriptions. About uses a 20 px Signal E header mark with one OpenPE heading, the tagline “AI-Native Workbench for Power Electronic Engineer” and a concise product summary. Its Close action stays in the header. Third-party licenses use a bordered disclosure with stable readable source names and load on first expansion; expanded content scrolls within the dialog.
 
-Rule sits between Appearance and Agents and edits the active project. The tabs appear in the following order.
+The Settings categories appear in the order Appearance, Workspace, Rule and Agents. Workspace contains Workspace mode, Messages sent while the Agent is running and Layout shadow suggestions. Rule edits the active project and has the following tabs.
 
 - **Schematic** groups Connectivity, Wires & markers and Symbols.
 - **Copper & Routing** groups board-wide minimum copper clearance and track width under Clearance & width, and copper shorts and unrouted connections under Connectivity. The DRC settings shortcut opens this tab.
@@ -762,6 +796,9 @@ Light/Dark/System and presets/custom six-digit colours/native pickers derive sha
 
 Local interface families: System/Technical/Arial/Georgia; content can inherit. Code: system mono/Consolas/Courier New. Styles Regular/Medium/Bold/Italic. Sizes interface 12–20, content/code 12–28; quick 13/14/15/17/19 resets overrides/coordinated scale. Typography never changes exported geometry.
 
+**Layout shadow suggestions** is an application-wide switch under Workspace.
+It defaults off and takes effect when the setting is saved.
+
 Advanced starts collapsed: motion System/On/Off, retained separate light/dark/shared profiles, Editing mode, translucent sidebar 40–100%/85 default, full-width Home (composer remains capped), Source lines/blocks. Smart punctuation defaults off and only transforms newly typed prose, preserving paste/code/units/source/history.
 
 Colour/number Escape discards local draft and keeps Settings open; elsewhere normal close. Load separately from projects, disable before ready, retain unreadable preferences on failure.
@@ -772,7 +809,9 @@ See the [plugin design specification](docs/PLUGINS.md#page-and-categories) for t
 
 ## Maintenance and verification
 
-Update this contract for visible behaviour/dimensions/icons/gestures. Setup belongs to README, engineering to AGENTS, numerical/storage details to feature contracts. Documentation-only edits need content/format/link checks. [Architecture verification](docs/ARCHITECTURE.md#verification) indexes isolated/opt-in checks.
+Update this contract when visible behaviour changes. See the
+[engineering verification requirements](AGENTS.md#verification-and-delivery)
+and [verification index](docs/ARCHITECTURE.md#verification).
 
 ## References
 

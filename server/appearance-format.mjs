@@ -11677,6 +11677,13 @@ var defaultProfile = {
   codeStyle: "regular"
 };
 var appearanceKey = "openpe.appearance.v1";
+var layoutPreferencesKey = "openpe.layout-preferences.v1";
+var defaultLayoutPreferences = Object.freeze({ placementSuggestions: false });
+function validateLayoutPreferences(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 1 || !Object.hasOwn(value, "placementSuggestions") || !("placementSuggestions" in value) || typeof value.placementSuggestions !== "boolean")
+    throw new Error("Invalid layout preferences");
+  return { placementSuggestions: value.placementSuggestions };
+}
 var defaultAppearance = {
   leftButtonDrag: defaultLeftButtonDrag,
   schematicLayers: { ...defaultSchematicLayers },
@@ -11896,13 +11903,16 @@ export {
   appearanceVariables,
   codeFontOptions,
   defaultAppearance,
+  defaultLayoutPreferences,
   fontOptions,
   fontStyleOptions,
+  layoutPreferencesKey,
   parseAppearance,
   presetOptions,
   profileColors,
   smartPunctuationEdit,
   sourceWhitespaceOptions,
   textSizeOptions,
-  validateAppearance
+  validateAppearance,
+  validateLayoutPreferences
 };

@@ -110,12 +110,13 @@ export async function fetchDatasheet(record, request, signal) {
 }
 
 /** A cancellable worker keeps PDF parsing/rasterization off the service thread. */
-export function renderDatasheetPage(bytes, page, image, pageCount, signal) {
+export function renderDatasheetPage(bytes, page, image, pageCount, signal, { includeText = true } = {}) {
   signal.throwIfAborted();
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./datasheet-worker.mjs', import.meta.url), {
-      workerData: { bytes: new Uint8Array(bytes), page, image, pageCount },
+      workerData: { bytes: new Uint8Array(bytes), page, image, pageCount, includeText },
       execArgv: [],
+      ...(includeText ? {} : { resourceLimits: { maxOldGenerationSizeMb: 160 } }),
     });
     let settled = false;
     const finish = (error, result) => {

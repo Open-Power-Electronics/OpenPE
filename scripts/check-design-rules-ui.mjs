@@ -1081,6 +1081,7 @@ try {
     await categories.waitFor();
     assert.deepEqual(await categories.getByRole('tab').allTextContents(), [
       'Appearance',
+      'Workspace',
       'Rule',
       'Agents',
     ]);

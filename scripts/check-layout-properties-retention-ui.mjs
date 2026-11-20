@@ -18,11 +18,13 @@ const mode = process.env.OPENPE_TEST_REACT_MODE ?? 'development';
 // lifecycle/sidebar state; no service, native dialog or user-file writes occur.
 const bundle = await build({
   stdin: {
-    contents: `import React,{StrictMode,useState,useRef,useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{flushSync}from'react-dom';
-      import LayoutEditor from './components/LayoutEditor';import{ProjectCore}from'./core/project-core';import{isOwnedPCB}from'./lib/immutable-project';
+    contents: `import React,{StrictMode,useState,useRef,useMemo,useSyncExternalStore} from 'react';import{createRoot}from'react-dom/client';import{flushSync}from'react-dom';
+      import LayoutEditor from './components/LayoutEditor';import{ProjectCore}from'./core/project-core';import{isOwnedPCB}from'./lib/immutable-project';import{pcbFillRuleContext}from'./lib/pcb-clearance-sources';
       function Fixture(){
         const[core]=useState(()=>new ProjectCore(window.fixture));
         const snapshot=useSyncExternalStore(core.subscribe,core.getSnapshot,core.getSnapshot);
+        const nativeFiles=snapshot.project.nativeFiles;
+        const fillRules=useMemo(()=>pcbFillRuleContext({nativeFiles}),[nativeFiles]);
         const[active,setActive]=useState(true),[visible,setVisible]=useState(true),[sidebar,setSidebar]=useState(true);
         const context=useRef(null);window.layoutContext=()=>context.current;
         window.setLayoutHost=patch=>flushSync(()=>{if('active'in patch)setActive(patch.active);if('visible'in patch)setVisible(patch.visible);if('sidebar'in patch)setSidebar(patch.sidebar)});
@@ -30,7 +32,7 @@ const bundle = await build({
         window.stageSource=()=>{const file=core.getNativeFiles().files.find(file=>file.name.endsWith('.kicad_pcb'));core.updateNativeSource(file.name,file.source+'\\n')};
         window.clearSource=()=>core.discardSource();
         window.changeTrackWidth=(id,width)=>{const pcb=core.getSnapshot().project.pcb;core.replaceBoard({...pcb,tracks:pcb.tracks.map(track=>track.id===id?{...track,width}:track)})};
-        return <LayoutEditor board={snapshot.project.pcb} schematic={snapshot.project.schematic}
+        return <LayoutEditor board={snapshot.project.pcb} schematic={snapshot.project.schematic} fillRules={fillRules}
           active={active} visible={visible} sidebarVisible={sidebar} onToggleSidebar={()=>setSidebar(value=>!value)} onShowSidebar={()=>setSidebar(true)}
           agentContextRef={context} draftStatus={snapshot.sourceDraft!==null?'Pending Source edits':''}
           onCommit={next=>{window.commitAttempts++;try{const changed=core.replaceBoard(next);window.exactAdoption=isOwnedPCB(next)&&core.getSnapshot().project.pcb===next;if(changed)window.commits++;window.commitError='';return true}catch(error){window.commitError=error.message;return false}}}
@@ -72,9 +74,9 @@ const bundle = await build({
                 properties,
                 'window.layoutWork.properties++;' + properties,
               );
-              const airwires = 'const airwireDrawing = useMemo(\n    () => (';
+              const airwires = 'const airwireDrawing = useMemo(() => {';
               assert.ok(contents.includes(airwires), 'Find actual airwire drawing factory.');
-              contents = contents.replace(airwires, airwires + '\nwindow.layoutWork.airwires++,');
+              contents = contents.replace(airwires, airwires + '\nwindow.layoutWork.airwires++;');
             } else {
               const body = 'const body = useMemo(\n    () => (';
               assert.ok(contents.includes(body), 'Find actual Appearance body factory.');
