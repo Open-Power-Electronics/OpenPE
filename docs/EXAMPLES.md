@@ -101,9 +101,10 @@ through `scripts/example-native-files.ts` using the path rule in
 `lib/home-examples.ts`.
 
 The outer `examples` scan reserves its immediate `project` directory for the
-dedicated root. Packaging copies the roots into sibling `examples-native/`
-and `project-native/` directories and excludes the nested group from
-`examples-native/`.
+dedicated root. Directory listings for these roots exclude Finder metadata
+named exactly `.DS_Store`. Packaging copies the roots into sibling
+`examples-native/` and `project-native/` directories and excludes the nested
+group from `examples-native/`.
 Their matching schematics, PCB, rules, libraries and supporting files retain
 their actual filenames. Source displays that same directory, including empty
 folders, editable ordinary text and existing PDFs. Packaging includes the

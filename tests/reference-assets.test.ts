@@ -21,12 +21,17 @@ import { createLibraryService } from '../server/libraries.mjs';
 
 const root = 'resources/example-catalog/footprints';
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const exampleDirectoryEntries = (directory: string) =>
+  readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.name !== '.DS_Store');
 test('examples and its project group contain ten self-contained projects and pinned assets', async () => {
   assert.equal(existsSync('project'), false);
   assert.equal(existsSync('recent'), false);
-  assert.deepEqual(readdirSync('examples/project'), ['emc-flyback']);
+  assert.deepEqual(
+    exampleDirectoryEntries('examples/project').map((entry) => entry.name),
+    ['emc-flyback'],
+  );
   const stems = manifest.examples.map((entry) => entry.file).sort();
-  const rootEntries = readdirSync('examples', { withFileTypes: true });
+  const rootEntries = exampleDirectoryEntries('examples');
   assert.deepEqual(
     rootEntries.map((entry) => entry.name).sort(),
     Array.from(
