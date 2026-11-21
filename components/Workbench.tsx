@@ -97,6 +97,7 @@ import {
   type Project,
 } from '@/lib/project';
 import { applyProposal, type Operation } from '@/lib/proposals';
+import { restoreHistoryFile } from '@/lib/project-history';
 import {
   selectedField,
   objectPosition,
@@ -1998,13 +1999,24 @@ export default function Workbench({
     setClosedSchematics((ids) => [...ids.filter((closed) => closed !== id), id]);
     return true;
   }
-  async function restoreProjectVersion(restored: string, signal: AbortSignal) {
+  async function restoreProjectVersion(restored: string, signal: AbortSignal, file?: string) {
     signal.throwIfAborted();
     const basis = core.getSnapshot();
     if (basis.sourceDraft !== null)
       throw new Error('Apply the source edits before restoring a version.');
     if (basis.editingBlocked) throw new Error(basis.editingBlocked);
-    const candidate = parseProject(restored);
+    function requireFileReady() {
+      if (!file) return;
+      if (directoryEditorRef.current.saving)
+        throw new Error('Wait for the current project file write to finish.');
+      if (directoryEditorRef.current.hasPendingFile(file))
+        throw new Error('Save or discard the pending edits to this file before restoring it.');
+    }
+    requireFileReady();
+    if (!basis.project) throw new Error('Open a project before restoring a version.');
+    const version = parseProject(restored);
+    const candidate = file ? restoreHistoryFile(basis.project, version, file) : version;
+    if (candidate === basis.project) return;
     const intent = cancelPendingNavigation(),
       control = new AbortController();
     const abort = () => control.abort(signal.reason);
@@ -2023,11 +2035,19 @@ export default function Workbench({
         current.editingBlocked
       )
         throw new Error('The project changed while the version was prepared. Try again.');
-      core.commitProject(candidate);
+      requireFileReady();
+      if (file) {
+        core.commitHistoryFile(candidate);
+        pcbSync.current.retainNativeSnapshot(core.getSnapshot().project!);
+      } else {
+        core.commitProject(candidate);
+      }
       setSelection([]);
       setSelected(null);
       setTool('select');
-      notify('Version restored. Save to write it to disk.');
+      notify(
+        file ? 'File restored. Save to write it to disk.' : 'Version restored. Save to write it to disk.',
+      );
     } finally {
       signal.removeEventListener('abort', abort);
       if (sourcePreparation.current === control) sourcePreparation.current = null;
@@ -3098,7 +3118,7 @@ export default function Workbench({
         nativeFileBusy.current = false;
       }
     },
-    historyRestore: async (id, signal) => {
+    historyRestore: async (id, signal, file) => {
       signal.throwIfAborted();
       const available = nativeActionAvailability();
       if (available !== true) throw new Error(String(available));
@@ -3120,7 +3140,7 @@ export default function Workbench({
           current.editingBlocked
         )
           throw new Error('The project changed while the version was read. Try again.');
-        await restoreProjectVersion(restored, signal);
+        await restoreProjectVersion(restored, signal, file);
       } finally {
         nativeFileBusy.current = false;
       }

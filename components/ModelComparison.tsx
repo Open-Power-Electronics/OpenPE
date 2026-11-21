@@ -60,9 +60,6 @@ export default function ModelComparison({
   const after = useMemo(() => parseProject(sources.afterSource), [sources.afterSource]);
   return (
     <section className="model-comparison" aria-label="Model comparison">
-      <div className="schematic-compare-toolbar">
-        <span className="history-preview-label">3D model · Read-only</span>
-      </div>
       <div className="schematic-compare-panes">
         {(
           [
@@ -70,11 +67,12 @@ export default function ModelComparison({
             { project: after, source: sources.afterSource, label: afterLabel, side: 'After' },
           ] as const
         ).map(({ project, source, label, side }) => (
-          <section key={side} className="schematic-compare-pane" aria-label={`${side} model`}>
-            <header>
-              <span>{side}</span>
-              <strong title={label}>{label}</strong>
-            </header>
+          <section
+            key={side}
+            className="schematic-compare-pane"
+            aria-label={`${side} model`}
+            aria-description={label}
+          >
             <Preview project={project} source={source} fileId={fileId} active={active} />
           </section>
         ))}

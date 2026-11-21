@@ -7,6 +7,9 @@ import type { SchematicLayers } from './schematic-layers';
 import { isOwnedCircuit } from './immutable-project';
 import { schematicSectionIds, type SchematicSectionView } from './schematic-section';
 
+export const schematicWireWidth = 0.28;
+export const schematicJunctionRadius = 0.6;
+
 export function globalLabelPath(label: Label) {
   const end = Math.max(9, label.text.length * 1.4 + 5),
     shape = label.shape || 'input';

@@ -3,7 +3,7 @@ import type { Circuit, Label, Part, Point, Wire } from '@/lib/circuit';
 import type { SExpr } from '@/lib/sexpr';
 import type { SchematicLayers } from '@/lib/schematic-layers';
 import { fieldId, partTransform } from '@/lib/schematic-edit';
-import { globalLabelPath } from '@/lib/schematic-view';
+import { globalLabelPath, schematicJunctionRadius, schematicWireWidth } from '@/lib/schematic-view';
 import { symbolBodyBounds } from '@/lib/symbol-bounds';
 import { visibleSchematicPins } from '@/lib/schematic-wire-target';
 import SymbolGraphic from './SymbolGraphic';
@@ -85,7 +85,7 @@ const DrawingWire = memo(function DrawingWire({
           x2={x2}
           y2={y2}
           stroke="var(--wire)"
-          strokeWidth="0.28"
+          strokeWidth={schematicWireWidth}
           strokeLinecap="square"
           pointerEvents="none"
         />
@@ -111,7 +111,7 @@ const DrawingJunction = memo(function DrawingJunction({
         opacity={dimmed ? 0.25 : 1}
         cx={x + dx}
         cy={y + dy}
-        r="0.6"
+        r={schematicJunctionRadius}
         fill="var(--wire)"
         onPointerDown={(event) => onPointerDown(event, id)}
       />

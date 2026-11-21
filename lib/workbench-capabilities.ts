@@ -27,7 +27,7 @@ export type WorkbenchCapabilityPorts = {
   historyList: (offset: number) => Promise<unknown>;
   historyRead: (id: string) => Promise<string>;
   historyCreate: (message: string) => Promise<unknown>;
-  historyRestore?: (id: string, signal: AbortSignal) => Promise<void>;
+  historyRestore?: (id: string, signal: AbortSignal, file?: string) => Promise<void>;
   projectActions?: {
     available: (action?: 'new' | 'open' | 'close' | 'reveal' | 'example') => boolean | string;
     examples: (signal: AbortSignal) => unknown | Promise<unknown>;
@@ -275,10 +275,16 @@ export function registerWorkbenchCapabilities(
   if (ports().historyRestore)
     command(
       'versions.restore',
-      'Restore a validated local Git version as one whole-project undo edit. Does not write native files.',
-      object({ id: { type: 'string', pattern: '^[a-f0-9]{40,64}$' } }),
-      async ({ id }, signal) => {
-        await ports().historyRestore!(id, signal);
+      'Restore a validated local Git version or one of its native project files as one undo edit. Does not write native files.',
+      object(
+        {
+          id: { type: 'string', pattern: '^[a-f0-9]{40,64}$' },
+          file: { type: 'string', minLength: 1, maxLength: 1024 },
+        },
+        ['id'],
+      ),
+      async ({ id, file }, signal) => {
+        await ports().historyRestore!(id, signal, file);
         signal.throwIfAborted();
         return { id, revision: ports().revision() };
       },

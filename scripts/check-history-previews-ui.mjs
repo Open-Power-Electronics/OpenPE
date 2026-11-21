@@ -5,8 +5,9 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
+import { formatTestProjectSource } from './format-test-project.mjs';
 
-// Isolated renderer using actual native RC files and mocked read-only history.
+// Isolated renderer using the native export of the RC fixture and mocked read-only history.
 // No Electron, Git, native destinations, solvers or providers are launched.
 const { projectFromNativeFiles, projectNativeFiles, parseProject, serializeProject } =
   await tsImport('../lib/project.ts', import.meta.url);
@@ -15,18 +16,15 @@ const { newModelCadObject, withModelCad, modelCadFromProject } = await tsImport(
   import.meta.url,
 );
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
-const native = {
-  entry: 'rc-filter.kicad_pro',
-  files: [
-    { name: 'rc-filter.kicad_pro', source: '{"meta":{"version":1}}\n' },
-    ...(await Promise.all(
-      ['sch', 'pcb'].map(async (extension) => ({
-        name: `rc-filter.kicad_${extension}`,
-        source: await readFile(`tests/fixtures/rc-filter.kicad_${extension}`, 'utf8'),
-      })),
-    )),
-  ],
-};
+const fixture = parseProject(formatTestProjectSource());
+for (const footprint of fixture.pcb.footprints) {
+  const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId);
+  (part.fields ??= {}).Footprint = footprint.libraryId;
+}
+for (const net of fixture.pcb.nets) {
+  if (net.name === '/IN' || net.name === '/OUT') net.name = net.name.slice(1);
+}
+const native = projectNativeFiles(fixture, 'rc-filter.kicad_pro');
 let project = projectFromNativeFiles(native);
 const body = newModelCadObject(project.pcb, 'box');
 project = withModelCad(project, { version: 1, objects: [body] });
@@ -177,10 +175,12 @@ try {
     () =>
       document.querySelector('section.project-history-view').getAttribute('aria-busy') === 'false',
   );
-  const expectedLabels = ['Initial design · aaaaaaaa', 'Changed design · bbbbbbbb'];
+  const expectedLabels = ['Initial design', 'Changed design'];
   async function assertLabels(name) {
-    const text = await region(name).innerText();
-    for (const label of expectedLabels) assert.ok(text.includes(label), `${name} uses ${label}`);
+    const labels = await region(name)
+      .locator(':is(.schematic-compare-pane, .history-file-pane)')
+      .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('aria-description')));
+    assert.deepEqual(labels, expectedLabels, `${name} identifies both versions accessibly.`);
   }
   async function checkNavigation(name) {
     const comparison = region(name);

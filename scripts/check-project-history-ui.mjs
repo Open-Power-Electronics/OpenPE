@@ -30,7 +30,9 @@ const source = serializeProject(fixture);
 const project = JSON.parse(source);
 const changed = structuredClone(project);
 changed.schematic.components[0].value = '4.7k';
-const changedSource = serializeProject(parseProject(JSON.stringify(changed)));
+const changedProject = parseProject(JSON.stringify(changed));
+changedProject.pcb.thickness = 2;
+const changedSource = serializeProject(changedProject);
 const nativeBefore = new Map(
   projectNativeFiles(parseProject(source), 'rc.kicad_pro').files.map((file) => [
     file.name,
@@ -241,9 +243,14 @@ try {
       .getByRole('dialog', { name: 'Git', exact: true })
       .getByRole('button', { name: 'Close dialog', exact: true })
       .click();
+  const reopenGit = async () => {
+    await closeGit();
+    await button('Git').click();
+  };
+  assert.equal(await button('Refresh version history').count(), 0);
   assert.equal(
     await history
-      .getByRole('button', { name: 'Worktree Current project' })
+      .getByRole('button', { name: 'Worktree', exact: true })
       .getAttribute('aria-current'),
     'true',
   );
@@ -258,19 +265,22 @@ try {
   const drawings = panes.locator('svg[role="img"]');
   async function checkSchematicComparison(theme) {
     assert.equal(await drawings.count(), 2, 'Both revisions render actual schematic geometry.');
-    await comparison.getByText('Changed 1', { exact: true }).waitFor();
+    const legend = comparison.getByText('Changed 1', { exact: true });
+    await legend.waitFor();
+    const colour = await legend.evaluate((element) => getComputedStyle(element).color);
+    assert.equal(await drawings.locator('rect[data-change]').count(), 0);
     const id = project.schematic.components[0].id;
     for (let side = 0; side < 2; side++) {
       const part = panes.nth(side).locator('[data-compare-id="' + id + '"]');
       assert.equal(await part.getAttribute('data-change'), 'changed');
       assert.equal(await part.locator('.symbol-graphic').count(), 1);
-      const highlight = panes.nth(side).locator('.compare-object-highlight');
-      assert.equal(await highlight.count(), 1);
-      assert.ok(
-        await highlight.evaluate((el) => el.width.baseVal.value > 3 && el.height.baseVal.value > 3),
+      assert.equal(
+        await part.locator('.symbol-graphic').evaluate((el) => getComputedStyle(el).color),
+        colour,
       );
-      const colour = await highlight.evaluate((el) => getComputedStyle(el).stroke);
-      assert.ok(colour !== 'none' && colour !== 'rgba(0, 0, 0, 0)');
+      const unchanged = panes.nth(side).locator('[data-compare-part]:not([data-change]) .symbol-graphic').first();
+      const channels = await unchanged.evaluate((el) => getComputedStyle(el).color.match(/\d+/g));
+      assert.ok(channels && new Set(channels.slice(0, 3)).size === 1, 'Unchanged symbols are gray.');
     }
     const initialView = await drawings.nth(0).getAttribute('viewBox');
     await comparison.getByRole('button', { name: 'Zoom in comparison', exact: true }).click();
@@ -316,7 +326,7 @@ try {
     fileBounds.y + fileBounds.height <= versionBounds.y + 1,
     'Changed files appear above history.',
   );
-  const fileRows = await files.getByRole('button').all();
+  const fileRows = await files.locator('.history-file-open').all();
   for (let index = 0; index < fileRows.length; index++) {
     const row = await fileRows[index].boundingBox();
     assert.ok(
@@ -329,7 +339,7 @@ try {
     }
   }
   const worktreeRow = await versionsPanel
-    .getByRole('button', { name: 'Worktree Current project' })
+    .getByRole('button', { name: 'Worktree', exact: true })
     .boundingBox();
   assert.ok(worktreeRow.width > versionBounds.width - 20, 'History entries use full-width rows.');
   assert.equal(
@@ -393,16 +403,25 @@ try {
     .filter({ hasText: 'Tune resistor' })
     .waitFor();
   await history.getByLabel(changedNames.length + ' changed files', { exact: true }).waitFor();
+  assert.equal(await comparison.locator('.schematic-compare-pane > header').count(), 0);
+  const restore = button('Restore rc.kicad_sch');
+  const schematicRow = files.getByRole('button', { name: 'Modified · rc.kicad_sch', exact: true });
+  await page.mouse.move(8, 8);
+  assert.equal(await restore.evaluate((element) => getComputedStyle(element).opacity), '0');
+  await schematicRow.hover();
+  assert.equal(await restore.evaluate((element) => getComputedStyle(element).opacity), '1');
   await page.evaluate(() => (window.testHistory.unavailableVersion = 'b'.repeat(40)));
-  await button('Restore version').click();
+  await restore.click();
   await history
     .getByRole('alert')
     .filter({ hasText: 'The selected version is no longer reachable.' })
     .waitFor();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
   await page.evaluate(() => (window.testHistory.unavailableVersion = ''));
-  await button('Restore version').click();
-  await history.getByText('Version restored. Save to write it to disk.', { exact: true }).waitFor();
+  await restore.focus();
+  assert.equal(await restore.evaluate((element) => getComputedStyle(element).opacity), '1');
+  await restore.press('Enter');
+  await history.getByText('File restored. Save to write it to disk.', { exact: true }).waitFor();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 1);
   if (await history.isVisible()) await closeGit();
   await button('Source').click();
@@ -411,6 +430,10 @@ try {
     .getByRole('button', { name: 'rc.kicad_sch', exact: true })
     .click();
   assert.equal(await readSource(page), nativeSchematic(changedSource));
+  const projectFiles = page.getByRole('navigation', { name: 'Project files', exact: true });
+  await projectFiles.getByRole('button', { name: 'rc.kicad_pcb', exact: true }).click();
+  assert.equal(await readSource(page), nativeBefore.get('rc.kicad_pcb'));
+  await projectFiles.getByRole('button', { name: 'rc.kicad_sch', exact: true }).click();
   await button('Schematic').click();
   await button('Undo').click();
   if (await history.isVisible()) await closeGit();
@@ -426,7 +449,7 @@ try {
   if (await button('Apply').isEnabled()) await button('Apply').click();
   await button('Git').click();
   await history.getByLabel(changedNames.length + ' changed files', { exact: true }).waitFor();
-  await versions.getByRole('button', { name: 'Worktree Current project' }).click();
+  await versions.getByRole('button', { name: 'Worktree', exact: true }).click();
   await versionName.fill('Documented baseline');
   await versionName.press('Control+Enter');
   await history.getByText('Version created.', { exact: true }).waitFor();
@@ -457,9 +480,7 @@ try {
   if (await history.isVisible()) await closeGit();
   await button('Source').click();
   await button('Git').click();
-  await history
-    .getByRole('button', { name: 'Refresh version history' })
-    .waitFor({ state: 'visible' });
+  await history.waitFor();
   await page.waitForFunction(
     () => document.querySelector('.project-history-view').getAttribute('aria-busy') === 'false',
   );
@@ -469,13 +490,13 @@ try {
   await page.evaluate(() => {
     window.testHistory.fail = true;
   });
-  await button('Refresh version history').click();
+  await reopenGit();
   await history.getByRole('alert').filter({ hasText: 'Install Git' }).waitFor();
   await page.evaluate(() => {
     window.testHistory.fail = false;
     window.testHistory.needsSave = true;
   });
-  await button('Refresh version history').click();
+  await reopenGit();
   await history.getByText('Save to start version history.', { exact: true }).waitFor();
   await button('Save project').click();
   await history.getByText('Save to start version history.', { exact: true }).waitFor();
@@ -492,7 +513,7 @@ try {
       source,
     });
   }, multiSource);
-  await button('Refresh version history').click();
+  await reopenGit();
   await versions.getByRole('button').filter({ hasText: 'Auxiliary circuit' }).click();
   await comparison.getByText('Added 1', { exact: true }).waitFor();
   await comparison.getByText('Removed 1', { exact: true }).waitFor();
@@ -503,14 +524,14 @@ try {
       .getAttribute('data-change'),
     'added',
   );
-  assert.equal(
-    await comparison.locator('.compare-object-highlight[data-change="added"]').count(),
-    1,
-  );
-  assert.equal(
-    await comparison.locator('.compare-object-highlight[data-change="removed"]').count(),
-    1,
-  );
+  for (const [kind, label] of [['added', 'Added 1'], ['removed', 'Removed 1']]) {
+    const net = drawings.locator(`[data-compare-id][data-change="${kind}"] text`);
+    assert.equal(await net.count(), 1);
+    assert.equal(
+      await net.evaluate((element) => getComputedStyle(element).fill),
+      await comparison.getByText(label, { exact: true }).evaluate((element) => getComputedStyle(element).color),
+    );
+  }
   await comparison.getByRole('combobox', { name: 'Compare schematic file', exact: true }).click();
   await page.getByRole('option', { name: 'Auxiliary', exact: true }).click();
   await comparison
@@ -556,7 +577,7 @@ try {
     'Git preserves the underlying Source mode.',
   );
   await button('Git').click();
-  await history.getByRole('button', { name: 'Refresh version history' }).waitFor();
+  await history.waitFor();
   await page.mouse.click(8, 8);
   assert.equal(await history.isVisible(), false, 'Backdrop click closes Git.');
   for (const view of ['Schematic', 'Layout', 'Model', 'Source']) {

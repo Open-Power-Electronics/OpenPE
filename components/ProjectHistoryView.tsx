@@ -9,7 +9,6 @@ import {
   FileCheck2,
   Check,
   Circle,
-  RefreshCw,
   RotateCcw,
   Save,
 } from 'lucide-react';
@@ -18,7 +17,12 @@ import Dialog from './Dialog';
 import WorkspaceLoading from './WorkspaceLoading';
 import { GitIcon, ModelIcon, SchematicIcon } from './EditorIcons';
 import ProjectFileComparison from './ProjectFileComparison';
-import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
+import {
+  compareProjectFiles,
+  sameHistoryFile,
+  type HistoryEntry,
+  type HistoryPage,
+} from '@/lib/project-history';
 import type { CapabilityHost } from '@/api/capabilities';
 import { parseProject, projectNativeFiles } from '@/lib/project';
 import { isCommandModifier } from '@/lib/command-modifier';
@@ -57,7 +61,7 @@ export default function ProjectHistoryView({
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [more, setMore] = useState(false);
   const [needsSave, setNeedsSave] = useState(false);
-  const [version, setVersion] = useState('');
+  const [historyAvailable, setHistoryAvailable] = useState(false);
   // A null target is the live validated worktree. The base is always explicit.
   const [selected, setSelected] = useState<Version | null>(null);
   const [base, setBase] = useState<Version | null>(null);
@@ -79,18 +83,41 @@ export default function ProjectHistoryView({
   current.current = { entries, selected, base };
   const before = base?.source ?? source;
   const after = selected?.source ?? source;
-  const changes = useMemo(
-    () =>
-      compareProjectFiles(
-        projectNativeFiles(parseProject(before)),
-        projectNativeFiles(parseProject(after)),
-      ),
-    [before, after],
-  );
+  const restoreVersion = selected?.id ?? base?.id;
+  const { changes, restorable } = useMemo(() => {
+    const oldFiles = projectNativeFiles(parseProject(before));
+    const newFiles = projectNativeFiles(parseProject(after));
+    const changes = compareProjectFiles(oldFiles, newFiles);
+    const liveFiles =
+      after === source
+        ? newFiles
+        : before === source
+          ? oldFiles
+          : projectNativeFiles(parseProject(source));
+    const liveByName = new Map(liveFiles.files.map((file) => [file.name, file]));
+    const restorable = new Set(
+      changes.flatMap((change) => {
+        const file = selected ? change.after : change.before;
+        return file && !sameHistoryFile(file, liveByName.get(file.name)) ? [file.name] : [];
+      }),
+    );
+    return { changes, restorable };
+  }, [before, after, source, selected]);
   const activeChange = changes.find((change) => change.name === selectedFile) ?? changes[0];
-  const label = (id: string) => entries.find((entry) => entry.id === id)?.message ?? id.slice(0, 8);
-  const beforeLabel = base ? `${label(base.id)} · ${base.id.slice(0, 8)}` : 'Worktree';
-  const afterLabel = selected ? `${label(selected.id)} · ${selected.id.slice(0, 8)}` : 'Worktree';
+  const labels = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const { message } of entries) counts.set(message, (counts.get(message) ?? 0) + 1);
+    return new Map(
+      entries.map(({ id, message }) => [
+        id,
+        counts.get(message) === 1 && message !== 'Worktree'
+          ? message
+          : `${message} · ${id.slice(0, 8)}`,
+      ]),
+    );
+  }, [entries]);
+  const beforeLabel = base ? (labels.get(base.id) ?? base.id.slice(0, 8)) : 'Worktree';
+  const afterLabel = selected ? (labels.get(selected.id) ?? selected.id.slice(0, 8)) : 'Worktree';
 
   async function perform(action: () => Promise<void>) {
     if (pending.current) return;
@@ -108,13 +135,24 @@ export default function ProjectHistoryView({
     }
   }
   function createVersion() {
-    if (busy || sourcePending || !name.trim() || !version) return;
+    if (busy || sourcePending || !name.trim() || !historyAvailable) return;
     void perform(async () => {
       await capabilityHost.execute('versions.create', { message: name });
       if (!mounted.current) return;
       setName('');
       await load(false, true);
       setStatus('Version created.');
+    });
+  }
+  function restoreFile(name: string) {
+    if (busy || sourcePending || !restoreVersion || !restorable.has(name)) return;
+    void perform(async () => {
+      await capabilityHost.execute(
+        'versions.restore',
+        { id: restoreVersion, file: name },
+        { actor: 'human' },
+      );
+      if (mounted.current) setStatus('File restored. Save to write it to disk.');
     });
   }
   async function read(id: string): Promise<Version> {
@@ -152,7 +190,7 @@ export default function ProjectHistoryView({
         : nextEntries[0]?.id;
     const nextBase = baseId ? await read(baseId) : null;
     if (!mounted.current) return;
-    setVersion(result.version);
+    setHistoryAvailable(Boolean(result.version));
     setNeedsSave(Boolean(result.needsSave));
     setMore(nextMore);
     setEntries(nextEntries);
@@ -171,7 +209,8 @@ export default function ProjectHistoryView({
       setMore(page.more);
     }
     const target = await read(entry.id);
-    const nextBase = await read((versions[index + 1] ?? entry).id);
+    const older = versions[index + 1];
+    const nextBase = older ? await read(older.id) : null;
     if (mounted.current) {
       setSelected(target);
       setBase(nextBase);
@@ -236,15 +275,6 @@ export default function ProjectHistoryView({
               <section className="history-changes" aria-label="Source control">
                 <header className="history-section-heading">
                   <strong>Changes</strong>
-                  <button
-                    className="tool-button"
-                    aria-label="Refresh version history"
-                    title="Refresh history"
-                    disabled={busy}
-                    onClick={() => void perform(() => load())}
-                  >
-                    <RefreshCw size={17} />
-                  </button>
                 </header>
                 <div className="history-create">
                   <input
@@ -271,12 +301,12 @@ export default function ProjectHistoryView({
                         if (
                           event.key === 'Escape' ||
                           event.key === 'Enter' ||
-                          ((isCommandModifier(event)) && event.key.toLowerCase() === 's')
+                          (isCommandModifier(event) && event.key.toLowerCase() === 's')
                         )
                           event.preventDefault();
                         return;
                       }
-                      if ((isCommandModifier(event)) && event.key === 'Enter') {
+                      if (isCommandModifier(event) && event.key === 'Enter') {
                         event.preventDefault();
                         createVersion();
                       }
@@ -286,7 +316,7 @@ export default function ProjectHistoryView({
                     className="history-commit"
                     aria-label="Commit"
                     title="Create version"
-                    disabled={busy || sourcePending || !name.trim() || !version}
+                    disabled={busy || sourcePending || !name.trim() || !historyAvailable}
                     onClick={createVersion}
                   >
                     <Check size={16} aria-hidden="true" />
@@ -295,21 +325,19 @@ export default function ProjectHistoryView({
                 </div>
                 <nav className="history-file-list" aria-label="Changed files">
                   <header>
-                    <span>Changes</span>
+                    <span>Changed files</span>
                     <span className="history-count" aria-label={changes.length + ' changed files'}>
                       {changes.length}
                     </span>
                   </header>
-                  {changes.map((change) => {
-                    const slash = change.name.lastIndexOf('/');
-                    return (
+                  {changes.map((change) => (
+                    <div key={change.name} className="history-file-row" data-change={change.kind}>
                       <button
-                        key={change.name}
-                        data-change={change.kind}
                         className={
-                          display === 'source' && activeChange?.name === change.name
-                            ? 'selected'
-                            : ''
+                          'history-file-open' +
+                          (display === 'source' && activeChange?.name === change.name
+                            ? ' selected'
+                            : '')
                         }
                         aria-label={changeLabel[change.kind] + ' · ' + change.name}
                         aria-current={
@@ -324,16 +352,24 @@ export default function ProjectHistoryView({
                         }}
                       >
                         <FileCode2 size={16} aria-hidden="true" />
-                        <span className="history-file-name">
-                          <strong>{change.name.slice(slash + 1)}</strong>
-                          {slash >= 0 && <small>{change.name.slice(0, slash)}</small>}
-                        </span>
+                        <strong className="history-file-name">{change.name}</strong>
                         <span className="history-change-kind" aria-hidden="true">
                           {changeStatus[change.kind]}
                         </span>
                       </button>
-                    );
-                  })}
+                      {restoreVersion && restorable.has(change.name) && (
+                        <button
+                          className="tool-button history-file-restore"
+                          aria-label={`Restore ${change.name}`}
+                          title={`Restore ${change.name} from ${selected ? afterLabel : beforeLabel}`}
+                          disabled={busy || sourcePending}
+                          onClick={() => restoreFile(change.name)}
+                        >
+                          <RotateCcw size={15} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                   {!changes.length && <p className="history-sidebar-empty">No changed files</p>}
                 </nav>
               </section>
@@ -355,31 +391,27 @@ export default function ProjectHistoryView({
                   }
                 >
                   <GitIcon size={16} />
-                  <div>
-                    <strong>Worktree</strong>
-                    <span>Current project</span>
-                  </div>
+                  <strong>Worktree</strong>
                 </button>
-                {entries.map((entry, index) => (
-                  <button
-                    key={entry.id}
-                    className={selected?.id === entry.id ? 'selected' : ''}
-                    disabled={busy}
-                    aria-current={selected?.id === entry.id ? 'true' : undefined}
-                    aria-description={`${entry.message}\n${new Date(entry.date).toLocaleString()} · ${entry.id.slice(0, 8)}`}
-                    onClick={() => void perform(() => selectVersion(entry, index))}
-                  >
-                    <span className="history-graph-node" aria-hidden="true">
-                      <Circle size={12} />
-                    </span>
-                    <div>
-                      <strong>{entry.message}</strong>
-                      <span>
-                        {new Date(entry.date).toLocaleString()} · {entry.id.slice(0, 8)}
+                {entries.map((entry, index) => {
+                  const details = `${new Date(entry.date).toLocaleString()} · ${entry.id.slice(0, 8)}`;
+                  return (
+                    <button
+                      key={entry.id}
+                      className={selected?.id === entry.id ? 'selected' : ''}
+                      disabled={busy}
+                      aria-current={selected?.id === entry.id ? 'true' : undefined}
+                      aria-description={details}
+                      title={`${entry.message}\n${details}`}
+                      onClick={() => void perform(() => selectVersion(entry, index))}
+                    >
+                      <span className="history-graph-node" aria-hidden="true">
+                        <Circle size={12} />
                       </span>
-                    </div>
-                  </button>
-                ))}
+                      <strong>{labels.get(entry.id)}</strong>
+                    </button>
+                  );
+                })}
                 {more && (
                   <button
                     className="tool-button history-older"
@@ -406,7 +438,7 @@ export default function ProjectHistoryView({
                     { value: 'current', label: 'Worktree' },
                     ...entries.map((entry) => ({
                       value: entry.id,
-                      label: `${entry.message} · ${entry.id.slice(0, 8)}`,
+                      label: labels.get(entry.id) ?? entry.id.slice(0, 8),
                     })),
                   ]}
                   onChange={(id) =>
@@ -433,25 +465,6 @@ export default function ProjectHistoryView({
                     </button>
                   ))}
                 </div>
-                <button
-                  className="tool-button"
-                  aria-label="Restore version"
-                  title="Restore version"
-                  disabled={busy || !selected || sourcePending || selected.source === source}
-                  onClick={() => {
-                    if (selected)
-                      void perform(async () => {
-                        await capabilityHost.execute(
-                          'versions.restore',
-                          { id: selected.id },
-                          { actor: 'human' },
-                        );
-                        setStatus('Version restored. Save to write it to disk.');
-                      });
-                  }}
-                >
-                  <RotateCcw size={17} />
-                </button>
               </div>
               {openedDisplays
                 .filter((mode) => mode !== 'source')
@@ -499,7 +512,6 @@ export default function ProjectHistoryView({
           </div>
         )}
         <footer className="history-footer">
-          <span className="history-version">{version}</span>
           <span role="status">{busy ? 'Loading version history…' : status}</span>
         </footer>
       </section>

@@ -18,11 +18,13 @@ Click Git immediately to the right of List in the editor toolbar to open the his
    state. An identical latest snapshot is a no-op error.
 3. Select Worktree on the left to compare the latest version with the current
    validated project. Selecting a version compares the next older version
-   with it, or itself for the initial version. Compare from can choose
+   with it. The oldest version compares against Worktree. Compare from can choose
    any loaded version or Worktree. The four comparison controls use the editor's
    Schematic, Layout, Model and Source icons and retain the same revision pair.
    Schematic opens by default with synchronized read-only pan/zoom/Fit, green
-   additions, red removals and yellow changes; missing sheets are explicit. Initial Fit measures visible drawings
+   additions, red removals and ochre changes. The view uses the editor’s wire
+   weight. The sheet selector appears only for multiple sheets. Missing sheets
+   are explicit. Initial Fit measures visible drawings
    after the window opens, including unchanged versions. Reopening the same
    comparison retains its camera; sheets changed while hidden fit when revealed.
    Stable IDs identify schematic additions/removals, values and order changes.
@@ -38,8 +40,13 @@ Click Git immediately to the right of List in the editor toolbar to open the his
    file switches to Source, showing read-only Before/After native text with line
    numbers and change-region highlighting. Graphical previews load on first use;
    mode switches and closing/reopening retain their cameras.
-4. Restore validates the complete snapshot and commits one undo edit, retaining
-   destination, save baseline and conversations. Save explicitly to write it.
+4. Hover or focus a changed file row and use its restore icon. When browsing
+   Worktree changes, the icon restores from the comparison revision. When
+   browsing a saved version, the icon restores from that version. Files present
+   in the target version can be restored or brought back if missing. The complete
+   candidate must validate and retain the exact native contents of sibling files
+   and the saved board artwork.
+   One undo reverses the edit. Save explicitly to write it.
 
 Opening Git uses the shared Source validation/apply gate; invalid drafts remain
 in Source. Pending Source blocks creation/restore. Reads accept only current-format
@@ -47,8 +54,8 @@ validated snapshots. Browsing/creation never changes dirty state; restore uses
 normal baseline comparison. Version lists page by 50. Native file lists include
 all changed filenames in the validated file sets. Text panes show excerpts around
 the first changed region, capped at 12,000 characters and 160 lines per side, with
-explicit notices. Binary files show a read-only byte count. Restoration always
-uses the full snapshot.
+explicit notices. Binary files show a read-only byte count. The capability can
+also restore a complete snapshot when it is called without a file name.
 
 File comparisons use complete native exports. File-list order and private PCB
 net UUIDs are not file changes when native bytes remain identical. Electrical
@@ -63,7 +70,7 @@ Panel styling belongs in
 | --------------------------------- | ------------------------------------------------------------------------------------ |
 | `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination |
 | `versions.create`                 | Snapshot current validated Core Source through the native bridge                     |
-| `versions.restore`                | Read a reachable version, prepare exact CAD geometry and commit one undo edit        |
+| `versions.restore`                | Read a reachable version and restore one native file or the whole project in one undo edit |
 | `project.replace`                 | Replace complete canonical Source in one Core transaction                            |
 | `history.undo` / `history.redo`   | Shared in-memory history                                                             |
 | `project.save`                    | Native Save/Save as                                                                  |

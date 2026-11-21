@@ -222,8 +222,7 @@ export default function LayoutComparison({
       data-pcb-theme={dark ? 'dark' : 'light'}
       aria-label="Layout comparison"
     >
-      <div className="schematic-compare-toolbar">
-        <span className="history-preview-label">PCB layout · Read-only</span>
+      <div className="schematic-compare-footer">
         <ComparisonViewActions zoom={zoom} fit={fit} />
       </div>
       <div className="schematic-compare-panes">
@@ -247,11 +246,12 @@ export default function LayoutComparison({
             },
           ] as const
         ).map(({ project, label, side, ref, notice, onNotice }) => (
-          <section key={side} className="schematic-compare-pane" aria-label={`${side} layout`}>
-            <header>
-              <span>{side}</span>
-              <strong title={label}>{label}</strong>
-            </header>
+          <section
+            key={side}
+            className="schematic-compare-pane"
+            aria-label={`${side} layout`}
+            aria-description={label}
+          >
             {project.pcb && notice && (
               <p className="history-preview-notice" role="status">
                 {notice}

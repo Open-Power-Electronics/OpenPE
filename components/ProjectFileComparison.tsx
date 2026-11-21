@@ -77,15 +77,9 @@ export default function ProjectFileComparison({
             <section
               className="history-file-pane"
               aria-label={side === 'before' ? 'Before file' : 'After file'}
+              aria-description={side === 'before' ? beforeLabel : afterLabel}
               key={side}
             >
-              <header>
-                <span>{side === 'before' ? 'Before' : 'After'}</span>
-                <strong title={side === 'before' ? beforeLabel : afterLabel}>
-                  {side === 'before' ? beforeLabel : afterLabel}
-                </strong>
-                {file && <small>{file.encoding === 'latin1' ? 'Latin-1' : 'UTF-8'}</small>}
-              </header>
               {!file ? (
                 <div className="history-file-message">File not present in this version.</div>
               ) : binary ? (

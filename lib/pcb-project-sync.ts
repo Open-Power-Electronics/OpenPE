@@ -158,6 +158,10 @@ export class PCBProjectSync {
     return value;
   }
 
+  retainNativeSnapshot(project: Project): void {
+    this.remember(project, { project, warnings: [] });
+  }
+
   private footprintSources(project: Project, ids: readonly string[]) {
     const sources = new Map(this.sources);
     for (const id of ids) {

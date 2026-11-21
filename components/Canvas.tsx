@@ -48,6 +48,7 @@ import {
 import { resizeDrawingView, type CanvasBounds } from '@/lib/drawing-viewport';
 import {
   fieldDragLinks,
+  schematicWireWidth,
   visibleSchematicIds,
   visibleSchematicWireTargetIds,
   visibleJunctions,
@@ -2049,7 +2050,7 @@ export default function Canvas({
             d={wirePreview.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ')}
             fill="none"
             stroke="var(--accent)"
-            strokeWidth="0.28"
+            strokeWidth={schematicWireWidth}
             strokeDasharray="0.55 0.35"
             strokeLinecap="butt"
             strokeLinejoin="miter"

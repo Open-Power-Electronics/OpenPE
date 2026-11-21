@@ -5,12 +5,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ProjectHistory } from '../server/project-history.mjs';
-import { compareProjectFiles } from '../lib/project-history';
+import { compareProjectFiles, restoreHistoryFile } from '../lib/project-history';
+import { ProjectCore } from '../core/project-core';
 import type { KiCadProjectFiles } from '../lib/kicad-project';
 import {
   appendSchematic,
   serializeProject,
   parseProject,
+  projectFromNativeFiles,
   projectNativeFiles,
 } from '../lib/project';
 import { exampleProject } from '../lib/project-example';
@@ -251,6 +253,56 @@ test('file comparison lists each actual native filename once and ignores packet 
       after.files.find((native) => native.name === file.name)!.source,
     );
   }
+});
+
+test('restoring one history file keeps sibling bytes and is one native undo edit', () => {
+  const fixture = exampleProject();
+  for (const footprint of fixture.pcb!.footprints) {
+    const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId)!;
+    (part.fields ??= {}).Footprint = footprint.libraryId;
+  }
+  for (const net of fixture.pcb!.nets) {
+    if (net.name === '/IN' || net.name === '/OUT') net.name = net.name.slice(1);
+  }
+  const original = projectNativeFiles(fixture, 'design.kicad_pro');
+  const saved = projectFromNativeFiles({
+    ...original,
+    files: [...original.files, { name: 'device.dcm', source: '# Café\n', encoding: 'latin1' }],
+  });
+  const current = projectFromNativeFiles(original);
+  current.pcb!.thickness = 2;
+  current.schematic.parts[0].value = '4.7k';
+  let prepareCount = 0;
+  const core = new ProjectCore(current, {
+    prepare: (project) => {
+      prepareCount++;
+      return project;
+    },
+  });
+  const live = core.getSnapshot().project!;
+  const before = projectNativeFiles(live);
+  const restore = (name: string) => restoreHistoryFile(core.getSnapshot().project!, saved, name);
+  assert.throws(() => restore('../design.kicad_sch'), /not present/);
+  core.commitHistoryFile(restore('design.kicad_sch'));
+  const after = projectNativeFiles(core.getSnapshot().project!);
+  assert.deepEqual(
+    compareProjectFiles(before, after).map(({ name }) => name),
+    ['design.kicad_sch'],
+  );
+  assert.equal(core.getSnapshot().project!.pcb!.thickness, 2);
+  assert.equal(prepareCount, 0);
+  assert.equal(core.getSnapshot().undoDepth, 1);
+  assert.ok(core.undo());
+  assert.deepEqual(projectNativeFiles(core.getSnapshot().project!), before);
+
+  core.commitHistoryFile(restore('device.dcm'));
+  const restored = projectNativeFiles(core.getSnapshot().project!);
+  assert.deepEqual(
+    compareProjectFiles(before, restored).map(({ name }) => name),
+    ['device.dcm'],
+  );
+  assert.equal(restored.files.find(({ name }) => name === 'device.dcm')?.encoding, 'latin1');
+  assert.equal(restore('device.dcm'), core.getSnapshot().project);
 });
 
 test('file comparison retains supporting bytes, encodings, empty additions and removals', () => {

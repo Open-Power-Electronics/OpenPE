@@ -407,7 +407,7 @@ S-expressions. Helpers retain encoding/selection and edit existing files only.
 | `tests/project-directory.test.ts`, `node scripts/check-project-directory-ui.mjs`                             | Grant-bound directory observations, read limits, stale/linked files, empty folders, read-only previews and native draft retention |
 | `node scripts/check-native-source-ui.mjs`                                                                    | Isolated native file selection, per-file history, Apply/validation/undo                                                           |
 | `node scripts/e2e-project.mjs`, `node scripts/e2e-workspace.mjs`                                             | Desktop native writes, recovery and independent projects                                                                          |
-| `node scripts/e2e-schematic-files.mjs`, `node scripts/e2e-history.mjs`                                       | Desktop multiple files and complete native version restore                                                                        |
+| `node scripts/e2e-schematic-files.mjs`, `node scripts/e2e-history.mjs`                                       | Desktop multiple files and single-file version restore                                                                        |
 
 Desktop checks require explicit authorization and isolated profiles; see
 [AGENTS.md](../AGENTS.md). Documentation changes need static checks only.

@@ -794,17 +794,20 @@ export class ProjectCore {
   private commit(
     next: Project,
     type: ProjectCoreEvent['type'] = 'project.changed',
-    applyDraft = false,
+    origin: 'edit' | 'source' | 'history-file' = 'edit',
   ): boolean {
+    const applyDraft = origin === 'source';
     this.requireEditing();
     next = ownProject(next, this.project);
     serializeProject(next);
-    const prepared = this.options.prepare?.(next, this.project) ?? next;
-    next = ownProject(prepared, next);
-    serializeProject(next);
+    if (origin !== 'history-file') {
+      const prepared = this.options.prepare?.(next, this.project) ?? next;
+      next = ownProject(prepared, next);
+      serializeProject(next);
+    }
     // Geometry and its current copper are one edit for every editor/Agent path.
     // Explicit native Source retains its own accepted contours without refilling.
-    if (!applyDraft && this.project?.pcb && next.pcb) {
+    if (origin === 'edit' && this.project?.pcb && next.pcb) {
       const pcb = refreshPCBFill(
         this.project.pcb,
         next.pcb,
@@ -842,6 +845,12 @@ export class ProjectCore {
     )
       next = withNativeProjectName(next);
     return this.commit(next);
+  }
+
+  /** A validated native history file retains the exact sibling bytes and saved copper. */
+  commitHistoryFile(next: Project): boolean {
+    this.requireAppliedSource();
+    return this.commit(next, 'project.changed', 'history-file');
   }
 
   replaceSchematic(next: Circuit, nativeFiles?: Project['nativeFiles']): boolean {
@@ -1007,7 +1016,7 @@ export class ProjectCore {
     this.requireEditing();
     if (this.sourceDraft === null) return this.project;
     try {
-      this.commit(this.previewSource()!, 'source.applied', true);
+      this.commit(this.previewSource()!, 'source.applied', 'source');
       return this.project;
     } catch (error) {
       const message = (error as Error).message;

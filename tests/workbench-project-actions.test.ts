@@ -134,6 +134,12 @@ test('versions.restore uses the shared restoration port with cancellation and va
     assert.deepEqual(await host.execute('versions.restore', { id }), { id, revision: '7' });
     assert.equal(received[0], id);
     assert.ok(received[1] instanceof AbortSignal);
+    assert.deepEqual(await host.execute('versions.restore', { id, file: 'design.kicad_sch' }), {
+      id,
+      revision: '7',
+    });
+    assert.equal(received[2], 'design.kicad_sch');
+    await assert.rejects(host.execute('versions.restore', { id, file: '' }), /input/i);
     await assert.rejects(host.execute('versions.restore', { id: '../unreachable' }), /input/i);
     await assert.rejects(
       host.execute('versions.restore', { id }, { expectedRevision: '6' }),

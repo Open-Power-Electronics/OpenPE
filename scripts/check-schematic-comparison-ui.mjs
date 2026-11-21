@@ -96,7 +96,7 @@ try {
       await drawings.nth(0).getAttribute('viewBox'),
       await drawings.nth(1).getAttribute('viewBox'),
     );
-    await comparison.getByText('Changed 0', { exact: true }).waitFor();
+    await comparison.getByText('No schematic changes', { exact: true }).waitFor();
   }
   for (const theme of ['light', 'dark']) {
     await page.evaluate((theme) => {

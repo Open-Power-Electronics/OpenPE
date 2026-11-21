@@ -5,19 +5,29 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import { readSource, fillSource, projectHistory } from './source-editor-test-helpers.mjs';
-import { projectFromNativeFiles } from '../server/project-format.mjs';
+import { parseProject, projectFromNativeFiles, projectNativeFiles } from '../server/project-format.mjs';
+import { formatTestProjectSource } from './format-test-project.mjs';
 
 const dir = path.resolve('test-results', 'history-' + Date.now());
 await mkdir(dir, { recursive: true });
 const nativeDir = path.join(dir, 'design');
 await mkdir(nativeDir);
 const names = ['circuit.kicad_pro', 'circuit.kicad_sch', 'circuit.kicad_pcb'];
-const initialFiles = {
-  [names[0]]:
-    '{"meta":{"filename":"circuit.kicad_pro"},"text_variables":{"NOTE":"Retain this setting"}}\n',
-  [names[1]]: await readFile('tests/fixtures/rc-filter.kicad_sch', 'utf8'),
-  [names[2]]: await readFile('tests/fixtures/rc-filter.kicad_pcb', 'utf8'),
-};
+const fixture = parseProject(formatTestProjectSource());
+for (const footprint of fixture.pcb.footprints) {
+  const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId);
+  (part.fields ??= {}).Footprint = footprint.libraryId;
+}
+for (const net of fixture.pcb.nets) {
+  if (net.name === '/IN' || net.name === '/OUT') net.name = net.name.slice(1);
+}
+const initialFiles = Object.fromEntries(
+  projectNativeFiles(fixture, names[0]).files.map(({ name, source }) => [name, source]),
+);
+initialFiles[names[0]] = JSON.stringify({
+  ...JSON.parse(initialFiles[names[0]]),
+  text_variables: { NOTE: 'Retain this setting' },
+}) + '\n';
 const nativeProject = (files) =>
   projectFromNativeFiles({
     entry: names[0],
@@ -127,17 +137,19 @@ try {
     .getByRole('button')
     .filter({ hasText: 'Initial design' })
     .click();
-  await button('Restore version').click();
+  await history.getByRole('button', { name: `Modified · ${names[1]}`, exact: true }).hover();
+  await button(`Restore ${names[1]}`).click();
+  await history.getByText('File restored. Save to write it to disk.', { exact: true }).waitFor();
   if (await history.isVisible())
     await page
       .getByRole('dialog', { name: 'Git', exact: true })
       .getByRole('button', { name: 'Close dialog' })
       .click();
   await button('Source').click();
-  assert.deepEqual(await sourceFiles(), first);
-  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
+  assert.deepEqual(await sourceFiles(), { ...applied, [names[1]]: first[names[1]] });
+  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 1);
   await projectHistory(page, 'Undo');
-  assert.deepEqual(await sourceFiles(), applied, 'One undo restores all three native file edits.');
+  assert.deepEqual(await sourceFiles(), applied, 'One undo reverses the selected file restoration.');
   await selectFile(names[1]);
   await fillSource(page, '(kicad_sch (unfinished');
   await button('Git').click();

@@ -210,6 +210,10 @@ export function useProjectDirectory(
         : null,
     [],
   );
+  const hasPendingFile = useCallback((name: string) => {
+    const draft = draftsRef.current.get(JSON.stringify([scopeRef.current, name]));
+    return !!draft && draft.source !== draft.expectedSource;
+  }, []);
   const files = useMemo(() => {
     const files = current.entries
       .filter((entry) => entry.kind === 'file')
@@ -329,5 +333,6 @@ export function useProjectDirectory(
     save,
     discard,
     pendingRevision,
+    hasPendingFile,
   };
 }
