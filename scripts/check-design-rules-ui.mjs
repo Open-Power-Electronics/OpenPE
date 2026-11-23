@@ -289,6 +289,8 @@ try {
     if (url.pathname === '/api/agent-settings')
       return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
+    if (url.pathname === '/api/layout-preferences' && route.request().method() === 'GET')
+      return route.fulfill({ json: { placementSuggestions: false } });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
@@ -961,11 +963,12 @@ try {
 
   const beforeRapid = await runCount('layout.drc');
   await page.evaluate(async (id) => {
+    delete window.ruleTestInitialDelays.drc;
     const core = window.ruleTestCores[id];
     for (let index = 0; index < 3; index++) {
       core.setEditingBlocked('Fixture changing revision.');
       core.setEditingBlocked(null);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 75));
     }
   }, projectIds[1]);
   await waitForFooterCounts();
@@ -974,6 +977,8 @@ try {
     beforeRapid + 1,
     'Rapid revisions coalesce into one settled check.',
   );
+  const staleDRCDelay = await page.evaluate(() => window.ruleTestInitialDelays.drc);
+  assert.ok(staleDRCDelay > 0 && staleDRCDelay <= 150, 'Stale Layout DRC settles within 150 ms.');
   const beforePending = await runCount('layout.drc');
   await page.evaluate((id) => {
     const core = window.ruleTestCores[id];
@@ -1244,6 +1249,7 @@ try {
 
   await page.evaluate((id) => {
     window.holdRuleIdle();
+    delete window.ruleTestInitialDelays.drc;
     const core = window.ruleTestCores[id],
       project = core.getSnapshot().project;
     core.commitProject({
@@ -1257,6 +1263,11 @@ try {
     });
   }, projectIds[1]);
   await page.waitForFunction(() => window.ruleIdleWaiting);
+  const repairedDRCDelay = await page.evaluate(() => window.ruleTestInitialDelays.drc);
+  assert.ok(
+    repairedDRCDelay > 0 && repairedDRCDelay <= 150,
+    'A PCB edit queues a prompt DRC refresh.',
+  );
   assert.equal(await shortIssue.isDisabled(), true);
   await assertUnknownCounts();
   const fixedDRC = await snapshot(1);

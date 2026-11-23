@@ -1,7 +1,7 @@
 [
   {
     "number": 3,
-    "spec": "Design an electrolytic capacitor charging and discharging circuit. When Vin exceeds 20 V, the input must power the load while charging the storage capacitor.\n\nBoost Vin to a charge voltage adjustable from 24 V to 60 V through the feedback (FB) pin. Use an electrolytic storage capacitor of approximately 10 mF and a charge-current limit adjustable from 0.03 A to 0.3 A.\n\nWhen Vin falls below 15 V, switch the downstream load directly to the storage capacitor. The load power is 15 W.",
+    "spec": "Design an electrolytic capacitor charging and discharging circuit. When Vin exceeds 20 V, the input must power the load while charging the storage capacitor. Boost Vin to a charge voltage adjustable from 24 V to 60 V through the feedback (FB) pin. Use an electrolytic storage capacitor of approximately 10 mF and a charge-current limit adjustable from 0.03 A to 0.3 A. When Vin falls below 15 V, switch the downstream load directly to the storage capacitor. The load power is 15 W.",
     "eval": {
       "cost": {
         "unit": "USD",

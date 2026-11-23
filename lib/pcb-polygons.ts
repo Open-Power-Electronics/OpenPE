@@ -949,25 +949,54 @@ function calculateCopperPolygons(
   return { polygons, reusedContours, stored: stored?.zones };
 }
 
-/** Read saved contours, including KiCad's zero-width bridges around holes.
- * Never substitute a zone outline or recalculate copper merely to display it. */
-export function filledCopperPolygons(board: PCB): Map<string, Polygon[]> {
+type SavedContours = NonNullable<BoardZone['filledPolygons']>;
+
+function decodeSavedCopper(contours: SavedContours): Polygon[] {
+  const subject = contours.map((p) => ({ outer: p.points, holes: [] }));
+  return operation(subject, [], Clipper.ClipType.ctUnion);
+}
+
+function readSavedCopper(
+  board: PCB,
+  decode: (contours: SavedContours) => Polygon[],
+): Map<string, Polygon[]> {
   const result = new Map<string, Polygon[]>();
   let vertices = 0;
   for (const z of worldZones(board)) {
-    if (
-      !z.layer.endsWith('.Cu') ||
-      z.keepout ||
-      z.fillEnabled === false ||
-      z.filledPolygons === undefined
-    )
+    const contours = z.filledPolygons;
+    if (!z.layer.endsWith('.Cu') || z.keepout || z.fillEnabled === false || contours === undefined)
       continue;
-    vertices += z.filledPolygons.reduce((n, p) => n + p.points.length, 0);
+    vertices += contours.reduce((n, p) => n + p.points.length, 0);
     if (vertices > 60000)
       throw new Error('Saved copper fills exceed the 60000-vertex board limit.');
-    const polygons = z.filledPolygons.map((p) => ({ outer: p.points, holes: [] }));
-    result.set(z.id, operation(polygons, [], Clipper.ClipType.ctUnion));
+    result.set(z.id, decode(contours));
   }
+  return result;
+}
+
+/** Read saved contours, including KiCad's zero-width bridges around holes.
+ * Public geometry remains independently mutable. */
+export function filledCopperPolygons(board: PCB): Map<string, Polygon[]> {
+  return readSavedCopper(board, decodeSavedCopper);
+}
+
+const ownedSavedCopper = new WeakMap<SavedContours, Polygon[]>();
+
+/** Internal read-only geometry shared by DRC and connectivity. */
+export function borrowFilledCopperPolygons(board: PCB): Map<string, Polygon[]> {
+  if (!isOwnedPCB(board)) return filledCopperPolygons(board);
+  const pending = new Map<SavedContours, Polygon[]>();
+  const result = readSavedCopper(board, (contours) => {
+    // Footprint-local contours are transformed for this call, which gives them
+    // new arrays and keeps them out of the board-level cache.
+    if (!isOwnedProjectNode(contours)) return decodeSavedCopper(contours);
+    const saved = ownedSavedCopper.get(contours) ?? pending.get(contours);
+    if (saved) return saved;
+    const polygons = ownProjectData(decodeSavedCopper(contours));
+    pending.set(contours, polygons);
+    return polygons;
+  });
+  for (const [contours, polygons] of pending) ownedSavedCopper.set(contours, polygons);
   return result;
 }
 

@@ -6421,19 +6421,26 @@ function worldZones(board) {
 }
 var clearanceArcTolerance = 1e-3;
 var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
-function filledCopperPolygons(board) {
+function decodeSavedCopper(contours) {
+  const subject = contours.map((p) => ({ outer: p.points, holes: [] }));
+  return operation(subject, [], import_clipper_lib2.default.ClipType.ctUnion);
+}
+function readSavedCopper(board, decode) {
   const result = /* @__PURE__ */ new Map();
   let vertices = 0;
   for (const z of worldZones(board)) {
-    if (!z.layer.endsWith(".Cu") || z.keepout || z.fillEnabled === false || z.filledPolygons === void 0)
+    const contours = z.filledPolygons;
+    if (!z.layer.endsWith(".Cu") || z.keepout || z.fillEnabled === false || contours === void 0)
       continue;
-    vertices += z.filledPolygons.reduce((n, p) => n + p.points.length, 0);
+    vertices += contours.reduce((n, p) => n + p.points.length, 0);
     if (vertices > 6e4)
       throw new Error("Saved copper fills exceed the 60000-vertex board limit.");
-    const polygons = z.filledPolygons.map((p) => ({ outer: p.points, holes: [] }));
-    result.set(z.id, operation(polygons, [], import_clipper_lib2.default.ClipType.ctUnion));
+    result.set(z.id, decode(contours));
   }
   return result;
+}
+function filledCopperPolygons(board) {
+  return readSavedCopper(board, decodeSavedCopper);
 }
 
 // lib/pcb-connectivity.ts

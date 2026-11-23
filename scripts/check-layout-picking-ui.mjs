@@ -23,7 +23,7 @@ const bundle = await build({
       function Test(){const [board,setBoard]=useState(window.fixture.board);const [history,setHistory]=useState([]);
         const context=useRef(null);window.layoutContext=()=>context.current;
         return <LayoutEditor leftButtonDrag={window.fixture.leftButtonDrag} board={board} schematic={window.fixture.schematic} active agentContextRef={context}
-          onCommit={next=>{window.lastBoard=next;window.commits++;setHistory([...history,board]);setBoard(next);return true}}
+          onCommit={(next,source,edit)=>{window.lastBoard=next;window.lastEdit=edit;window.commits++;setHistory([...history,board]);setBoard(next);return true}}
           undoAction={<button aria-label="Undo" disabled={!history.length} onClick={()=>{const next=history.at(-1);window.lastBoard=next;setBoard(next);setHistory(history.slice(0,-1))}}>Undo</button>}
           annotations={[]} annotationSessionId="picking" onAnnotationsChange={()=>{}}/>}
       createRoot(document.getElementById('root')).render(<Test/>);`,
@@ -274,14 +274,16 @@ async function run(
     page.evaluate(() => ({ board: window.lastBoard, commits: window.commits }));
   const renderedTracks = () =>
     canvas.locator('[data-layout-track-target]').evaluateAll((nodes) =>
-      nodes.map((node) => ({
-        id: node.parentElement.getAttribute('data-selection-id'),
-        start: { x: Number(node.getAttribute('x1')), y: Number(node.getAttribute('y1')) },
-        end: { x: Number(node.getAttribute('x2')), y: Number(node.getAttribute('y2')) },
-        width: Number(node.getAttribute('data-layout-track-target')),
-        layer: node.closest('[data-layout-layer]').getAttribute('data-layout-layer'),
-        netId: node.parentElement.getAttribute('data-net-id'),
-      })),
+      nodes
+        .filter((node) => !node.closest('[data-footprint-motion-hidden]'))
+        .map((node) => ({
+          id: node.parentElement.getAttribute('data-selection-id'),
+          start: { x: Number(node.getAttribute('x1')), y: Number(node.getAttribute('y1')) },
+          end: { x: Number(node.getAttribute('x2')), y: Number(node.getAttribute('y2')) },
+          width: Number(node.getAttribute('data-layout-track-target')),
+          layer: node.closest('[data-layout-layer]').getAttribute('data-layout-layer'),
+          netId: node.parentElement.getAttribute('data-net-id'),
+        })),
     );
   const clean = async () => assert.deepEqual(await snapshot(), { board: fixtureBoard, commits: 0 });
   const captureDetail = async (position, path) => {
@@ -574,7 +576,7 @@ try {
         ...copper,
         ...finish,
       ]);
-      await expectActions(component, [...edit, 'Drag with tracks', 'Rotate', 'Flip', ...finish]);
+      await expectActions(component, [...edit, 'Drag', 'Rotate', 'Flip', ...finish]);
       await expectActions({ x: 53.6, y: 23.6 }, ['Properties', 'Highlight nets', 'Lock']);
       await expectActions(via, [...edit, ...copper, ...finish]);
       await point(secondVia, true, ['Shift']);
@@ -607,36 +609,97 @@ try {
     menuBoard,
   );
   await run(
-    'connected footprint drag previews attached tracks and commits one undo edit',
+    'connected footprint drag accepts overlap and board exit with saved copper and one undo edit',
     async ({ page, canvas, point, drag, snapshot, renderedTracks, clean }) => {
       const preview = canvas.locator('[data-footprint-drag-preview]');
       const origin = { x: 30, y: 25 };
-      const target = { x: 30, y: 29 };
+      const target = { x: 30, y: -4 };
+      const fill = canvas.locator('[data-copper-fill="pour"]');
+      const savedPath = await fill.locator('[data-copper-zone]').getAttribute('d');
       await point(origin, true);
       await canvas.press('d');
-      await point(target);
+      await point({ x: 55, y: 25 });
       await preview.waitFor({ state: 'attached' });
       assert.equal(await preview.getAttribute('data-track-drag-blocked'), 'false');
+      assert.equal(await preview.getAttribute('data-track-drag-constrained'), 'false');
+      assert.equal(await fill.locator('mask').count(), 0);
       await canvas.press('Escape');
       await preview.waitFor({ state: 'detached' });
       await clean();
 
       await drag(origin, target);
       await preview.waitFor({ state: 'attached' });
+      await canvas
+        .locator('[data-footprint-motion] [data-layout-track-target][y1="-5.4"]')
+        .waitFor({ state: 'attached' });
       assert.equal(await preview.getAttribute('data-track-drag-blocked'), 'false');
       assert.equal(await preview.getAttribute('data-track-drag-constrained'), 'false');
+      assert.equal(await fill.locator('mask').count(), 0);
+      assert.equal(await fill.locator('[data-copper-zone]').getAttribute('d'), savedPath);
       const shown = (await renderedTracks()).sort(byTrackId);
       await clean();
       await page.mouse.up();
       const placed = await snapshot();
       assert.equal(placed.commits, 1);
-      assert.equal(placed.board.footprints[0].y, 29);
+      assert.equal(placed.board.footprints[0].y, target.y);
+      assert.equal(await page.evaluate(() => window.lastEdit), 'footprint-position');
+      assert.deepEqual(placed.board.zones, routedFootprint.zones);
       assert.equal(placed.board.tracks[0].id, routedFootprint.tracks[0].id);
-      assert.deepEqual(placed.board.tracks[0].start, { x: 28.6, y: 27.6 });
+      assert.deepEqual(placed.board.tracks[0].start, { x: 28.6, y: -5.4 });
       assert.deepEqual(placed.board.tracks.at(-1).end, routedFootprint.tracks[0].end);
       assert.deepEqual(placed.board.tracks.map(trackGeometry).sort(byTrackId), shown);
       await page.getByRole('button', { name: 'Undo', exact: true }).click();
       assert.deepEqual((await snapshot()).board, routedFootprint);
+    },
+    routedFootprint,
+  );
+  await run(
+    'footprint Move from M and the canvas menu preserves saved copper',
+    async ({ page, canvas, screen, point, snapshot, clean }) => {
+      const origin = { x: 30, y: 25 };
+      const target = { x: 34, y: 31 };
+      const fill = canvas.locator('[data-copper-fill="pour"]');
+      const path = fill.locator('[data-copper-zone]');
+      const savedPath = await path.getAttribute('d');
+      const showPreview = async () => {
+        await point(target);
+        await canvas
+          .locator('[data-footprint-body="A1"][transform^="translate(34 31)"]')
+          .waitFor({ state: 'attached' });
+        assert.equal(await path.getAttribute('d'), savedPath);
+        assert.equal(await fill.locator('mask').count(), 0);
+      };
+      const checkPlacement = async (commits) => {
+        const placed = await snapshot();
+        assert.equal(placed.commits, commits);
+        assert.equal(placed.board.footprints[0].x, target.x);
+        assert.equal(placed.board.footprints[0].y, target.y);
+        assert.equal(await page.evaluate(() => window.lastEdit), 'footprint-position');
+        assert.deepEqual(placed.board.tracks, routedFootprint.tracks);
+        assert.deepEqual(placed.board.zones, routedFootprint.zones);
+        await page.getByRole('button', { name: 'Undo', exact: true }).click();
+        assert.deepEqual((await snapshot()).board, routedFootprint);
+      };
+
+      await point(origin, true);
+      await canvas.press('m');
+      await showPreview();
+      await canvas.evaluate((svg) => {
+        svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+      });
+      await clean();
+      await canvas.press('Enter');
+      await checkPlacement(1);
+
+      const at = await screen(origin);
+      await page.mouse.click(at.x, at.y, { button: 'right' });
+      await page
+        .getByRole('menu', { name: 'Canvas actions', exact: true })
+        .getByRole('menuitem', { name: 'Move', exact: true })
+        .click();
+      await showPreview();
+      await point(target, true);
+      await checkPlacement(2);
     },
     routedFootprint,
   );

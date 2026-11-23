@@ -192,7 +192,7 @@ retains its pointer/centre anchor, and pan retains tool world coordinates.
 The canvas menu follows the current selection. Board outline strokes are object
 targets and their open interiors remain available for blank-space commands.
 Footprint selections offer Flip
-and show Drag with tracks when at least one selected footprint has a
+and show Drag when at least one selected footprint has a
 net-assigned copper pad. Track-only selections offer Drag tracks and Drag corner.
 Select connected applies to track and via selections. Highlight nets requires
 net-bearing copper targets. Individual pads offer Properties and Lock/Unlock,
@@ -595,58 +595,47 @@ share checks. With a closed board outline, standalone and route-transition via c
 ### Connected footprint drag
 
 Drag a footprint with the pointer in Select mode, press D with footprints
-selected, or choose **Drag with tracks** in the canvas menu. In the default
+selected, or choose **Drag** in the canvas menu. In the default
 left-button mode, pressing on the footprint body, a pad, silkscreen or courtyard
 and moving more than four screen pixels drags that footprint. A stationary
 ambiguous click still opens Choose layout object. Selection-only mode does not
-press-drag. M
-translates the selected objects independently. A footprint-only selection moves
-as a group. Affected native track ends follow their pad offsets on the connected
-copper layers. A track with both ends on moved pads translates with them.
-Single-ended leads reconnect with checked 45-degree Walk Around geometry. The
-original track keeps its ID, layer, width and net, and new elbows receive fresh
-IDs. Unselected footprints, vias, locked tracks and remote endpoints stay
-fixed. A contact through the middle of a track must remain connected.
+press-drag. M translates the selected objects independently. A footprint-only
+drag moves the group and carries attached native track ends by their pad offsets
+on the connected copper layers. A track with both ends on moved pads translates
+with them. The original track keeps its ID, layer, width and net, and new elbows
+receive fresh IDs. Unselected footprints, vias, locked tracks and remote
+endpoints stay fixed. Existing routed contacts must remain connected.
 
-The planner checks the moved pad and drill envelopes and the rerouted tracks
-against hidden and visible copper, artwork, board edges, cutouts and applicable
-keepouts. It rejects poses that split a routed group or join a previously
-separate same-net island. Saved pours refresh on commit under the same rules as
-track drag. Footprints that own copper artwork, board edges or rule areas use M.
-Preparation is bounded to 256 footprints, 256 attached tracks, 15,000 copper
-objects, 120,000 anchor vertices and two million geometry work units.
+The GUI accepts the requested pose at the current snap setting, including
+overlaps, keepouts, cutouts and positions outside the board outline. Single-ended
+leads use direct 45-degree reconnects, with `/` switching the elbow posture.
+Existing routed connections are preserved and new same-net contacts are allowed.
+The canvas shows the translated footprint, replacement tracks and moving
+ratsnest endpoints over the committed board. Release, click or Enter commits the
+current pose in one undo edit. GUI drag and **Move** (M or the canvas menu)
+retain saved contours in preview and on commit whenever the selection contains
+a footprint. Use **Fill all zones** or the zone's **Refill** action to recalculate
+the copper. The normal cancellation, lock, Source and revision gates apply.
 
-The canvas and `layout.drag` share preparation through
-`createPCBInteractiveDrag`. Preview, posture, cancellation, boundary placement
-and single-transaction commit follow the connected track rules below. For a
-footprint selection, omit `obstacleMode` or supply `walk-around`. Agent placement
-defaults to the exact displacement and requires explicit `constrain:true` to
-accept a legal boundary. One gesture keeps a private router session. The first
+The GUI and `layout.drag` share attachment and geometry preparation through
+`createPCBInteractiveDrag`. Preparation is bounded to 256 footprints, 256
+attached tracks, 15,000 copper objects, 120,000 anchor vertices and two million
+geometry work units. The checked `layout.drag` command validates pads, drills
+and 45-degree Walk Around reconnects against copper, artwork, board edges,
+cutouts and keepouts. It rejects new same-net joins and refreshes saved pours on
+commit. Footprints with copper artwork, board edges or rule areas use
+`layout.move` for Agent translation. Omit `obstacleMode` or supply `walk-around`
+for checked footprint drag. `constrain:true` explicitly enables the bounded
+placement search described below.
+
+Checked preparation keeps a private router session. The first
 preparation of each clearance key stores the stationary obstacle tree, board
 outline and successful stationary segment results. Later poses rebuild obstacles
 only for the moved footprints and replacement tracks, and recheck clearance only
 for pairs that involve those records. A moved-copper partition starts from the
 stationary groups and unions only the moved pads and replacement tracks. Both
-results match a full rebuild of the same pose. The eight-pose boundary search is
-unchanged: it still revalidates the last displayed displacement and probes
-toward the cursor, then commits that one validated pose. Walk-around remains the
-per-probe cost when a direct span is blocked. The session ends with the gesture.
-
-During the gesture the static board drawing stays on the committed documents.
-The dragged footprint is a translated preview of that same package, and
-replacement tracks plus ratsnest endpoints on its pads are redrawn from the
-validated preview. Pointer release commits that preview once. Saved pours stay
-on the committed copper until that transaction refreshes them. The refresh
-matches a full refill contour for contour. Every pour subtracts the complete
-clip set. Clipper rounding can turn a floating-point miss into a shared
-integer edge, and the following opening follows that exact difference, so
-every clip path stays in the operation. A repeated refresh reuses stored
-contours only when the exact inputs of the pour are unchanged: zone geometry
-and rules, net, layer, clearance, thickness, thermal relief, pad connection,
-island removal, priority, board outline, keepouts, and every track, via and
-pad. The comparison is that full record, not a hash. Any change recalculates
-the pours. Fill failure rejects the edit and leaves the accepted copper in
-place.
+results match a full rebuild of the same pose. Walk Around runs for each
+placement probe that needs a detour. The session ends with the preparation.
 
 ### Connected track drag
 
@@ -767,16 +756,19 @@ restores canvas focus; rejection retains the draft/focus for retry. Properties
 edits net/layer, clearance, minimum width, thermals, priority and bounds.
 
 Enabling unfilled copper zones is explicit and undoable. Already-filled enabled
-zones refresh automatically when copper geometry, board boundaries or effective
-zone rules change, including footprint-owned zones. Geometry and refreshed contours
-share one Core validation, revision and undo transaction for human and Agent edits.
-Interactive motion uses the worker-prepared fills and temporary conservative
-masks described above; accepted contours are calculated independently once for
-placement. For internally owned snapshots,
+zones refresh automatically on copper geometry, board boundary and effective
+zone-rule edits, including footprint-owned zones. [GUI footprint Move and drag](#connected-footprint-drag)
+retain the saved contours. Edits that refresh fills validate and commit the
+geometry and contours in one Core revision and undo transaction. Eligible
+interactive motion uses worker-prepared fills and temporary conservative masks.
+Core calculates accepted contours independently at placement. For internally owned snapshots,
 track-only changes recalculate affected copper layers and retain other-layer
 contours and rules, including when an intermediate candidate cleared its fills.
 Unrelated captions, models, locks, viewing, opening and saving retain native fills;
 Source applies the entered native contours without automatic refill.
+Incremental refresh reuses contours only for exactly matching pour inputs.
+Each recalculated pour subtracts the complete clip set, preserving integer-edge
+rounding and resulting contours from a full refill.
 Bounded Clipper geometry clips closed
 edges/cutouts, subtracts foreign copper and drill exclusions, resolves priority
 and creates solid/thermal contacts. Same-net plated drills remain separate

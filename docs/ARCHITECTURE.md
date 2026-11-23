@@ -263,8 +263,10 @@ flowchart LR
 Host calls apply schemas, availability, revision and lifecycle checks before handlers. Core validates domain candidates and commits one transaction. Context reads current accepted state and bounded presentation through browser-safe ports; it cannot mutate design.
 
 Layout's GUI preview and `layout.drag` both prepare geometry through
-`lib/pcb-interactive-drag.ts`, including connected footprint leads, track chains,
-local obstacle avoidance and picked corners. The command exposes the same input parameters.
+`lib/pcb-interactive-drag.ts`, including connected footprint leads, track chains
+and picked corners. GUI footprint drag selects free placement in that engine.
+GUI Move and drag selections containing a footprint use the Core board transaction
+that retains saved contours. The `layout.drag` command uses checked placement.
 Constrained placement requires explicit consent and reports the accepted
 displacement. Model Properties deletes CAD bodies through `modelCad.remove` and
 physical components through `layout.delete`, sharing the Agent command paths.
@@ -285,8 +287,8 @@ pending. `components/pcbFillPreview.ts` prepares temporary conservative masks th
 geometry. Source, revision, visibility, cancellation and disposal gates discard
 inapplicable results. Airwire analysis stays on the renderer thread using the
 fill-free candidate during motion. Neither worker results nor masks enter Core,
-capability data or native files: placement independently prepares current fills
-and validates geometry plus contours as one Core transaction. See
+capability data or native files. Edits with automatic refresh independently
+prepare current fills and validate geometry plus contours in one Core transaction. See
 [Layout](LAYOUT.md#saved-zone-fills) for geometry limits and preserved rules.
 
 Workbench prepares accepted project data at open and adds current observations at Send. The service validates the submitted workspace before `context/agent-prompt-context.ts` projects it for the selected provider. Prompt assembly checks its character bound before starting a provider process. The projection never becomes Core input. [Core](CORE.md#agent-transport-and-review) owns preparation and [API](API.md#chat-requests-and-sse) owns provider context fields and scoped query access.

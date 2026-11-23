@@ -1732,14 +1732,14 @@ export default function Workbench({
     [core, notify],
   );
   const commitBoard = useCallback(
-    (board: PCB, source?: FootprintSource) => {
+    (board: PCB, source?: FootprintSource, edit?: 'footprint-position') => {
       try {
         const snapshot = core.getSnapshot();
         if (!snapshot.project) return false;
         const packaged = source
           ? attachOnlineFootprint({ ...snapshot.project, pcb: board }, source)
           : snapshot.project;
-        return core.replaceBoard(board, packaged.nativeFiles);
+        return core.replaceBoard(board, packaged.nativeFiles, edit);
       } catch (error) {
         notify((error as Error).message);
         return false;
@@ -4001,7 +4001,7 @@ export default function Workbench({
       if (ruleFailureBasis.current[kind] === basis) return;
     }
     const first = !stored;
-    const quietMs = first ? 50 : opening ? 250 : 650;
+    const quietMs = first ? 50 : opening ? 250 : kind === 'drc' ? 150 : 650;
     const earliest = performance.now() + (first ? 0 : quietMs);
     const input = ruleInput.current;
     let timer: ReturnType<typeof setTimeout> | undefined;

@@ -3,7 +3,7 @@ import type { Footprint, Pad, PCB } from './pcb';
 import { padPosition } from './pcb-layout';
 import { isOwnedPCB, isOwnedProjectNode } from './immutable-project';
 import { borrowPCBPadCopperContour } from './pcb-pad-contour';
-import { filledCopperPolygons, worldZones, type Polygon } from './pcb-polygons';
+import { borrowFilledCopperPolygons, worldZones, type Polygon } from './pcb-polygons';
 import { squaredDistance as distance, segmentDistance, polygonEdges } from './pcb-collision';
 
 export type Airwire = {
@@ -556,7 +556,7 @@ export function analyzePCBConnectivity(board: PCB): {
     );
     if (reusable && !geometry && body) pendingVias.set(via, freezeCopperGeometry(body));
   }
-  const fills = filledCopperPolygons(board);
+  const fills = borrowFilledCopperPolygons(board);
   const zones = worldZones(board);
   const zoneSources = owned
     ? [...board.zones, ...board.footprints.flatMap((footprint) => footprint.zones ?? [])]

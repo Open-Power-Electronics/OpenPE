@@ -794,7 +794,7 @@ export class ProjectCore {
   private commit(
     next: Project,
     type: ProjectCoreEvent['type'] = 'project.changed',
-    origin: 'edit' | 'source' | 'history-file' = 'edit',
+    origin: 'edit' | 'footprint-position' | 'source' | 'history-file' = 'edit',
   ): boolean {
     const applyDraft = origin === 'source';
     this.requireEditing();
@@ -805,8 +805,8 @@ export class ProjectCore {
       next = ownProject(prepared, next);
       serializeProject(next);
     }
-    // Geometry and its current copper are one edit for every editor/Agent path.
-    // Explicit native Source retains its own accepted contours without refilling.
+    // Ordinary geometry edits refresh accepted copper in the same transaction.
+    // GUI footprint positioning, native Source and history files retain their contours.
     if (origin === 'edit' && this.project?.pcb && next.pcb) {
       const pcb = refreshPCBFill(
         this.project.pcb,
@@ -884,7 +884,11 @@ export class ProjectCore {
     return this.commit(nativeFiles ? { ...replacement, nativeFiles } : replacement);
   }
 
-  replaceBoard(board: PCB, nativeFiles?: Project['nativeFiles']): boolean {
+  replaceBoard(
+    board: PCB,
+    nativeFiles?: Project['nativeFiles'],
+    origin: 'edit' | 'footprint-position' = 'edit',
+  ): boolean {
     this.requireAppliedSource();
     const latest = this.requireProject();
     if (latest.pcb) assertPCBLockedEdits(latest.pcb, board);
@@ -892,7 +896,11 @@ export class ProjectCore {
     // Copper-only previews cannot change assignments through the same array;
     // the complete candidate still passes the normal commit validation.
     if (latest.pcb && board.footprints === latest.pcb.footprints)
-      return this.commit({ ...latest, ...(nativeFiles ? { nativeFiles } : {}), pcb: board });
+      return this.commit(
+        { ...latest, ...(nativeFiles ? { nativeFiles } : {}), pcb: board },
+        'project.changed',
+        origin,
+      );
     const assignments = new Map<string, string>();
     for (const footprint of board.footprints) {
       const old = latest.pcb?.footprints.find((item) => item.id === footprint.id);
@@ -916,12 +924,11 @@ export class ProjectCore {
           ),
         }
       : latest.schematic;
-    return this.commit({
-      ...latest,
-      ...(nativeFiles ? { nativeFiles } : {}),
-      schematic,
-      pcb: board,
-    });
+    return this.commit(
+      { ...latest, ...(nativeFiles ? { nativeFiles } : {}), schematic, pcb: board },
+      'project.changed',
+      origin,
+    );
   }
 
   updateSource(draft: string | null): void {

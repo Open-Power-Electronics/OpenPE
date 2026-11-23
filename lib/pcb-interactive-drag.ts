@@ -20,6 +20,7 @@ export function createPCBInteractiveDrag(
     clearance: number;
     mode?: 'connected' | 'corner';
     obstacleMode?: 'shove' | 'walk-around';
+    footprintPlacement?: 'free';
     pickup?: Point;
     endpointTolerance?: number;
   },
@@ -36,7 +37,7 @@ export function createPCBInteractiveDrag(
   if (kind === 'footprint') {
     if (options.obstacleMode === 'shove')
       throw new Error('Footprint drag uses Walk Around. Omit obstacleMode or select walk-around.');
-    return createPCBFootprintDrag(board, selection, options.clearance);
+    return createPCBFootprintDrag(board, selection, options.clearance, options.footprintPlacement);
   }
   if (!kind)
     throw new Error('Connected drag requires a selection of only footprints or only tracks.');

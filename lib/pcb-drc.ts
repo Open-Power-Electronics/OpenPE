@@ -1,5 +1,5 @@
 import type { Circuit, Point } from './circuit';
-import type { PCB } from './pcb';
+import type { BoardLine, PCB } from './pcb';
 import {
   defaultPCBRuleSeverity,
   pcbDesignRuleScopes,
@@ -16,22 +16,21 @@ import {
   type PCBDesignRuleSources,
 } from './pcb-clearance-sources';
 import { footprintPoint, padDrillLine, padDrillPosition, padPosition } from './pcb-layout';
+import { borrowPCBPadCopperContour, borrowPCBPadOutline } from './pcb-pad-contour';
 import { transformPCBGraphic } from './pcb-geometry';
 import { pcbSilkscreen } from './pcb-silkscreen';
 import { pcbStrokeText } from './pcb-stroke-text';
 import {
-  boardPolygons,
+  borrowFilledCopperPolygons,
   circlePolygon,
   closedGraphicContours,
-  filledCopperPolygons,
   graphicVertices,
   intersectPolygons,
   offsetPolygons,
-  padDrillPolygon,
-  padPolygon,
   polygonResolution,
   polygonsFromContours,
   pourKeepoutPolygons,
+  prepareBoardOutline,
   worldZones,
   type Polygon,
 } from './pcb-polygons';
@@ -75,20 +74,23 @@ type Hole = Bounds & {
   plated: boolean;
 };
 type IndexedEdge = Bounds & { line: [Point, Point]; ring: number };
-type EdgeIndex = Bounds & { edges?: IndexedEdge[]; left?: EdgeIndex; right?: EdgeIndex };
+type BoundsIndex<T> = Bounds & { items?: T[]; left?: BoundsIndex<T>; right?: BoundsIndex<T> };
 const epsilon = 0.00001;
 const maxIssues = 1000;
 const courtyardLayers = ['F.CrtYd', 'B.CrtYd'] as const;
-const pointBounds = (points: Point[], radius = 0): Bounds =>
-  points.reduce(
-    (bounds, p) => ({
-      minX: Math.min(bounds.minX, p.x - radius),
-      minY: Math.min(bounds.minY, p.y - radius),
-      maxX: Math.max(bounds.maxX, p.x + radius),
-      maxY: Math.max(bounds.maxY, p.y + radius),
-    }),
-    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-  );
+function pointBounds(points: Point[], radius = 0): Bounds {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point.x - radius);
+    minY = Math.min(minY, point.y - radius);
+    maxX = Math.max(maxX, point.x + radius);
+    maxY = Math.max(maxY, point.y + radius);
+  }
+  return { minX, minY, maxX, maxY };
+}
 
 function courtyardContoursIntersect(contours: Point[][], spend: () => void): boolean {
   const edges = contours.flatMap((outer, ring) =>
@@ -219,27 +221,27 @@ export function runPCBDesignRules(
     minY: Math.min(a.y, b.y),
     maxY: Math.max(a.y, b.y),
   });
-  const indexes = new WeakMap<Body, EdgeIndex>();
-  const makeIndex = (edges: IndexedEdge[]): EdgeIndex => {
-    const bounds = edges.reduce(
-      (value, edge) => ({
-        minX: Math.min(value.minX, edge.minX),
-        maxX: Math.max(value.maxX, edge.maxX),
-        minY: Math.min(value.minY, edge.minY),
-        maxY: Math.max(value.maxY, edge.maxY),
+  const indexes = new WeakMap<Body, BoundsIndex<IndexedEdge>>();
+  const makeIndex = <T extends Bounds>(items: T[]): BoundsIndex<T> => {
+    const bounds = items.reduce(
+      (value, item) => ({
+        minX: Math.min(value.minX, item.minX),
+        maxX: Math.max(value.maxX, item.maxX),
+        minY: Math.min(value.minY, item.minY),
+        maxY: Math.max(value.maxY, item.maxY),
       }),
       { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
     );
-    if (edges.length <= 8) return { ...bounds, edges };
+    if (items.length <= 8) return { ...bounds, items };
     const x = bounds.maxX - bounds.minX >= bounds.maxY - bounds.minY;
-    edges.sort((a, b) =>
+    items.sort((a, b) =>
       x ? a.minX + a.maxX - b.minX - b.maxX : a.minY + a.maxY - b.minY - b.maxY,
     );
-    const middle = Math.floor(edges.length / 2);
+    const middle = Math.floor(items.length / 2);
     return {
       ...bounds,
-      left: makeIndex(edges.slice(0, middle)),
-      right: makeIndex(edges.slice(middle)),
+      left: makeIndex(items.slice(0, middle)),
+      right: makeIndex(items.slice(middle)),
     };
   };
   const index = (value: Body) => {
@@ -263,18 +265,18 @@ export function runPCBDesignRules(
     }
     return prepared;
   };
-  const query = (
-    node: EdgeIndex,
+  const query = <T extends Bounds>(
+    node: BoundsIndex<T>,
     bounds: Bounds,
     margin: number,
-    visit: (edge: IndexedEdge) => void,
+    visit: (item: T) => void,
   ) => {
     spend();
     if (!overlapsBounds(node, bounds, margin)) return;
-    if (node.edges)
-      for (const edge of node.edges) {
+    if (node.items)
+      for (const item of node.items) {
         spend();
-        if (overlapsBounds(edge, bounds, margin)) visit(edge);
+        if (overlapsBounds(item, bounds, margin)) visit(item);
       }
     else {
       query(node.left!, bounds, margin, visit);
@@ -391,26 +393,29 @@ export function runPCBDesignRules(
     };
   };
   try {
-    const graphics =
-      !needsCopper && !outline
-        ? []
-        : [
-            ...board.graphics,
-            ...board.footprints.flatMap((f) =>
-              f.graphics.map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
-            ),
-          ];
+    const copperGraphic = (graphic: BoardLine) =>
+      board.layers.some((layer) => layer === graphic.layer);
+    const graphics = needsCopper
+      ? [
+          ...board.graphics.filter(copperGraphic),
+          ...board.footprints.flatMap((f) =>
+              f.graphics
+                .filter(copperGraphic)
+                .map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
+          ),
+        ]
+      : [];
     let boundary: Polygon[] = [];
     try {
-      if (outline) boundary = boardPolygons(board);
-      const outlineEdges = graphics
-        .filter((g) => outline && g.layer === 'Edge.Cuts')
-        .flatMap((g) => {
+      const prepared = outline ? prepareBoardOutline(board) : undefined;
+      boundary = prepared?.polygons ?? [];
+      const outlineEdges =
+        prepared?.edges.flatMap((g) => {
           const points = graphicVertices(g);
           return (g.kind === 'circle' || g.kind === 'polygon' ? [...points, points[0]] : points)
             .slice(1)
             .map((p, i): [Point, Point] => [points[i], p]);
-        });
+        }) ?? [];
       for (let i = 0; i < outlineEdges.length; i++)
         for (let j = i + 1; j < outlineEdges.length; j++) {
           spend();
@@ -539,31 +544,32 @@ export function runPCBDesignRules(
         const layers = padCopperLayers(board, f, p);
         if (!layers.length) continue;
         if (!needsCopper && !(annular && p.type === 'thru_hole' && p.drill)) continue;
-        const polygon = padPolygon(f, p);
-        if (p.type === 'thru_hole' && p.drill) {
-          if (annular) {
-            let ring = Infinity;
-            for (const [a, b] of polygonEdges(polygon)) {
+        const plated = p.type === 'thru_hole' && p.drill;
+        if (annular && plated) {
+          let ring = Infinity;
+          if (p.shape === 'circle') {
+            ring =
+              p.size.x / 2 -
+              Math.sqrt(Math.max(...line.map((end) => squaredDistance(at, end)))) -
+              plated / 2;
+          } else {
+            const outer = borrowPCBPadOutline(f, p);
+            for (const [a, b] of polygonEdges(outer)) {
               spend();
-              ring = Math.min(ring, Math.sqrt(segmentDistance(...line, a, b)) - p.drill / 2);
+              ring = Math.min(ring, Math.sqrt(segmentDistance(...line, a, b)) - plated / 2);
             }
-            if (line.some((end) => !insidePolygon(end, polygon, spend))) ring = -p.drill / 2;
-            if (p.shape === 'circle')
-              ring =
-                p.size.x / 2 -
-                Math.sqrt(Math.max(...line.map((end) => squaredDistance(at, end)))) -
-                p.drill / 2;
-            if (ring + epsilon < settings.minAnnularRing)
-              issue(
-                'pcb.annular-ring',
-                `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
-                [f.id, p.id],
-                at,
-              );
+            if (line.some((end) => !insidePolygon(end, outer, spend))) ring = -plated / 2;
           }
-          if (needsCopper) polygon.holes.push(padDrillPolygon(f, p));
+          if (ring + epsilon < settings.minAnnularRing)
+            issue(
+              'pcb.annular-ring',
+              `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
+              [f.id, p.id],
+              at,
+            );
         }
         if (!needsCopper) continue;
+        const polygon = plated ? borrowPCBPadCopperContour(f, p) : borrowPCBPadOutline(f, p);
         const copper = body(
           p.id,
           'pad',
@@ -663,9 +669,7 @@ export function runPCBDesignRules(
       copper.disk = { at: via, outer: via.diameter / 2, inner: via.drill / 2 };
       bodies.push(copper);
     }
-    for (const g of needsCopper
-      ? graphics.filter((g) => board.layers.some((layer) => layer === g.layer))
-      : []) {
+    for (const g of graphics) {
       if (g.kind === 'text' || g.kind === 'dimension') {
         coverage(
           'pcb.unsupported-copper',
@@ -699,7 +703,7 @@ export function runPCBDesignRules(
       );
     }
     const zones = needsCopper || connectivityEnabled ? worldZones(board) : [];
-    const fills = needsCopper ? filledCopperPolygons(board) : null;
+    const fills = needsCopper ? borrowFilledCopperPolygons(board) : null;
     for (const zone of zones) {
       if (
         !board.layers.some((layer) => layer === zone.layer) ||
@@ -888,6 +892,11 @@ export function runPCBDesignRules(
         spend();
         return pointSegmentDistance(p, a, b) <= epsilon ** 2;
       });
+    const holeIndex =
+      copperHoles && holes.length
+        ? makeIndex(holes.map((hole, order) => ({ ...hole, order })))
+        : null;
+    const nearbyHoles: (Hole & { order: number })[] = [];
     for (const copper of bodies) {
       if (edge && boundary.length) {
         let gap = Infinity;
@@ -957,17 +966,15 @@ export function runPCBDesignRules(
             copper.at,
           );
       }
-      for (const hole of copperHoles ? holes : []) {
-        spend();
-        if (hole.id === copper.id || (hole.plated && hole.netId && hole.netId === copper.netId))
-          continue;
-        if (
-          hole.maxX + settings.copperToHole < copper.minX ||
-          hole.minX - settings.copperToHole > copper.maxX ||
-          hole.maxY + settings.copperToHole < copper.minY ||
-          hole.minY - settings.copperToHole > copper.maxY
-        )
-          continue;
+      if (!holeIndex) continue;
+      nearbyHoles.length = 0;
+      query(holeIndex, copper, settings.copperToHole, (hole) => {
+        if (hole.id !== copper.id && !(hole.plated && hole.netId && hole.netId === copper.netId))
+          nearbyHoles.push(hole);
+      });
+      // Keep report ordering independent of the spatial tree split order.
+      nearbyHoles.sort((a, b) => a.order - b.order);
+      for (const hole of nearbyHoles) {
         let gap = Infinity;
         if (copper.disk) {
           const { at, outer, inner } = copper.disk;

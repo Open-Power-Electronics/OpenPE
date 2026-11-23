@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { ProjectCore } from '../core/project-core';
 import { uid, type Point } from '../lib/circuit';
+import { ownProjectData } from '../lib/immutable-project';
 import { invalidatePCBFill, type BoardZone, type Footprint, type PCB } from '../lib/pcb';
 import { createEmptyPCB, flipPCBFootprint, padDrillPosition } from '../lib/pcb-layout';
-import { copperFillContour, fillCopperZones } from '../lib/pcb-polygons';
+import {
+  borrowFilledCopperPolygons,
+  copperFillContour,
+  fillCopperZones,
+  filledCopperPolygons,
+} from '../lib/pcb-polygons';
 import { defaultPCBDesignRules, runPCBDesignRules } from '../lib/pcb-drc';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import {
@@ -96,6 +102,67 @@ const zone = (board: PCB, points = rect(2, 2, 8, 8)): BoardZone => ({
 });
 const issues = (board: PCB, rule: string) =>
   runPCBDesignRules(board).issues.filter((issue) => issue.ruleId === rule);
+
+test('copper-to-hole checks retain nearby findings and order with thousands of distant pairs', () => {
+  const board = fixture();
+  const drill = (x: number, y: number) => {
+    const footprint = pad(board, x, y);
+    const hole = footprint.pads[0];
+    Object.assign(hole, {
+      type: 'np_thru_hole',
+      shape: 'circle',
+      netId: null,
+      drill: 0.2,
+      size: { x: 0.2, y: 0.2 },
+    });
+    return hole.id;
+  };
+  const upper = drill(0.75, 0.4);
+  for (let i = 0; i < 1300; i++) drill(i * 3, 20);
+  const lower = drill(0.25, -0.4);
+  board.tracks = Array.from({ length: 1600 }, (_, i) =>
+    track(board, { x: i * 3, y: 0 }, { x: i * 3 + 1, y: 0 }),
+  );
+  const report = runPCBDesignRules(board, { scopes: ['holes'] });
+  assert.deepEqual(
+    report.issues.map(({ ruleId, objectIds }) => [ruleId, objectIds]),
+    [
+      ['pcb.copper-hole', [board.tracks[0].id, upper]],
+      ['pcb.copper-hole', [board.tracks[0].id, lower]],
+    ],
+  );
+  assert.equal(report.truncated, false);
+});
+
+test('saved copper borrowing reuses exact owned contours and detaches public geometry', () => {
+  const board = fixture();
+  const pour = zone(board);
+  pour.filledPolygons = [{ points: rect(2, 2, 8, 8) }];
+  board.zones.push(pour);
+  const basis = ownProjectData(board);
+  const first = borrowFilledCopperPolygons(basis).get(pour.id)!;
+  const edited = ownProjectData(
+    { ...basis, tracks: [track(basis, { x: 10, y: 5 }, { x: 20, y: 5 })] },
+    basis,
+  );
+  assert.equal(borrowFilledCopperPolygons(edited).get(pour.id), first);
+  assert.ok(Object.isFrozen(first[0].outer[0]));
+  const detached = filledCopperPolygons(basis).get(pour.id)!;
+  assert.deepEqual(detached, first);
+  detached[0].outer[0].x += 1;
+  assert.notDeepEqual(detached, first);
+
+  const changed = ownProjectData(
+    { ...basis, zones: [{ ...basis.zones[0], filledPolygons: [{ points: rect(2, 2, 4, 4) }] }] },
+    basis,
+  );
+  assert.notDeepEqual(borrowFilledCopperPolygons(changed).get(pour.id), first);
+  const callerFrozen = Object.freeze(board);
+  const previous = borrowFilledCopperPolygons(callerFrozen).get(pour.id);
+  pour.filledPolygons = [{ points: rect(2, 2, 3, 3) }];
+  assert.notDeepEqual(borrowFilledCopperPolygons(callerFrozen).get(pour.id), previous);
+  assert.deepEqual(borrowFilledCopperPolygons(basis).get(pour.id), first);
+});
 
 test('foreign-net contact is a short only on common copper layers; same-net contact is legal', () => {
   const board = fixture();

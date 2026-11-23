@@ -279,7 +279,7 @@ type Props = {
   sidebarVisible?: boolean;
   onShowSidebar?: () => void;
   onToggleSidebar?: () => void;
-  onCommit: (board: PCB, source?: FootprintSource) => boolean;
+  onCommit: (board: PCB, source?: FootprintSource, edit?: 'footprint-position') => boolean;
   fileId?: string;
   projectSource?: string;
   fillRules?: PCBFillRuleContext;
@@ -877,7 +877,8 @@ function LayoutEditor({
           mode: trackDrag.mode,
           clearance: routeClearance,
           endpointTolerance: trackDrag.endpointTolerance,
-          obstacleMode: footprintDrag ? 'walk-around' : dragObstacleMode,
+          obstacleMode: footprintDrag ? undefined : dragObstacleMode,
+          footprintPlacement: footprintDrag ? 'free' : undefined,
           pickup: trackDrag.pickup,
         }),
         error: '',
@@ -907,6 +908,7 @@ function LayoutEditor({
   function interactiveTrackDragPreview(delta: Point): PCBTrackDragPreview {
     const engine = trackDragEngine.engine;
     if (!engine) return { board: pcb, error: trackDragEngine.error, changedIds: [] };
+    if (footprintDrag) return engine.preview(delta, routePosture);
     const accepted = acceptedTrackDrag.current;
     const previous =
       accepted &&
@@ -935,11 +937,11 @@ function LayoutEditor({
         y: trackDrag.current.y - trackDrag.start.y,
       };
       const preview = interactiveTrackDragPreview(delta);
-      return preparePCBTrackPresentation(pcb, preview);
+      return footprintDrag ? preview : preparePCBTrackPresentation(pcb, preview);
     } catch (error) {
       return { board: pcb, error: (error as Error).message, changedIds: [] };
     }
-  }, [pcb, trackDrag, trackDragEngine, routePosture]);
+  }, [pcb, trackDrag, trackDragEngine, routePosture, footprintDrag]);
   useLayoutEffect(() => {
     if (!(globalThis as { __openpeMeasureDrag?: boolean }).__openpeMeasureDrag) return;
     const starts = performance.getEntriesByName('openpe-layout-render-start');
@@ -964,7 +966,7 @@ function LayoutEditor({
       performance.now() - release;
   });
   useLayoutEffect(() => {
-    if (!trackDrag || !trackDragEngine.engine || trackDrag.basis !== pcb) {
+    if (!trackDrag || footprintDrag || !trackDragEngine.engine || trackDrag.basis !== pcb) {
       acceptedTrackDrag.current = null;
     } else if (trackDragPreview && !trackDragPreview.error) {
       acceptedTrackDrag.current = {
@@ -982,7 +984,7 @@ function LayoutEditor({
         },
       };
     }
-  }, [pcb, trackDrag, trackDragEngine, trackDragPreview, routePosture]);
+  }, [pcb, trackDrag, trackDragEngine, trackDragPreview, routePosture, footprintDrag]);
   const trackDragChangedIds = useMemo(
     () => new Set(trackDragPreview?.changedIds),
     [trackDragPreview],
@@ -1036,6 +1038,11 @@ function LayoutEditor({
     trackDragPreview.error === '' &&
     trackDragPreview.board !== pcb;
   const motionBoard = showFootprintMotion ? pcb : placed;
+  const footprintPositionEdit =
+    footprintDrag || drag?.ids.some(({ kind }) => kind === 'footprint')
+      ? 'footprint-position'
+      : undefined;
+  const fillMotionBoard = footprintPositionEdit ? pcb : motionBoard;
   const footprintMotionIds = useMemo(() => {
     if (!footprintDrag || !trackDrag) return null;
     const engine = trackDragEngine.engine;
@@ -1084,21 +1091,18 @@ function LayoutEditor({
         : motionBoard,
     [motionBoard, placement, cursor],
   );
-  // Pointer geometry stays immediate; a worker progressively solves real fills.
-  // Masks cover only the movement since the last completed background frame.
-  // Connected footprint motion keeps the committed pour on the static layer and
-  // paints the translated package in a separate preview group.
+  // Positioning footprints displays saved copper without running the worker or masks.
   const presentationBoard = useMemo(() => invalidatePCBFill(pcb, motionBoard), [pcb, motionBoard]);
   const acceptedFillPreview = useMemo(() => {
     try {
-      return { ...preparePCBFillPreview(pcb, motionBoard, fillRules), error: '' };
+      return { ...preparePCBFillPreview(pcb, fillMotionBoard, fillRules), error: '' };
     } catch (error) {
       return { zones: [], changed: true, error: (error as Error).message };
     }
-  }, [pcb, motionBoard, fillRules]);
+  }, [pcb, fillMotionBoard, fillRules]);
   const backgroundFill = usePCBFillWorker(
     pcb,
-    motionBoard,
+    fillMotionBoard,
     active &&
       visible &&
       !annotationDisabled &&
@@ -1114,11 +1118,11 @@ function LayoutEditor({
     const completed = backgroundFill.completed;
     if (!completed?.board) return acceptedFillPreview;
     try {
-      return { ...preparePCBFillPreview(completed.board, motionBoard, fillRules), error: '' };
+      return { ...preparePCBFillPreview(completed.board, fillMotionBoard, fillRules), error: '' };
     } catch (error) {
       return { zones: [], changed: true, error: (error as Error).message };
     }
-  }, [acceptedFillPreview, backgroundFill.completed, motionBoard, fillRules]);
+  }, [acceptedFillPreview, backgroundFill.completed, fillMotionBoard, fillRules]);
   const fillPreviewZones = useMemo(
     () => new Map(fillPreview.zones.map((zone) => [zone.id, zone])),
     [fillPreview.zones],
@@ -1778,7 +1782,7 @@ function LayoutEditor({
     return () => observer.disconnect();
   }, []);
 
-  function commit(next: PCB, knownChanged = false) {
+  function commit(next: PCB, knownChanged = false, edit?: 'footprint-position') {
     if (!active || next === pcb || (!knownChanged && JSON.stringify(next) === JSON.stringify(pcb)))
       return false;
     try {
@@ -1790,6 +1794,7 @@ function LayoutEditor({
           next.footprints.some((fp) => fp.id === prepared.id)
           ? prepared.source
           : undefined,
+        edit,
       );
       if (accepted) setError('');
       return accepted;
@@ -2698,7 +2703,10 @@ function LayoutEditor({
       at && !same(at, trackDrag.current)
         ? interactiveTrackDragPreview(requestedDelta)
         : trackDragPreview;
-    const proposal = preview && preparePCBTrackPresentation(pcb, preview);
+    const proposal =
+      footprintDrag || preview === trackDragPreview
+        ? preview
+        : preparePCBTrackPresentation(pcb, preview);
     if (!proposal || proposal.error) {
       setError(proposal?.error || trackDragEngine.error);
       if (trackDrag.pointer) setTrackDrag(null);
@@ -2734,7 +2742,7 @@ function LayoutEditor({
       (globalThis as { __openpeFootprintRelease?: number }).__openpeFootprintRelease =
         performance.now();
     }
-    if (changed && !commit(preview === trackDragPreview ? placed : proposal.board, true)) {
+    if (changed && !commit(proposal.board, true, footprintPositionEdit)) {
       delete (globalThis as { __openpeFootprintRelease?: number }).__openpeFootprintRelease;
       setInspector(inspector);
       if (!previousDraft.pointer) setTrackDrag(previousDraft);
@@ -2752,7 +2760,11 @@ function LayoutEditor({
       setDrag(null);
       if (
         changed &&
-        !commit(at.x === drag.current.x && at.y === drag.current.y ? placed : next, true)
+        !commit(
+          at.x === drag.current.x && at.y === drag.current.y ? placed : next,
+          true,
+          footprintPositionEdit,
+        )
       ) {
         if (previousDraft.mode !== 'pointer') setDrag(previousDraft);
         return;
@@ -5044,7 +5056,7 @@ function LayoutEditor({
       } else if (canDragWithTracks) {
         contextObjectActions.push({
           id: 'footprint-drag',
-          label: 'Drag with tracks',
+          label: 'Drag',
           icon: Route,
           disabled: contextEditingBlocked || contextLocked,
           run: () => beginTrackDrag('connected', selection),

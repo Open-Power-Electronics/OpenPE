@@ -12,6 +12,7 @@ import {
   padDrillLine,
   padDrillPosition,
   rotatePCBSelection,
+  routePoints,
   type PCBSelection,
 } from './pcb-layout';
 import { borrowPCBPadOutline } from './pcb-pad-contour';
@@ -52,16 +53,18 @@ function padAtTrackEnd(
 }
 
 /** Translate selected packages, reconnecting their native track ends while
- * preserving the routing partition of tracks, pads and fixed through vias. */
+ * preserving existing contacts between tracks, pads and fixed through vias. */
 export function createPCBFootprintDrag(
   source: PCB,
   selection: readonly PCBSelection[],
   clearance: number,
+  placement: 'checked' | 'free' = 'checked',
 ): {
   preview: (delta: Point, posture?: boolean, turn?: number) => PCBTrackDragPreview;
   leadIds?: readonly string[];
 } {
   const failed = (error: string): PCBTrackDragPreview => ({ board: source, error, changedIds: [] });
+  const freePlacement = placement === 'free';
   try {
     if (!Number.isFinite(clearance) || clearance < 0.05 || clearance > 20)
       throw new Error('Choose a drag clearance from 0.05 to 20 mm.');
@@ -74,6 +77,7 @@ export function createPCBFootprintDrag(
     if (selected.some(({ locked }) => locked))
       throw new Error('Unlock selected footprints before starting connected drag.');
     if (
+      !freePlacement &&
       selected.some(
         ({ graphics, zones }) =>
           graphics.some(({ layer }) => layer.endsWith('.Cu') || layer === 'Edge.Cuts') ||
@@ -121,11 +125,7 @@ export function createPCBFootprintDrag(
       spend,
     );
     const routerSession = createPCBRouterSession();
-    const stationaryArtwork = preparePCBArtworkObstacles({
-      ...board,
-      footprints: board.footprints.filter(({ id }) => !footprintIds.has(id)),
-      tracks: stationaryTracks,
-    });
+    let stationaryArtwork: PCB | undefined;
     const baseRouters = new Map<string, ReturnType<typeof createPCBRouter>>();
     const partitionIndex = createIncrementalPCBRoutingPartition(
       stationaryTracks.filter(({ netId }) => movedPads.has(netId)),
@@ -146,6 +146,11 @@ export function createPCBFootprintDrag(
       tracks: readonly Track[],
       trackCount: number,
     ) => {
+      stationaryArtwork ??= preparePCBArtworkObstacles({
+        ...board,
+        footprints: board.footprints.filter(({ id }) => !footprintIds.has(id)),
+        tracks: stationaryTracks,
+      });
       const key = routerKey(options);
       const full = { ...options, clearance };
       if (!baseRouters.has(key))
@@ -232,15 +237,19 @@ export function createPCBFootprintDrag(
               throw new Error('Footprint drag would collapse an attached track. Move less.');
             let path = [start, end];
             if (!lead.start || !lead.end) {
-              const planner = planWith({
-                layer: track.layer,
-                netId: track.netId,
-                width: track.width,
-                allowInheritedWidth: true,
-              });
-              const route = planner.route(start, end, '45', posture, spend, 'omit');
-              if (route.blocked) throw new Error(route.message);
-              path = route.points;
+              if (freePlacement) {
+                path = posture ? routePoints(end, start).reverse() : routePoints(start, end);
+              } else {
+                const planner = planWith({
+                  layer: track.layer,
+                  netId: track.netId,
+                  width: track.width,
+                  allowInheritedWidth: true,
+                });
+                const route = planner.route(start, end, '45', posture, spend, 'omit');
+                if (route.blocked) throw new Error(route.message);
+                path = route.points;
+              }
               path[0] = start;
               path[path.length - 1] = end;
             }
@@ -264,47 +273,48 @@ export function createPCBFootprintDrag(
             .concat(added);
           const next = { ...moved, tracks };
           const changed = [...replacements.values(), ...added];
-          const validateTrackWith = routersFor(poses, changed, tracks.length);
-          for (const track of changed) {
-            const { layer, netId, width } = track;
-            const validator = validateTrackWith({ layer, netId, width, allowInheritedWidth: true });
-            const issue = validator.validate([track.start, track.end], spend);
-            if (issue) throw new Error(issue);
-          }
+          if (!freePlacement) {
+            const validateTrackWith = routersFor(poses, changed, tracks.length);
+            for (const track of changed) {
+              const { layer, netId, width } = track;
+              const validator = validateTrackWith({ layer, netId, width, allowInheritedWidth: true });
+              const issue = validator.validate([track.start, track.end], spend);
+              if (issue) throw new Error(issue);
+            }
 
-          // The pad group translates rigidly, so its original internal clearance
-          // is unchanged. Recheck all moved pad and drill envelopes against the
-          // full stationary board and every rerouted track.
-          const validatePadWith = routersFor([], changed, tracks.length);
-          for (const footprint of poses)
-            for (const pad of footprint.pads) {
-              const layers = padCopperLayers(board, footprint, pad);
-              for (const layer of board.layers) {
-                if (layers.includes(layer)) {
-                  const issue = validatePadWith({
-                    layer,
-                    netId: pad.netId,
-                    width: 0,
-                    obstacleType: 'pad',
-                  }).validateRegion(borrowPCBPadOutline(footprint, pad).outer, spend);
-                  if (issue) throw new Error(issue);
-                }
-                if (pad.drill) {
-                  const issue = validatePadWith({
-                    layer,
-                    netId: pad.type === 'np_thru_hole' ? null : pad.netId,
-                    width: pad.drill,
-                    obstacleType: 'pad',
-                  }).validate(
-                    pad.drillSlot
-                      ? padDrillLine(footprint, pad)
-                      : [padDrillPosition(footprint, pad)],
-                    spend,
-                  );
-                  if (issue) throw new Error(issue);
+            // The pad group translates rigidly, so its original internal clearance
+            // is unchanged. Recheck the envelopes against stationary and rerouted copper.
+            const validatePadWith = routersFor([], changed, tracks.length);
+            for (const footprint of poses)
+              for (const pad of footprint.pads) {
+                const layers = padCopperLayers(board, footprint, pad);
+                for (const layer of board.layers) {
+                  if (layers.includes(layer)) {
+                    const issue = validatePadWith({
+                      layer,
+                      netId: pad.netId,
+                      width: 0,
+                      obstacleType: 'pad',
+                    }).validateRegion(borrowPCBPadOutline(footprint, pad).outer, spend);
+                    if (issue) throw new Error(issue);
+                  }
+                  if (pad.drill) {
+                    const issue = validatePadWith({
+                      layer,
+                      netId: pad.type === 'np_thru_hole' ? null : pad.netId,
+                      width: pad.drill,
+                      obstacleType: 'pad',
+                    }).validate(
+                      pad.drillSlot
+                        ? padDrillLine(footprint, pad)
+                        : [padDrillPosition(footprint, pad)],
+                      spend,
+                    );
+                    if (issue) throw new Error(issue);
+                  }
                 }
               }
-            }
+          }
 
           const anchors = preparePCBTrackAnchors(
             { ...next, footprints: poses, vias: [] },
@@ -322,7 +332,7 @@ export function createPCBFootprintDrag(
             if (
               after === undefined ||
               (forward.has(before) && forward.get(before) !== after) ||
-              (reverse.has(after) && reverse.get(after) !== before)
+              (!freePlacement && reverse.has(after) && reverse.get(after) !== before)
             )
               throw new Error(footprintDragContactError);
             forward.set(before, after);

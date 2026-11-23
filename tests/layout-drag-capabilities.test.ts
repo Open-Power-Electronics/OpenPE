@@ -4,10 +4,11 @@ import { createCapabilityHost } from '../api/capabilities';
 import { ProjectCore } from '../core/project-core';
 import { registerProjectCapabilities } from '../core/register-project';
 import { uid } from '../lib/circuit';
-import { createEmptyPCB } from '../lib/pcb-layout';
+import { createEmptyPCB, movePCBSelection } from '../lib/pcb-layout';
 import { createProject } from '../lib/project';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import { createPCBInteractiveDrag } from '../lib/pcb-interactive-drag';
+import { fillCopperZones } from '../lib/pcb-polygons';
 import { previewConstrainedPCBTrackDrag } from '../lib/pcb-track-drag';
 
 function fixture() {
@@ -197,7 +198,7 @@ function footprintFixture() {
   return { project, board };
 }
 
-test('connected footprint drag shares native placement and undo between canvas and Agent', async () => {
+test('canvas and Agent footprint drag share native placement and undo for a clear straight pose', async () => {
   const { project, board } = footprintFixture();
   const canvas = new ProjectCore(project);
   const agent = new ProjectCore(project);
@@ -211,7 +212,10 @@ test('connected footprint drag shares native placement and undo between canvas a
     clearance: 0.25,
   };
   const basis = canvas.getSnapshot().project!.pcb!;
-  const engine = createPCBInteractiveDrag(basis, input.selection, input);
+  const engine = createPCBInteractiveDrag(basis, input.selection, {
+    ...input,
+    footprintPlacement: 'free',
+  });
   assert.equal(engine.preview({ x: 0, y: 0 }).board, basis);
   const preview = engine.preview(input.delta);
   assert.equal(preview.error, '');
@@ -220,7 +224,7 @@ test('connected footprint drag shares native placement and undo between canvas a
   assert.deepEqual(preview.board.tracks[0].start, { x: 11.125, y: 10 });
   assert.equal(preview.board.tracks[1], basis.tracks[1]);
   assert.equal(preview.board.vias[0], basis.vias[0]);
-  assert.equal(canvas.replaceBoard(preview.board), true);
+  assert.equal(canvas.replaceBoard(preview.board, undefined, 'footprint-position'), true);
   await host.execute('layout.drag', input, { actor: 'agent' });
   assert.deepEqual(agent.getNativeFiles(), canvas.getNativeFiles());
   const reopened = projectFromNativeFiles(agent.getNativeFiles()).pcb!;
@@ -239,6 +243,93 @@ test('connected footprint drag shares native placement and undo between canvas a
     core.undo();
     assert.deepEqual(core.getNativeFiles(), native);
   }
+});
+
+test('canvas footprint drag and Move preserve native fills in their undo transactions', () => {
+  const { project, board } = footprintFixture();
+  const footprint = board.footprints[0];
+  const foreignNet = board.nets[1].id;
+  board.footprints.push({
+    ...footprint,
+    id: uid(),
+    reference: 'J2',
+    y: 14,
+    pads: footprint.pads.map((pad) => ({ ...pad, id: uid(), netId: foreignNet })),
+  });
+  board.vias.push({ ...board.vias[0], id: uid(), x: 7, y: 10 });
+  const edge = [{ x: 0, y: 0 }, { x: 24, y: 0 }, { x: 24, y: 20 }, { x: 0, y: 20 }];
+  board.graphics = edge.map((start, index) => ({
+    id: uid(),
+    layer: 'Edge.Cuts',
+    width: 0.1,
+    start,
+    end: edge[(index + 1) % edge.length],
+  }));
+  board.zones = [{
+    id: uid(),
+    netId: foreignNet,
+    layer: 'F.Cu',
+    outline: [{ x: 1, y: 1 }, { x: 23, y: 1 }, { x: 23, y: 19 }, { x: 1, y: 19 }],
+    clearance: 0.25,
+    minThickness: 0.2,
+    thermalGap: 0.3,
+    thermalBridge: 0.3,
+  }];
+  project.pcb = fillCopperZones(board);
+  const core = new ProjectCore(project);
+  const basis = core.getSnapshot().project!.pcb!;
+  const native = core.getNativeFiles();
+  const args = {
+    boardId: board.id,
+    selection: [{ kind: 'footprint' as const, id: footprint.id }],
+    clearance: 0.25,
+  };
+  const engine = createPCBInteractiveDrag(basis, args.selection, {
+    ...args,
+    footprintPlacement: 'free',
+  });
+  for (const delta of [{ x: 0, y: 4 }, { x: -3.125, y: 0 }, { x: 0, y: 12 }]) {
+    const preview = engine.preview(delta);
+    assert.equal(preview.error, '');
+    assert.equal(preview.constraint, undefined);
+    assert.deepEqual(preview.board.tracks[0].start, {
+      x: footprint.x + delta.x,
+      y: footprint.y + delta.y,
+    });
+    assert.equal(preview.board.tracks[1], basis.tracks[1]);
+    assert.equal(preview.board.zones[0], basis.zones[0]);
+    assert.throws(() => core.execute('layout.drag', { ...args, delta }), /blocked|connectivity/i);
+  }
+  assert.deepEqual(core.getNativeFiles(), native);
+
+  const outside = engine.preview({ x: 0, y: 12 }).board;
+  assert.equal(core.replaceBoard(outside, undefined, 'footprint-position'), true);
+  assert.equal(core.getSnapshot().undoDepth, 1);
+  const placed = core.getNativeFiles();
+  const reopened = projectFromNativeFiles(placed).pcb!;
+  assert.equal(reopened.footprints[0].y, 22);
+  assert.deepEqual(reopened.zones[0].filledPolygons, basis.zones[0].filledPolygons);
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), native);
+  core.redo();
+  assert.deepEqual(core.getNativeFiles(), placed);
+  core.execute('layout.fill', { boardId: board.id });
+  assert.notDeepEqual(
+    core.getSnapshot().project!.pcb!.zones[0].filledPolygons,
+    basis.zones[0].filledPolygons,
+  );
+
+  const move = new ProjectCore(project);
+  const moveBasis = move.getSnapshot().project!.pcb!;
+  const candidate = movePCBSelection(moveBasis, args.selection, { x: 0, y: 12 });
+  assert.equal(move.replaceBoard(candidate, undefined, 'footprint-position'), true);
+  assert.equal(move.getSnapshot().undoDepth, 1);
+  const moved = projectFromNativeFiles(move.getNativeFiles()).pcb!;
+  assert.equal(moved.footprints[0].y, 22);
+  assert.deepEqual(moved.tracks[0].start, moveBasis.tracks[0].start);
+  assert.deepEqual(moved.zones[0].filledPolygons, moveBasis.zones[0].filledPolygons);
+  move.undo();
+  assert.deepEqual(move.getNativeFiles(), native);
 });
 
 test('footprint drag bends native leads and checks hidden obstacles and same-net islands', () => {
