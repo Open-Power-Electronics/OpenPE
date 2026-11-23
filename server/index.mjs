@@ -118,6 +118,18 @@ export async function startServer({
   const apiResponses = new Set();
   const rawKiCad = createRawKiCadSession();
   const recovery = createWorkspaceRecoveryStore(dataDir);
+  function openQuestionBridge(provider, sessionId, origin, emit, signal) {
+    const bridge = createAgentQuestionBridge({ sessionId, origin, emit, signal });
+    questionBridges.set(bridge.id, { ...bridge, provider });
+    return {
+      ...bridge,
+      url: `${base}/api/agent-questions/${bridge.id}`,
+      close() {
+        bridge.close();
+        questionBridges.delete(bridge.id);
+      },
+    };
+  }
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -144,9 +156,12 @@ export async function startServer({
     next();
   });
   app.use('/api', (req, res, next) => {
-    const isRawChat = req.path === '/raw-kicad/chat' && req.method === 'POST';
+    const isPost = req.method === 'POST';
+    const isRawChat = isPost && req.path === '/raw-kicad/chat';
+    const isQuestion =
+      isPost && (req.path === '/chat/answer' || /^\/agent-questions\/[^/]+\/?$/i.test(req.path));
     const isAgentDiscovery = req.method === 'GET' && ['/agents', '/models'].includes(req.path);
-    if (rawKiCad.active() ? !isRawChat && !isAgentDiscovery : isRawChat) {
+    if (rawKiCad.active() ? !isRawChat && !isAgentDiscovery && !isQuestion : isRawChat) {
       if (req.get('x-openpe-token') !== token)
         return res.status(401).json({ error: 'Session expired. Restart OpenPE.' });
       return res.status(409).json({ error: 'This action is unavailable in the current mode.' });
@@ -171,11 +186,18 @@ export async function startServer({
     const bridge = questionBridges.get(req.params.bridgeId);
     if (!bridge?.authorized(req.get('x-openpe-agent-token')))
       return res.status(401).json({ error: 'Agent question connection expired.' });
+    const control = new AbortController();
+    const disconnect = () => control.abort();
+    res.once('close', disconnect);
+    if (res.destroyed) control.abort();
     try {
-      const answers = await bridge.ask(agentQuestions(bridge.provider, req.body?.questions));
+      const questions = agentQuestions(bridge.provider, req.body?.questions);
+      const answers = await bridge.ask(questions, control.signal);
       if (!res.destroyed) res.json({ answers });
     } catch (error) {
       if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
+    } finally {
+      res.off('close', disconnect);
     }
   });
   app.use('/api', (req, res, next) => {
@@ -485,14 +507,20 @@ export async function startServer({
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
-    const emit = (event) => {
-      if (
-        !res.destroyed &&
-        !control.signal.aborted &&
-        ['text-delta', 'text-replace', 'error', 'done'].includes(event.type)
-      )
+    const writeEvent = (event) => {
+      if (!res.destroyed && !control.signal.aborted)
         res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
+    const emit = (event) => {
+      if (['text-delta', 'text-replace', 'error', 'done'].includes(event.type)) writeEvent(event);
+    };
+    const questions = openQuestionBridge(
+      b.provider,
+      b.selection,
+      req.get('origin'),
+      writeEvent,
+      control.signal,
+    );
     const heartbeat = setInterval(() => {
       if (!res.destroyed) res.write(': keepalive\n\n');
     }, 15000);
@@ -504,7 +532,7 @@ export async function startServer({
         { prompt, model: b.model, effort: b.effort, parameters: b.parameters },
         emit,
         control.signal,
-        { cursorCredential },
+        { cursorCredential, questions },
       );
       outcome = result?.outcome || 'failed';
     } catch (error) {
@@ -512,6 +540,7 @@ export async function startServer({
     } finally {
       if (rawTurn === control) rawTurn = undefined;
       clearInterval(heartbeat);
+      questions.close();
       emit({ type: 'done', outcome });
       res.end();
     }
@@ -569,14 +598,13 @@ export async function startServer({
         })
       : null;
     if (bridge) agentBridges.set(bridge.id, bridge);
-    const questions = createAgentQuestionBridge({
+    const questions = openQuestionBridge(
+      b.provider,
       sessionId,
+      req.get('origin'),
       emit,
-      signal: control.signal,
-      origin: req.get('origin'),
-    });
-    questions.provider = b.provider;
-    questionBridges.set(questions.id, questions);
+      control.signal,
+    );
     const inputBridge = createAgentInputBridge({
       sessionId,
       emit,
@@ -604,7 +632,7 @@ export async function startServer({
       control.signal.throwIfAborted();
       const result = await agentRunner(b.provider, b, cwd, emit, control.signal, {
         input: inputBridge,
-        questions: { ...questions, url: `${base}/api/agent-questions/${questions.id}` },
+        questions,
         pcbDesignInstructions,
         cursorCredential,
         ...(bridge
@@ -627,7 +655,6 @@ export async function startServer({
       questions.close();
       inputBridge.close();
       inputBridges.delete(inputBridge.id);
-      questionBridges.delete(questions.id);
       if (bridge) agentBridges.delete(bridge.id);
       if (active.get(sessionId) === control) active.delete(sessionId);
       emit({ type: 'done', outcome });

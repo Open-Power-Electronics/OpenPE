@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,27 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { isProviderReasoningEffort, validModelId } from './agent-provider-format.mjs';
 import { startAgentMCP, agentMcpTools } from './agent-mcp.mjs';
+import { loadCursorSdk } from './agent-cursor-sdk.mjs';
 
-const require = createRequire(import.meta.url);
 const mcpScript = fileURLToPath(new URL('./agent-mcp.mjs', import.meta.url));
 
-function cursorSdkVersion() {
-  let dir = path.dirname(require.resolve('@cursor/sdk'));
-  for (let depth = 0; depth < 6; depth++) {
-    const file = path.join(dir, 'package.json');
-    try {
-      const parsed = JSON.parse(readFileSync(file, 'utf8'));
-      if (parsed.name === '@cursor/sdk' && typeof parsed.version === 'string' && parsed.version)
-        return parsed.version;
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  throw new Error('Cursor SDK version is unavailable.');
-}
 const startupLimitMs = 30000;
 const textLimit = 2_000_000;
 // SDK 1.3.1 expands `mcp` to these proto tools. Deny wins, so the resource and
@@ -62,30 +43,17 @@ const cursorMcpTools = ['openpe_ask_user', 'openpe_execute', 'openpe_observe', '
 // unless ELECTRON_RUN_AS_NODE is 1. server/agent-mcp.mjs reads only the
 // capability bridge and the separate question bridge, so no other variable,
 // including NODE_OPTIONS, is allowed.
-const cursorMcpEnvKeys = Object.freeze([
+const cursorMcpQuestionEnvKeys = [
   'ELECTRON_RUN_AS_NODE',
-  'OPENPE_AGENT_BRIDGE_URL',
-  'OPENPE_AGENT_BRIDGE_TOKEN',
   'OPENPE_QUESTIONS_URL',
   'OPENPE_QUESTIONS_TOKEN',
-]);
-
-export async function loadCursorSdk() {
-  const sdk = await import('@cursor/sdk');
-  const version = cursorSdkVersion();
-  if (typeof sdk.Agent?.create !== 'function' || typeof sdk.Cursor?.models?.list !== 'function')
-    throw new Error('Cursor SDK did not export its local agent runtime.');
-  if (typeof sdk.JsonlLocalAgentStore !== 'function' || typeof sdk.emptyFs !== 'function')
-    throw new Error('Cursor SDK did not export its local isolation runtime.');
-  return {
-    Agent: sdk.Agent,
-    Cursor: sdk.Cursor,
-    JsonlLocalAgentStore: sdk.JsonlLocalAgentStore,
-    emptyFs: sdk.emptyFs,
-    CursorAgentError: sdk.CursorAgentError,
-    version,
-  };
-}
+];
+const cursorMcpEnvKeys = [
+  ...cursorMcpQuestionEnvKeys,
+  'OPENPE_AGENT_BRIDGE_URL',
+  'OPENPE_AGENT_BRIDGE_TOKEN',
+];
+const rawMcpArgs = [mcpScript, '--questions-only'];
 
 export async function readCursorApiKey(credential) {
   if (!credential || typeof credential.read !== 'function')
@@ -409,19 +377,17 @@ function sameNames(actual, expected) {
 function isolatedMcpEnv(env, expected) {
   if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
   const keys = Object.keys(env);
-  if (
-    keys.length !== cursorMcpEnvKeys.length ||
-    cursorMcpEnvKeys.some((key) => !Object.hasOwn(env, key)) ||
-    keys.some((key) => !cursorMcpEnvKeys.includes(key))
-  )
+  const required = expected.raw ? cursorMcpQuestionEnvKeys : cursorMcpEnvKeys;
+  if (keys.length !== required.length || required.some((key) => !Object.hasOwn(env, key)))
     return false;
   const values = Object.values(env);
   if (values.some((value) => typeof value !== 'string')) return false;
   if (expected.apiKey && values.some((value) => value.includes(expected.apiKey))) return false;
   return (
     env.ELECTRON_RUN_AS_NODE === '1' &&
-    env.OPENPE_AGENT_BRIDGE_URL === expected.capabilityUrl &&
-    env.OPENPE_AGENT_BRIDGE_TOKEN === expected.capabilityToken &&
+    (expected.raw ||
+      (env.OPENPE_AGENT_BRIDGE_URL === expected.capabilityUrl &&
+        env.OPENPE_AGENT_BRIDGE_TOKEN === expected.capabilityToken)) &&
     env.OPENPE_QUESTIONS_URL === expected.questionUrl &&
     env.OPENPE_QUESTIONS_TOKEN === expected.questionToken
   );
@@ -446,9 +412,10 @@ async function cursorModelCatalog(apiKey, sdk) {
   return { models: catalog, unavailable, raw };
 }
 
-export async function proveCursorMcpTools(env) {
-  const declared = agentMcpTools(env).map((tool) => tool.name);
-  if (!sameNames(declared, cursorMcpTools))
+export async function proveCursorMcpTools(env, questionsOnly = false) {
+  const expected = questionsOnly ? ['openpe_ask_user'] : cursorMcpTools;
+  const declared = agentMcpTools(env, questionsOnly).map((tool) => tool.name);
+  if (!sameNames(declared, expected))
     throw new Error(`OpenPE MCP declared ${declared.join(', ') || 'no tools'}.`);
   const input = new PassThrough();
   const output = new PassThrough();
@@ -466,6 +433,7 @@ export async function proveCursorMcpTools(env) {
     input,
     output,
     env,
+    questionsOnly,
     request: async () => {
       throw new Error('Tool proof must not call the bridge.');
     },
@@ -475,7 +443,7 @@ export async function proveCursorMcpTools(env) {
     for (let i = 0; i < 50 && !received.length; i++)
       await new Promise((resolve) => setTimeout(resolve, 10));
     const names = received[0]?.result?.tools?.map((tool) => tool.name);
-    if (!sameNames(names, cursorMcpTools))
+    if (!sameNames(names, expected))
       throw new Error(`OpenPE MCP exposed ${names?.join(', ') || 'no tools'}.`);
   } finally {
     input.end();
@@ -504,11 +472,6 @@ export function assertCursorSdkTools(agent, expected) {
     throw new Error('Cursor SDK enabled custom tools, subagents, or a cloud runtime.');
   const denied = new Set(options.disallowedProtoTools);
   const effective = options.allowedProtoTools.filter((name) => !denied.has(name)).sort();
-  if (expected.raw) {
-    if (effective.length || Object.keys(options.mcpServers ?? {}).length)
-      throw new Error('Cursor SDK exposed tools in Raw KiCad mode.');
-    return;
-  }
   const server = options.mcpServers?.openpe;
   const servers = options.mcpServers ? Object.keys(options.mcpServers) : [];
   if (
@@ -518,7 +481,12 @@ export function assertCursorSdkTools(agent, expected) {
     server.command !== process.execPath
   )
     throw new Error('Cursor SDK did not keep the single OpenPE MCP server.');
-  if (!Array.isArray(server.args) || server.args.length !== 1 || server.args[0] !== mcpScript)
+  const requiredArgs = expected.raw ? rawMcpArgs : [mcpScript];
+  if (
+    !Array.isArray(server.args) ||
+    server.args.length !== requiredArgs.length ||
+    requiredArgs.some((arg, index) => server.args[index] !== arg)
+  )
     throw new Error('Cursor SDK MCP server is not the OpenPE adapter.');
   if (server.cwd !== expected.cwd)
     throw new Error('Cursor SDK MCP server is not in the private directory.');
@@ -553,25 +521,27 @@ async function withStartup(signal, timeoutMs, work) {
  * @param {AbortSignal} signal
  */
 export async function runCursorAgent(prompt, request, emit, signal, options, raw = false) {
-  const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
   let apiKey = '';
   try {
     apiKey = await readCursorApiKey(options.cursorCredential);
     if (!request.model) throw new Error('Choose a Cursor model from the catalog.');
     if (!raw && (!options.capabilities?.url || !options.capabilities.token))
       throw new Error('Cursor requires the OpenPE capability bridge.');
-    if (!raw && (!options.questions?.url || !options.questions.token))
+    if (!options.questions?.url || !options.questions.token)
       throw new Error('Cursor requires the OpenPE question bridge.');
-    const env = raw ? undefined : Object.freeze({
+    const env = Object.freeze({
       ELECTRON_RUN_AS_NODE: '1',
-      OPENPE_AGENT_BRIDGE_URL: options.capabilities.url,
-      OPENPE_AGENT_BRIDGE_TOKEN: options.capabilities.token,
+      ...(!raw && {
+        OPENPE_AGENT_BRIDGE_URL: options.capabilities.url,
+        OPENPE_AGENT_BRIDGE_TOKEN: options.capabilities.token,
+      }),
       OPENPE_QUESTIONS_URL: options.questions.url,
       OPENPE_QUESTIONS_TOKEN: options.questions.token,
     });
     if (signal.aborted) return { outcome: 'cancelled' };
+    const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
     emit({ type: 'status', stage: 'starting', text: 'Checking Cursor tool isolation…' });
-    if (env) await proveCursorMcpTools(env);
+    await proveCursorMcpTools(env, raw);
     const catalog = await cursorModelCatalog(apiKey, sdk);
     if (signal.aborted) return { outcome: 'cancelled' };
     const catalogModel = catalog.raw.find((model) => model?.id === request.model);
@@ -602,13 +572,13 @@ export async function runCursorAgent(prompt, request, emit, signal, options, raw
     const createOptions = {
       apiKey,
       model: selection,
-      tools: raw ? [] : ['mcp'],
+      tools: ['mcp'],
       disallowedTools,
-      mcpServers: raw ? {} : {
+      mcpServers: {
         openpe: {
           type: 'stdio',
           command: process.execPath,
-          args: [mcpScript],
+          args: raw ? [...rawMcpArgs] : [mcpScript],
           cwd: directory,
           env,
         },

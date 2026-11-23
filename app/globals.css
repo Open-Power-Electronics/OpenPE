@@ -125,10 +125,6 @@
   --dialog-compact-width: 360px;
   --dialog-compact-wide-width: 560px;
   --dialog-inset: var(--space-3);
-  --hero-trace: color-mix(in srgb, var(--brand-ink) 20%, transparent);
-  --hero-signal: color-mix(in srgb, var(--brand-ink) 34%, transparent);
-  --hero-grid: color-mix(in srgb, var(--text) 7%, transparent);
-  --hero-glow: color-mix(in srgb, var(--brand-ink) 8%, transparent);
 }
 
 :root[data-theme='dark'] {

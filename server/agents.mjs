@@ -35,11 +35,11 @@ import {
   windowsCodexNpmLaunch,
 } from './agent-provider-runtime.mjs';
 import {
-  loadCursorSdk,
   readCursorApiKey,
   runCursorAgent,
   validCursorRequestParameters,
 } from './agent-cursor.mjs';
+import { findCursorSdk } from './agent-cursor-sdk.mjs';
 import { runPiAgent } from './agent-pi.mjs';
 import { agentPromptContext } from './agent-context-format.mjs';
 import { schematicDraftingInstructions } from './schematic-drafting.mjs';
@@ -155,13 +155,13 @@ export async function resolveAgent(id, options = {}) {
     } else if (!/\.ps1$/i.test(candidate)) return { file: candidate, args: [], env: process.env };
   }
   throw new Error(
-    `Could not find ${agentName(id)} (${agentLaunchers[id].commands.join(' or ')}). Install and sign in, then detect again in Agent connections.`,
+    `Could not detect ${agentName(id)} (${agentLaunchers[id].commands.join(' or ')}).`,
   );
 }
 async function detectCursor(options) {
   let version;
   try {
-    const sdk = await (options.loadCursorSdk || loadCursorSdk)();
+    const sdk = await (options.findCursorSdk || findCursorSdk)();
     version = sdk.version;
   } catch (error) {
     return { id: 'cursor', installed: false, available: false, auth: 'unknown', error: error.message };
@@ -325,19 +325,32 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
   return runAgentTransport(provider, request, cwd, emit, signal, options, false);
 }
 
-/** Raw text is assembled by the native file session, before provider transport. */
+/** Raw text is assembled by the native file session, before provider transport.
+ * @param {Parameters<typeof runAgent>[0]} provider
+ * @param {{prompt:string, model?:string, effort?:import('../lib/agent-providers').ReasoningEffort, parameters?:{id:string, value:string}[]}} request
+ * @param {Parameters<typeof runAgent>[3]} emit
+ * @param {AbortSignal} signal
+ * @param {Pick<NonNullable<Parameters<typeof runAgent>[5]>, 'cursorCredential'|'resolve'|'sdk'|'timeoutMs'> & {questions:{url:string, token:string, ask:ReturnType<typeof import('./agent-questions.mjs').createAgentQuestionBridge>['ask']}}} options
+ */
 export async function runRawAgent(
   provider,
   request,
   emit,
   signal,
-  { cursorCredential, resolve, sdk, timeoutMs } = {},
+  { cursorCredential, resolve, sdk, timeoutMs, questions },
 ) {
   signal.throwIfAborted();
+  if (!questions) throw new Error('Raw KiCad requires the OpenPE question bridge.');
   const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-raw-agent-'));
   try {
     return await runAgentTransport(
-      provider, request, directory, emit, signal, { cursorCredential, resolve, sdk, timeoutMs }, true,
+      provider,
+      request,
+      directory,
+      emit,
+      signal,
+      { cursorCredential, resolve, sdk, timeoutMs, questions },
+      true,
     );
   } finally {
     await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -444,8 +457,17 @@ async function runAgentTransport(provider, request, cwd, emit, signal, options, 
           '--permission-prompt-tool',
           'stdio',
           '--tools',
-          raw ? '' : 'AskUserQuestion',
-          ...(raw ? ['--safe-mode', '--no-session-persistence', '--disallowedTools', '*'] : []),
+          'AskUserQuestion',
+          ...(raw
+            ? [
+                '--safe-mode',
+                '--no-session-persistence',
+                '--disallowedTools',
+                'mcp__*',
+                '--append-system-prompt',
+                `${toolBoundary} Use ${questionTool} for clarification.`,
+              ]
+            : []),
           '--strict-mcp-config',
           '--mcp-config',
           JSON.stringify({
@@ -600,7 +622,6 @@ async function runAgentTransport(provider, request, cwd, emit, signal, options, 
           provider,
           codex ? params.questions : params.input?.questions,
         );
-        status('question', 'Waiting for your answer…');
         const answers = await options.questions.ask(questions, control.signal);
         if (finished || signal.aborted) return;
         if (codex)
@@ -627,7 +648,6 @@ async function runAgentTransport(provider, request, cwd, emit, signal, options, 
               },
             },
           });
-        status('waiting', 'Waiting for the model…');
       } catch (error) {
         if (!finished && !signal.aborted && !control.signal.aborted) fail(error.message);
       } finally {
@@ -805,11 +825,9 @@ async function runAgentTransport(provider, request, cwd, emit, signal, options, 
           return;
         }
         if (event.id !== undefined && event.method) {
-          if (event.method === 'item/tool/requestUserInput') {
-            if (!raw) {
-              void askQuestion(event);
-              return;
-            }
+          if (event.method === 'item/tool/requestUserInput' && options.questions) {
+            void askQuestion(event);
+            return;
           }
           if (event.method === 'item/tool/call' && capabilityEnabled) {
             void toolCall(event);
@@ -842,11 +860,14 @@ async function runAgentTransport(provider, request, cwd, emit, signal, options, 
               ...(capabilityEnabled ? { dynamicTools: agentCapabilityTools } : {}),
               ...(request.model ? { model: request.model } : {}),
               config: {
-                'features.default_mode_request_user_input': !raw,
+                'features.default_mode_request_user_input': !!questionTool,
                 ...(request.effort && { model_reasoning_effort: request.effort }),
               },
               ...(!raw && {
                 developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
+              }),
+              ...(raw && {
+                developerInstructions: `${toolBoundary} Use ${questionTool} for clarification.`,
               }),
             },
           });

@@ -7,8 +7,7 @@ manufacturer-authored document obtained from the explicitly pinned Hitech
 distributor copy in the supplemental EMC file catalog.
 They retain all embedded vendor copyright, trademark, legal and product notices.
 No Apache-2.0 license or other redistribution grant is asserted for those PDFs.
-They are ignored by Git. Existing local PDFs are included when packaging the
-corresponding native example directories.
+The PDFs are excluded from Git and desktop packages.
 Retain the original PDF notices when keeping local reference copies.
 
 The JSON records contain selected numerical specifications, conditions,

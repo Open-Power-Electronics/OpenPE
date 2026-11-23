@@ -10,8 +10,9 @@ import { create, extract, list } from 'tar';
 export const SOLVER_ARCHIVE_EPOCH = 1786424074;
 const SOLVER_ARCHIVE_MTIME = new Date(SOLVER_ARCHIVE_EPOCH * 1000);
 const HASH = /^[0-9a-f]{64}$/;
-const RELEASE_HOSTS = new Set([
-  'github.com',
+export const SOLVER_RELEASE_REPO = 'Open-Power-Electronics/OpenPE';
+const RELEASE_PATH = `/${SOLVER_RELEASE_REPO}/releases/download/`;
+const RELEASE_ASSET_HOSTS = new Set([
   'objects.githubusercontent.com',
   'release-assets.githubusercontent.com',
 ]);
@@ -41,7 +42,9 @@ function releaseIdentity(url) {
     return { tag: local[1], name: local[2] };
   }
   if (parsed.protocol === 'https:' && parsed.hostname === 'github.com' && !parsed.port) {
-    const release = /^\/fleaxiao\/OpenPE\/releases\/download\/([^/]+)\/([^/]+)$/.exec(parsed.pathname);
+    const release =
+      parsed.pathname.startsWith(RELEASE_PATH) &&
+      /^([^/]+)\/([^/]+)$/.exec(parsed.pathname.slice(RELEASE_PATH.length));
     if (!release) throw new Error(`Invalid solver release URL ${url}.`);
     return { tag: release[1], name: release[2] };
   }
@@ -101,7 +104,7 @@ export function assertLockedRelease(archive) {
     typeof archive.url !== 'string'
   )
     throw new Error('Solver release lock is missing tag, name, or url.');
-  const expected = `https://github.com/fleaxiao/OpenPE/releases/download/${archive.tag}/${archive.name}`;
+  const expected = `https://github.com${RELEASE_PATH}${archive.tag}/${archive.name}`;
   if (archive.url !== expected) throw new Error(`Solver release URL must be ${expected}.`);
   releaseIdentity(archive.url);
   if (!Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > 512_000_000)
@@ -119,11 +122,18 @@ export function approvedReleaseRedirect(initial, next) {
   } catch {
     return false;
   }
-  if (dest.username || dest.password || dest.search || dest.hash) return false;
+  if (dest.username || dest.password || dest.hash) return false;
   if (start.protocol === 'http:' && start.hostname === '127.0.0.1')
-    return dest.protocol === 'http:' && dest.hostname === '127.0.0.1' && dest.port === start.port;
+    return (
+      dest.protocol === 'http:' &&
+      dest.hostname === '127.0.0.1' &&
+      dest.port === start.port &&
+      !dest.search
+    );
   if (start.protocol !== 'https:' || start.hostname !== 'github.com' || start.port) return false;
-  return dest.protocol === 'https:' && !dest.port && RELEASE_HOSTS.has(dest.hostname);
+  if (dest.protocol !== 'https:' || dest.port) return false;
+  // GitHub signs its asset CDN URLs with query parameters.
+  return (dest.hostname === 'github.com' && !dest.search) || RELEASE_ASSET_HOSTS.has(dest.hostname);
 }
 
 export async function sha256File(file) {
@@ -154,10 +164,10 @@ export async function downloadReleaseAsset({ url, sha256, size, file }) {
     if (![301, 302, 303, 307, 308].includes(response.status)) break;
     const location = response.headers.get('location');
     await response.body?.cancel();
-    if (!location) throw new Error(`Solver release redirect from ${current} has no location.`);
+    if (!location) throw new Error(`Solver release redirect for ${identity.name} has no location.`);
     const next = new URL(location, current);
     if (hop === 5 || !approvedReleaseRedirect(url, next))
-      throw new Error(`Unapproved solver release redirect from ${current} to ${next}.`);
+      throw new Error(`Unapproved solver release redirect for ${identity.name} to ${next.origin}.`);
     current = next;
   }
   if (response.status === 404)

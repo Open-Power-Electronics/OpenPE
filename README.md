@@ -4,7 +4,7 @@
 
 OpenPE · Electrical Engineering Studio places Agent conversations beside editable electrical designs in a local desktop workbench.
 
-![OpenPE Home](assets/home.png)
+![OpenPE Home with the project composer on a circuit backdrop](assets/home.png)
 
 ## One workspace for your design
 
@@ -20,13 +20,13 @@ Start with a curated example or your own circuit. Save a portable KiCad project 
 
 ## Get OpenPE
 
-Desktop packages bundle solvers, libraries and examples for **Windows x64**, **macOS arm64** and **Linux x64**. [Releases](https://github.com/fleaxiao/OpenPE/releases) · [Installation notes](docs/DEVELOPMENT.md#install-the-app)
+OpenPE targets **Windows x64**, **macOS arm64** and **Linux x64**. See [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) for available desktop installers and the [installation guide](docs/DEVELOPMENT.md#install-the-app) for host requirements.
 
 Use Node.js 24 and Git to [run from source](docs/DEVELOPMENT.md#run-from-source). The development guide also covers browser mode, offline solver preparation, checks and packaging.
 
 ## Learn more
 
-[Documentation](docs/README.md) · [Examples](docs/EXAMPLES.md) · [Architecture](docs/ARCHITECTURE.md) · [Coverage and limits](docs/README.md#coverage-and-limits) · [Contributing](AGENTS.md)
+[Documentation](docs/README.md) · [Examples](docs/EXAMPLES.md) · [Architecture](docs/ARCHITECTURE.md) · [Coverage and limits](docs/README.md#coverage-and-limits) · [Contributing](CONTRIBUTING.md)
 
 ## License
 

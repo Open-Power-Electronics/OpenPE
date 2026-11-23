@@ -1,10 +1,11 @@
-import { parseProject, projectNativeFiles } from '../server/project-format.mjs';
+import { parseProject } from '../server/project-format.mjs';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { readSource } from './source-editor-test-helpers.mjs';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
+import { readOriginalExamples } from './original-example-test-helpers.mjs';
 
 const aboutOnly = process.argv.includes('--about-only');
 const licensePaths = new Set([
@@ -40,8 +41,23 @@ const licenseBodies = new Map();
 
 const manifest = JSON.parse(await readFile('resources/example-catalog/home-manifest.json', 'utf8'));
 const catalog = [...manifest.recent, ...manifest.examples];
-const exampleSources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
-exampleSources['emc-flyback-demo'] = await readFile('lib/emc-flyback-example.json', 'utf8');
+const exampleSources = aboutOnly
+  ? {}
+  : Object.fromEntries(
+      (await readOriginalExamples()).map(({ key, id, source, filename }) => [
+        key,
+        { id, source, filename },
+      ]),
+    );
+const home = {
+  examples: catalog.map(({ id, title, description, root }) => ({
+    id,
+    title,
+    description,
+    section: root,
+  })),
+  recent: manifest.recent.map((entry) => ({ ...entry, pinned: true })),
+};
 assert.equal(manifest.examples.length, 9);
 assert.deepEqual(
   manifest.recent.map((entry) => entry.id),
@@ -86,33 +102,35 @@ try {
     footprintRequests = 0;
   page.on('pageerror', (error) => errors.push(error.message));
   page.setDefaultTimeout(10000);
-  await page.addInitScript((sources) => {
-    window.openpe = {
-      titleBarOverlay: false,
-      writeWorkspaceRecovery: async (content) => {
-        await fetch('http://localhost/api/state', {
-          method: content === null ? 'DELETE' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: content ?? undefined,
-        });
-      },
-      connection: async () => ({ base: 'http://localhost', token: 'test' }),
-      newFile: async () => crypto.randomUUID(),
-      openDefaultExample: async (key) => {
-        const source = sources[key.replace(/^example:/, '')];
-        if (!source) throw new Error('Unknown Home fixture.');
-        return {
-          id: JSON.parse(source).project.id,
-          source,
-          fileId: crypto.randomUUID(),
-          filename: 'project.kicad_pro',
-        };
-      },
-      releaseFile: async () => {},
-      setDirty: async () => {},
-      onCloseRequested: () => () => {},
-    };
-  }, exampleSources);
+  await page.addInitScript(
+    ({ sources, home }) => {
+      window.openpe = {
+        titleBarOverlay: false,
+        writeWorkspaceRecovery: async (content) => {
+          await fetch('http://localhost/api/state', {
+            method: content === null ? 'DELETE' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: content ?? undefined,
+          });
+        },
+        connection: async () => ({ base: 'http://localhost', token: 'test' }),
+        newFile: async () => crypto.randomUUID(),
+        listExamples: async () => ({ entries: home.examples, warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: home.recent, warnings: [] }),
+        onRecentChanged: () => () => {},
+        projectDirectory: async () => ({ entries: [], truncated: false }),
+        openDefaultExample: async (key) => {
+          const fixture = sources[key];
+          if (!fixture) throw new Error('Unknown Home fixture.');
+          return { ...fixture, fileId: crypto.randomUUID() };
+        },
+        releaseFile: async () => {},
+        setDirty: async () => {},
+        onCloseRequested: () => () => {},
+      };
+    },
+    { sources: exampleSources, home },
+  );
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/agent-settings')
@@ -157,8 +175,13 @@ try {
     await checkAbout(page, errors);
   } else {
     const home = page.getByRole('region', { name: 'Welcome to OpenPE', exact: true });
+    const homeScroll = home.locator('.home-scroll');
+    const backdrop = home.locator('.home-backdrop');
     await home
-      .getByRole('heading', { name: 'What will you Power next, Engineer?', exact: true })
+      .getByRole('heading', {
+        name: 'What will you Power next, Engineer',
+        exact: true,
+      })
       .waitFor();
     const recent = home.getByRole('region', { name: 'Recent', exact: true });
     const examples = home.getByRole('region', { name: 'Example', exact: true });
@@ -180,22 +203,53 @@ try {
     await page.waitForFunction(() =>
       [...document.images].every((img) => img.complete && img.naturalWidth > 0),
     );
-    assert.equal(await home.locator('.home-hero-backdrop').getAttribute('aria-hidden'), 'true');
+    assert.equal(await backdrop.getAttribute('aria-hidden'), 'true');
+    const homeViewport = await homeScroll.boundingBox();
+    assert.deepEqual(await backdrop.boundingBox(), homeViewport);
+    const scrollTop = await homeScroll.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    assert.ok(scrollTop > 0);
+    assert.deepEqual(await backdrop.boundingBox(), homeViewport);
+    await homeScroll.evaluate((el) => (el.scrollTop = 0));
+    await page.emulateMedia({ forcedColors: 'active' });
+    await backdrop.waitFor({ state: 'hidden' });
 
     // Both OS and explicit reduced motion keep the decorative pulse still.
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    const animation = () =>
-      page.locator('.home-signal-current').evaluate((el) => getComputedStyle(el).animationName);
-    assert.equal(await animation(), 'none');
+    await page.emulateMedia({
+      colorScheme: 'light',
+      forcedColors: 'none',
+      reducedMotion: 'reduce',
+    });
+    const animations = () =>
+      backdrop
+        .locator('.home-signal-current')
+        .evaluateAll((paths) => paths.map((path) => getComputedStyle(path).animationName));
+    assert.deepEqual(await animations(), Array(4).fill('none'));
     await page.evaluate(() => {
       document.documentElement.dataset.motion = 'full';
     });
-    assert.equal(await animation(), 'home-signal-flow');
+    assert.deepEqual(await animations(), Array(4).fill('home-signal-flow'));
     await page.evaluate(() => {
       document.documentElement.dataset.motion = 'reduced';
     });
-    assert.equal(await animation(), 'none');
+    assert.deepEqual(await animations(), Array(4).fill('none'));
     await page.screenshot({ path: 'test-results/openpe-home-light.png' });
+    if (process.argv.includes('--update-readme-screenshot')) {
+      const clip = await homeScroll.evaluate((el) => {
+        const surface = el.getBoundingClientRect();
+        const intro = el.querySelector('.home-intro').getBoundingClientRect();
+        const inset = 12;
+        return {
+          x: surface.left + inset,
+          y: surface.top + inset,
+          width: el.clientWidth - 2 * inset,
+          height: Math.min(intro.bottom, surface.bottom - inset) - surface.top - inset,
+        };
+      });
+      await page.screenshot({ path: 'assets/home.png', clip });
+    }
     console.log('Reference Home light preview check passed.');
     const button = (name) => page.getByRole('button', { name, exact: true });
     async function theme(name) {
@@ -210,11 +264,6 @@ try {
     await theme('Dark');
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await page.screenshot({ path: 'test-results/openpe-home-dark.png' });
-    if (process.argv.includes('--update-readme-screenshot'))
-      await page.screenshot({
-        path: 'assets/home.png',
-        clip: { x: 0, y: 0, width: 1440, height: 480 },
-      });
     console.log('Reference Home dark preview check passed.');
 
     await page.setViewportSize({ width: 1100, height: 740 });
@@ -224,12 +273,12 @@ try {
     assert.ok(
       composer.x >= 52 && composer.x + composer.width <= 1100 && composer.y + composer.height < 740,
     );
-    assert.ok(await home.evaluate((el) => el.scrollWidth <= el.clientWidth));
+    assert.ok(await homeScroll.evaluate((el) => el.scrollWidth <= el.clientWidth));
     await page.screenshot({ path: 'test-results/openpe-home-compact.png' });
     console.log('Reference Home compact preview check passed.');
     // Browser layouts below the desktop minimum keep the cards/composer contained.
     await page.setViewportSize({ width: 760, height: 900 });
-    assert.ok(await home.evaluate((el) => el.scrollWidth <= el.clientWidth));
+    assert.ok(await homeScroll.evaluate((el) => el.scrollWidth <= el.clientWidth));
     assert.equal(
       await examples
         .locator('.home-example-list')
@@ -297,21 +346,24 @@ try {
         .getByRole('navigation', { name: 'Project files', exact: true })
         .locator('[aria-current="page"]')
         .getAttribute('data-source-file');
-      const example = parseProject(exampleSources[entry.id]);
-      const native = projectNativeFiles(example, 'project.kicad_pro');
-      const expectedFile = native.files.find((file) => file.name === selectedFile);
+      const example = parseProject(exampleSources[`example:${entry.id}`].source);
       console.log(`${entry.title}: Source opened.`);
-      assert.ok(expectedFile, `${entry.id}: Source selects a native project file.`);
+      assert.ok(
+        ['pro', 'sch', 'pcb'].some((suffix) => selectedFile === `${entry.file}.kicad_${suffix}`),
+        `${entry.id}: Source selects a native project file.`,
+      );
+      const expectedSource = await readFile(
+        `${manifest.sourceRoots[entry.root]}/${entry.directory}/${selectedFile}`,
+        'utf8',
+      );
       assert.equal(
         exampleSource,
-        expectedFile.source,
+        expectedSource,
         `${entry.id}: opening preserves every selected native source byte.`,
       );
-      assert.equal(example.name, entry.title);
       assert.ok(example.schematic.parts.length > 0);
       assert.ok(example.pcb.footprints.length > 0);
       assert.ok(example.pcb.tracks.length > 0);
-      await button('Dismiss notification').click();
       await button('Layout').click();
       const layout = page.getByTestId('layout-canvas');
       await layout.waitFor();

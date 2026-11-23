@@ -312,7 +312,7 @@ export default function SettingsDialog({
                               ? a.version || 'CLI detected'
                               : installed
                                 ? 'CLI detected · unavailable'
-                                : 'Not installed'}
+                                : 'Not detected'}
                       </span>
                       {id === 'cursor' && (
                         <form
@@ -412,10 +412,12 @@ export default function SettingsDialog({
                         aria-description={id === 'cursor' ? a?.error || cursorError : a?.error}
                         aria-label={
                           id === 'cursor'
-                            ? 'Cursor API key not configured'
+                            ? installed
+                              ? 'Cursor API key not configured'
+                              : 'Cursor SDK not detected'
                             : installed
                               ? 'CLI unavailable'
-                              : 'Not installed'
+                              : 'Not detected'
                         }
                       >
                         <Unplug size={19} className="muted" />

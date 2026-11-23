@@ -8,6 +8,7 @@ import { create, Header } from 'tar';
 import { gzipSync } from 'node:zlib';
 import {
   approvedReleaseRedirect,
+  assertLockedRelease,
   assertPinnedLocalArchive,
   downloadReleaseAsset,
   extractVerifiedArchive,
@@ -20,32 +21,57 @@ import {
 
 const tag = 'solvers-fixture-1';
 const name = 'fixture-1.tar.gz';
+const release = `https://github.com/Open-Power-Electronics/OpenPE/releases/download/${tag}/${name}`;
+
+test('macOS and Linux solver locks point at the team release repository', async () => {
+  for (const lockName of ['ngspice-lock.json', 'thermal-lock.json']) {
+    const lock = JSON.parse(
+      await readFile(new URL(`../resources/${lockName}`, import.meta.url), 'utf8'),
+    );
+    for (const platform of ['darwin-arm64', 'linux-x64']) {
+      const archive = lock.platforms[platform].archive;
+      assert.equal(assertLockedRelease(archive), archive);
+      assert.throws(
+        () => assertLockedRelease({
+          ...archive,
+          url: archive.url.replace('Open-Power-Electronics', 'another-owner'),
+        }),
+        /Solver release URL must be/,
+      );
+    }
+  }
+});
 
 test('solver release redirects allow GitHub asset hosts and reject every other host', () => {
-  const release = `https://github.com/fleaxiao/OpenPE/releases/download/${tag}/${name}`;
   assert.equal(
     approvedReleaseRedirect(
       release,
-      'https://objects.githubusercontent.com/github-production-release-asset/1',
+      'https://objects.githubusercontent.com/github-production-release-asset/1?sig=fixture',
     ),
     true,
   );
   assert.equal(
     approvedReleaseRedirect(
       release,
-      'https://release-assets.githubusercontent.com/github-production-release-asset/1',
+      'https://release-assets.githubusercontent.com/github-production-release-asset/1?sig=fixture',
     ),
     true,
   );
   assert.equal(
-    approvedReleaseRedirect(release, 'https://github.com/fleaxiao/OpenPE/releases/download/x/y'),
+    approvedReleaseRedirect(release, 'https://github.com/Open-Power-Electronics/OpenPE/releases/download/x/y'),
     true,
   );
   assert.equal(
-    approvedReleaseRedirect(release, 'https://codeload.github.com/fleaxiao/OpenPE/tar.gz/x'),
+    approvedReleaseRedirect(release, 'https://codeload.github.com/Open-Power-Electronics/OpenPE/tar.gz/x'),
     false,
   );
   assert.equal(approvedReleaseRedirect(release, 'https://example.com/archive.tar.gz'), false);
+  assert.equal(approvedReleaseRedirect(release, `${release}?sig=fixture`), false);
+  assert.equal(approvedReleaseRedirect(release, 'https://example.com/archive.tar.gz?sig=fixture'), false);
+  assert.equal(
+    approvedReleaseRedirect(release, 'https://release-assets.githubusercontent.com/archive?sig=fixture#fragment'),
+    false,
+  );
   assert.equal(
     approvedReleaseRedirect(release, 'http://objects.githubusercontent.com/archive'),
     false,
@@ -54,6 +80,7 @@ test('solver release redirects allow GitHub asset hosts and reject every other h
     approvedReleaseRedirect('http://127.0.0.1:9/a/b', 'https://objects.githubusercontent.com/a'),
     false,
   );
+  assert.equal(approvedReleaseRedirect('http://127.0.0.1:9/a/b', '/a/b?sig=fixture'), false);
   assert.throws(() => solverEntryPath('../secret'), /Invalid solver archive entry/);
 });
 

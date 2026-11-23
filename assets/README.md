@@ -8,4 +8,6 @@ Update the diagram and contract together when implemented boundaries change. `np
 
 [vision.drawio](vision.drawio) preserves the original Page-2 concept in the Original Page-2 sheet and adapts it to the current project in the Vision sheet. Solid nodes show the implemented foundation; dashed nodes describe future task goals, analytical studies and broader reviewed guidance. Future labels are conceptual directions, not registered APIs, supported features or delivery commitments. The vision retains ProjectCore transactions, native KiCad ownership, scoped tools and host execution boundaries; the current architecture and feature contracts remain authoritative for implemented behaviour.
 
-`home.png` is the README's 1440 × 480 Home hero crop. Regenerate it with `node scripts/check-brand-ui.mjs --update-readme-screenshot`, then inspect the image. The capture uses an isolated headless renderer and mocked services, without Electron, providers or solvers.
+`home.png` shows the light Home view through the composer, cropped inside the content panel. Regenerate it with `node scripts/check-brand-ui.mjs --update-readme-screenshot`, then inspect the image. The capture uses a 1440 px viewport in an isolated headless renderer with mocked services.
+
+[The Home circuit texture](../public/brand/site-circuit.svg) comes from the OpenPE website's `src/assets/site-circuit.svg`. The app uses its geometry as a mask with theme-aware colours.

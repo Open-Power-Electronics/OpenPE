@@ -107,9 +107,8 @@ named exactly `.DS_Store`. Packaging copies the roots into sibling
 group from `examples-native/`.
 Their matching schematics, PCB, rules, libraries and supporting files retain
 their actual filenames. Source displays that same directory, including empty
-folders, editable ordinary text and existing PDFs. Packaging includes the
-original directory contents while excluding private files, generated solver
-results and `.kicad_prl`.
+folders, editable ordinary text and existing PDFs. Packaging excludes private
+files, generated solver results, vendor PDFs, TI libraries and `.kicad_prl`.
 
 Opening and clean recovery read current disk bytes. Save writes to that
 destination and Save as creates a separate personal project. The [opening
@@ -122,8 +121,11 @@ independent of model support and Include in SPICE simulation.
 
 TI simulation models live in ignored `models/` sidecars. Their sources are pinned in
 [reference-models-lock.json](../resources/reference-models-lock.json) and, for
-LM2596, [lib/reference-models.ts](../lib/reference-models.ts). The prepared Home subset ships as
-separate application resources under `simulation-examples/models`. EMC Flyback's
+LM2596, [lib/reference-models.ts](../lib/reference-models.ts). Desktop packages
+include the reference designs with their model bindings and omit TI libraries
+and vendor PDFs. Use the [SPICE model chooser](SIMULATION.md#portable-models-and-bundled-solver)
+to obtain TI libraries and [datasheet queries](DATASHEETS.md#submission-and-on-demand-context)
+for the reviewed PDF pages. EMC Flyback's
 four project-local SPICE libraries are tracked source assets. Preparation verifies
 their bytes against [the EMC model lock](../resources/emc-flyback-models-lock.json).
 [Simulation](SIMULATION.md#portable-models-and-bundled-solver) defines model
@@ -193,9 +195,9 @@ written from those pinned bytes and are not downloaded again.
 official TI and KiCad URLs already pinned for those models. Both build and
 development startup run this step before the renderer starts. Runtime opening
 reads those original files without generating, downloading or copying Home
-content. Missing or corrupt resources require preparation or installation
-repair. Packaging copies the original native projects and existing PDFs into
-their respective resource directories described under [Original project directories and portable assets](#original-project-directories-and-portable-assets).
+content. Missing or corrupt required assets need preparation or installation
+repair. Packaging follows the resource rules in
+[Original project directories and portable assets](#original-project-directories-and-portable-assets).
 Private destination-bound Git history is initialized on example opening.
 
 Model preparation also updates canonical model references. Vendor model bytes
@@ -252,9 +254,9 @@ Use the explicit [ERC/DRC reports](DESIGN-RULES.md) for supported rules.
 
 The reference circuits retain source author `fleaxiao`, commit
 `3e94f7eb08821dcaf3309ac433f530cb56418030`, original file paths and SHA-256 hashes.
-The pinned checkout has no top-level dataset license; no additional
-license is asserted for these designs. Embedded KiCad data retains its upstream
-terms. See [the reference-circuit notice](../public/licenses/reference/NOTICE.txt),
+The nine reference circuit designs are available under [Apache-2.0](../LICENSE).
+Embedded KiCad data retains its upstream terms. See
+[the reference-circuit notice](../public/licenses/reference/NOTICE.txt),
 [footprints/LICENSE.md](../resources/example-catalog/footprints/LICENSE.md) and About OpenPE > Third-party
 licenses. Preserve original model notices and all pinned source bytes/hashes.
 

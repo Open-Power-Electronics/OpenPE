@@ -4,6 +4,9 @@ node_modules/
 /out/
 /release/
 /release-*/
+/build/installer-mark.ico
+/build/installer-ui.dll
+/build/installerSidebar.bmp
 /next-env.d.ts
 *.tsbuildinfo
 
@@ -33,13 +36,11 @@ node_modules/
 !/examples/project/emc-flyback/models/
 /examples/project/emc-flyback/models/*
 !/examples/project/emc-flyback/models/*.lib
-/examples/**/circuits/
 /examples/**/3D/*.step
 /examples/**/footprints/*.step
 /examples/**/licenses/
 /examples/**/datasheets/*.pdf
 /tests/fixtures/**/models/
-/tests/fixtures/**/circuits/
 
 # Solver results and publication backups beside native example/test projects
 /examples/**/spice-simulation/

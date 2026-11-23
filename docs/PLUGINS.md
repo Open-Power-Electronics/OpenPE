@@ -289,7 +289,20 @@ evidence.
 
 ## Provider discovery and management
 
-Actions follow discovered CLI support rather than package presence:
+OpenPE detects all five externally supplied Agent runtimes. **Detect agents**
+refreshes their status in Agent connections. Cursor requires the local
+`@cursor/sdk` 1.3.1 package and its same-version platform package. The service
+checks the SDK entry and platform files without evaluating code during
+detection. It loads the verified entry for model discovery and execution.
+
+Cursor detection reads the standard npm module directories for the host:
+`%APPDATA%/npm/node_modules` on Windows, `/opt/homebrew/lib/node_modules` and
+`/usr/local/lib/node_modules` on macOS, and `/usr/local/lib/node_modules` and
+`/usr/lib/node_modules` on Linux. The host process environment can set
+`OPENPE_CURSOR_SDK_MODULES` to one absolute local module directory instead.
+Restart OpenPE after changing that environment or replacing the SDK.
+
+Provider plugin actions follow discovered CLI support:
 
 | Provider    | Discovery                                                                      | Mutation                                                    |
 | ----------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |

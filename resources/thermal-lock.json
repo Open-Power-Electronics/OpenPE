@@ -352,7 +352,7 @@
       "archive": {
         "tag": "solvers-thermal-1-darwin-arm64-1",
         "name": "thermal-1-darwin-arm64-1.tar.gz",
-        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-thermal-1-darwin-arm64-1/thermal-1-darwin-arm64-1.tar.gz",
+        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-thermal-1-darwin-arm64-1/thermal-1-darwin-arm64-1.tar.gz",
         "size": 43880655,
         "sha256": "8ae32d18a566b640a7e7b5cb919f5fbfc5d997ca7c849598e7b124d79ffa150c"
       },
@@ -457,7 +457,7 @@
       "archive": {
         "name": "thermal-1-linux-x64-1.tar.gz",
         "tag": "solvers-thermal-1-linux-x64-1",
-        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-thermal-1-linux-x64-1/thermal-1-linux-x64-1.tar.gz",
+        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-thermal-1-linux-x64-1/thermal-1-linux-x64-1.tar.gz",
         "size": 47785804,
         "sha256": "bf52ad45a74e089b1c7c2f0c6c54010abad2200e50885ca574754f42ed643151"
       }

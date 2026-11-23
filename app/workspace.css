@@ -6672,17 +6672,26 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 
 .home-surface {
   --home-inset: clamp(var(--space-4), 3vw, var(--space-8));
+  position: relative;
+  isolation: isolate;
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-width: 0;
   margin: 0 var(--workbench-gutter) var(--workbench-gutter) 0;
-  padding: clamp(var(--space-6), 5vh, var(--space-12)) var(--home-inset) 40px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
+}
+
+.home-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: clamp(var(--space-6), 5vh, var(--space-12)) var(--home-inset) 40px;
+  overflow: auto;
 }
 
 .home-content {
@@ -6692,69 +6701,51 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .home-intro {
-  position: relative;
-  isolation: isolate;
-  padding: clamp(28px, 5vh, 56px) 0 40px;
+  padding: clamp(28px, 5vh, 56px) var(--home-inset) 40px;
 }
 
-.home-hero-backdrop {
+.home-backdrop {
   position: absolute;
   z-index: -1;
-  inset: 0 calc(-1 * var(--home-inset));
-  overflow: hidden;
+  inset: 0;
   pointer-events: none;
   user-select: none;
-  background: radial-gradient(ellipse at 50% 20%, var(--hero-glow), transparent 66%);
-  mask-image: linear-gradient(transparent, #000 12%, #000 72%, transparent);
+  mask-image: linear-gradient(90deg, #000, #0008 32%, #0008 68%, #000);
 }
 
-.home-hero-grid {
+.home-backdrop::before,
+.home-backdrop > svg {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(var(--hero-grid) 0.8px, transparent 0.8px);
-  background-size: 20px 20px;
-  mask-image: radial-gradient(ellipse at 50% 40%, #000, transparent 72%);
+  width: 100%;
+  height: 100%;
 }
 
-.home-hero-backdrop > svg {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: max(100%, 1100px);
-  height: auto;
-  transform: translate(-50%, -50%);
-  mask-image: linear-gradient(
-    90deg,
-    #000,
-    #000 12%,
-    transparent 34%,
-    transparent 66%,
-    #000 88%,
-    #000
-  );
+.home-backdrop::before {
+  background: color-mix(in srgb, var(--text-strong) 7%, transparent);
+  mask: url('/brand/site-circuit.svg') center / cover no-repeat;
+  content: '';
 }
 
-.home-hero-traces {
-  stroke: var(--hero-trace);
-}
-
-.home-hero-signals {
-  stroke: var(--hero-signal);
+@media (forced-colors: active) {
+  .home-backdrop {
+    display: none;
+  }
 }
 
 .home-hero {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: var(--space-6);
 }
 
 .home-brand {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 20px;
   color: var(--text-strong);
-  font-size: calc(32px + var(--font-step));
+  font-size: calc(24px + var(--font-step));
   font-weight: 600;
   letter-spacing: normal;
   line-height: 1;
@@ -6764,34 +6755,30 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   flex: 0 0 auto;
 }
 
-.home-brand-ee {
-  color: var(--brand-ink);
-}
-
 .home-hero h1 {
   color: var(--text-strong);
-  font-size: calc(clamp(34px, 3.6vw, 48px) + var(--font-step));
+  font-size: calc(clamp(28px, 3vw, 36px) + var(--font-step));
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: normal;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
   text-wrap: balance;
 }
 
-.home-hero h1 > span {
-  display: inline-block;
-  color: var(--brand-ink);
+.home-hero h1 > strong {
+  color: color-mix(in srgb, var(--brand-ink) 63%, var(--muted));
+  font-weight: 750;
 }
 
 .home-signal-current {
-  stroke: var(--brand-ink);
-  stroke-dasharray: 6 94;
-  opacity: 0.45;
+  stroke: color-mix(in srgb, var(--brand-ink) 18%, transparent);
+  stroke-dasharray: 5 95;
+  stroke-dashoffset: -36;
   animation: home-signal-flow 6s linear infinite;
 }
 
 @keyframes home-signal-flow {
   to {
-    stroke-dashoffset: -100;
+    stroke-dashoffset: -136;
   }
 }
 
@@ -7007,17 +6994,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 @media (max-height: 820px) {
-  .home-surface {
+  .home-scroll {
     padding-top: 24px;
     padding-bottom: 20px;
-  }
-
-  .home-hero {
-    margin-bottom: 24px;
-  }
-
-  .home-hero h1 {
-    font-size: calc(clamp(32px, 3.6vw, 44px) + var(--font-step));
   }
 
   .home-intro {
@@ -7026,7 +7005,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   }
 
   .home-brand {
-    margin-bottom: 18px;
+    margin-bottom: var(--space-4);
   }
 
   .home-examples {

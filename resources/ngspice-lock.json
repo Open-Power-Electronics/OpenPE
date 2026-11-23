@@ -49,7 +49,7 @@
       "archive": {
         "tag": "solvers-ngspice-47-darwin-arm64-1",
         "name": "ngspice-47-darwin-arm64-1.tar.gz",
-        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-ngspice-47-darwin-arm64-1/ngspice-47-darwin-arm64-1.tar.gz",
+        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-ngspice-47-darwin-arm64-1/ngspice-47-darwin-arm64-1.tar.gz",
         "size": 4649430,
         "sha256": "88bfdfc3a5804040ad9e464c44d5d2d23d0db19d5c6ff666a976890e3e20d957"
       },
@@ -121,7 +121,7 @@
       "archive": {
         "name": "ngspice-47-linux-x64-1.tar.gz",
         "tag": "solvers-ngspice-47-linux-x64-1",
-        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-ngspice-47-linux-x64-1/ngspice-47-linux-x64-1.tar.gz",
+        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-ngspice-47-linux-x64-1/ngspice-47-linux-x64-1.tar.gz",
         "size": 6903234,
         "sha256": "cdc0c14cc2842185b323f3b943aafe6c945bae934f360406be876f6e0328d235"
       }

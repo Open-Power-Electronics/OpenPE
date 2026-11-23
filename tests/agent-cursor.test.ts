@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../server/index.mjs';
 import { detectAgents, resolveAgent, runAgent, runRawAgent } from '../server/agents.mjs';
 import { listAgentModels } from '../server/agent-models.mjs';
+import { findCursorSdk } from '../server/agent-cursor-sdk.mjs';
 import {
   assertCursorSdkTools,
   cursorCatalogEntry,
@@ -201,7 +202,7 @@ test('Cursor detection uses the stored key and never a CLI launcher', async () =
     resolve: async () => {
       throw new Error('Cursor detection must not resolve a CLI');
     },
-    loadCursorSdk: async () => ({ version: 'test-sdk' }),
+    findCursorSdk: async () => ({ version: 'test-sdk' }),
   });
   const absent: any = missing.find((agent: any) => agent.id === 'cursor');
   assert.equal(absent.installed, true);
@@ -211,7 +212,7 @@ test('Cursor detection uses the stored key and never a CLI launcher', async () =
     resolve: async () => {
       throw new Error('Cursor detection must not resolve a CLI');
     },
-    loadCursorSdk: async () => ({ version: 'test-sdk' }),
+    findCursorSdk: async () => ({ version: 'test-sdk' }),
     cursorCredential: { read: async () => apiKey },
   });
   const present: any = ready.find((agent: any) => agent.id === 'cursor');
@@ -221,6 +222,41 @@ test('Cursor detection uses the stored key and never a CLI launcher', async () =
   assert.equal(present.auth, 'unknown');
   assert.equal(present.version, 'test-sdk');
   assert.equal('path' in present, false);
+});
+
+test('external Cursor discovery checks platform files and version without evaluating its entry', async (t) => {
+  const platform = `${process.platform}-${process.arch}`;
+  if (!['win32-x64', 'darwin-arm64', 'linux-x64'].includes(platform)) return t.skip('Unsupported host');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-cursor-sdk-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const modules = path.join(await realpath(root), 'node_modules');
+  const sdk = path.join(modules, '@cursor', 'sdk');
+  const platformName = `@cursor/sdk-${platform}`;
+  const platformPackage = path.join(modules, platformName);
+  const entry = path.join(sdk, 'dist', 'esm', 'index.js');
+  await mkdir(path.dirname(entry), { recursive: true });
+  await writeFile(entry, "throw new Error('Discovery evaluated the SDK.');");
+  await writeFile(
+    path.join(sdk, 'package.json'),
+    JSON.stringify({
+      name: '@cursor/sdk',
+      version: '1.3.1',
+      exports: { '.': { import: './dist/esm/index.js' } },
+    }),
+  );
+  const detect = () => findCursorSdk({ directories: [modules] });
+  await assert.rejects(detect, /was not detected/);
+  await mkdir(platformPackage);
+  const metadata = path.join(platformPackage, 'package.json');
+  await writeFile(metadata, JSON.stringify({ name: platformName, version: '1.3.1' }));
+  for (const name of ['tree-sitter', 'tree-sitter-bash']) {
+    const binding = path.join(platformPackage, 'vendor', name);
+    await mkdir(binding, { recursive: true });
+    await writeFile(path.join(binding, 'binding.node'), 'fixture');
+  }
+  assert.deepEqual(await detect(), { entry, version: '1.3.1' });
+  await writeFile(metadata, JSON.stringify({ name: platformName, version: '9.9.9' }));
+  await assert.rejects(detect, /was not detected/);
 });
 
 test('Cursor model catalog exposes every parameter and its catalog default', async () => {
@@ -430,19 +466,36 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
   assert.throws(() => cursorModelSelection(mixed, { effort: 'high' }), /does not expose a reasoning effort/);
 });
 
-test('raw Cursor uses an empty tool catalog and no bridge', async () => {
-  const state = sdkFor(async (options) => {
-    assert.deepEqual(options.tools, []);
-    assert.deepEqual(options.mcpServers, {});
-    return { options: { ...options, allowedProtoTools: [], disallowedProtoTools: [] } };
-  }, [{ type: 'assistant', message: { content: [{ type: 'text', text: 'Raw reply' }] } }]);
+test('raw Cursor keeps the question bridge and excludes the capability connection', async () => {
+  const state = sdkFor(
+    async (options) => {
+      assert.deepEqual(options.tools, ['mcp']);
+      assert.deepEqual(Object.keys(options.mcpServers), ['openpe']);
+      const { env, args } = options.mcpServers.openpe;
+      assert.equal(args[1], '--questions-only');
+      assert.deepEqual(env, {
+        ELECTRON_RUN_AS_NODE: '1',
+        OPENPE_QUESTIONS_URL: questionUrl,
+        OPENPE_QUESTIONS_TOKEN: questionToken,
+      });
+      return {};
+    },
+    [{ type: 'assistant', message: { content: [{ type: 'text', text: 'Raw reply' }] } }],
+  );
   const events: any[] = [];
   const result = await runRawAgent(
     'cursor',
     { prompt: 'Original text', model: 'plain' },
     (event: any) => events.push(event),
     new AbortController().signal,
-    { cursorCredential: { read: async () => apiKey }, sdk: state.sdk },
+    {
+      cursorCredential: { read: async () => apiKey },
+      sdk: state.sdk,
+      questions: {
+        ...bridges().questions,
+        ask: async () => assert.fail('Cursor asks through MCP.'),
+      },
+    },
   );
   assert.equal(result.outcome, 'completed');
   assert.ok(events.some((event) => event.type === 'text-delta' && event.delta === 'Raw reply'));
@@ -633,7 +686,7 @@ test('Cursor fails closed when the SDK cannot prove its built-in tools', () => {
   );
 });
 
-test('Cursor MCP proof accepts only the OpenPE tools and the question bridge', async () => {
+test('Cursor MCP enforces the declared tool set and delivers questions in both modes', async (t) => {
   const env = {
     OPENPE_AGENT_BRIDGE_URL: capabilityUrl,
     OPENPE_AGENT_BRIDGE_TOKEN: capabilityToken,
@@ -641,40 +694,65 @@ test('Cursor MCP proof accepts only the OpenPE tools and the question bridge', a
     OPENPE_QUESTIONS_TOKEN: questionToken,
   };
   await proveCursorMcpTools(env);
-  const input = new PassThrough();
-  const output = new PassThrough();
-  const received: any[] = [];
-  let buffer = '';
-  output.on('data', (chunk) => {
-    buffer += chunk;
-    let end;
-    while ((end = buffer.indexOf('\n')) >= 0) {
-      received.push(JSON.parse(buffer.slice(0, end)));
-      buffer = buffer.slice(end + 1);
-    }
-  });
-  const lines = startAgentMCP({
-    input,
-    output,
-    env,
-    request: async (_url, options) => {
-      const headers = options?.headers as Record<string, string> | undefined;
-      assert.equal(headers?.['X-OpenPE-Agent-Token'], questionToken);
-      return new Response(JSON.stringify({ answers: { q1: ['Use 10k'] } }));
-    },
-  });
-  input.write(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'openpe_ask_user', arguments: { questions: [{ id: 'q1', question: 'Value?' }] } },
-    }) + '\n',
-  );
-  for (let i = 0; i < 50 && !received.length; i++) await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.match(received[0].result.content[0].text, /Use 10k/);
-  input.end();
-  lines.close();
+  const questionEnv = {
+    OPENPE_QUESTIONS_URL: questionUrl,
+    OPENPE_QUESTIONS_TOKEN: questionToken,
+  };
+  await proveCursorMcpTools(questionEnv, true);
+  for (const questionsOnly of [false, true])
+    await t.test(questionsOnly ? 'Raw KiCad' : 'Workbench', async () => {
+      const input = new PassThrough();
+      const output = new PassThrough();
+      const received: any[] = [];
+      let buffer = '';
+      output.on('data', (chunk) => {
+        buffer += chunk;
+        let end;
+        while ((end = buffer.indexOf('\n')) >= 0) {
+          received.push(JSON.parse(buffer.slice(0, end)));
+          buffer = buffer.slice(end + 1);
+        }
+      });
+      const lines = startAgentMCP({
+        input,
+        output,
+        env,
+        questionsOnly,
+        request: async (_url, options) => {
+          const headers = options?.headers as Record<string, string> | undefined;
+          assert.equal(headers?.['X-OpenPE-Agent-Token'], questionToken);
+          return new Response(JSON.stringify({ answers: { q1: ['Use 10k'] } }));
+        },
+      });
+      input.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: 'openpe_ask_user',
+            arguments: { questions: [{ id: 'q1', question: 'Value?' }] },
+          },
+        }) + '\n',
+      );
+      for (let i = 0; i < 50 && !received.length; i++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.match(received[0].result.content[0].text, /Use 10k/);
+      if (questionsOnly) {
+        input.write(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/call',
+            params: { name: 'openpe_query', arguments: {} },
+          }) + '\n',
+        );
+        assert.equal(received[1].result.isError, true);
+        assert.match(received[1].result.content[0].text, /only user questions/);
+      }
+      input.end();
+      lines.close();
+    });
   await assert.rejects(
     proveCursorMcpTools({
       OPENPE_AGENT_BRIDGE_URL: capabilityUrl,

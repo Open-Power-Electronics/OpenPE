@@ -1,6 +1,6 @@
 # OpenPE documentation
 
-Choose a workflow below. Each feature contract owns its detailed behaviour and limits; the [engineering contract](../AGENTS.md) defines contribution requirements.
+Choose a workflow below. Each feature contract owns its detailed behaviour and limits. See [Contributing](../CONTRIBUTING.md) for issues and pull requests.
 
 <!-- prettier-ignore -->
 | Work | Read |

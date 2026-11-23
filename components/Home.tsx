@@ -4,7 +4,7 @@ import { Blocks, FolderPlus, FolderOpen, Home as HomeIcon, Settings } from 'luci
 import { homeExampleCatalog, type HomeExampleId as ExampleId } from '@/lib/home-examples';
 import HomeProjectCard from './HomeProjectCard';
 import HomeProjectSection from './HomeProjectSection';
-import HomeHeroBackdrop from './HomeHeroBackdrop';
+import HomeBackdrop from './HomeBackdrop';
 import AgentComposer, { type AgentComposerProps } from './AgentComposer';
 import NavigationButton from './NavigationButton';
 import AgentPicker, { type AgentPickerProps } from './AgentPicker';
@@ -114,65 +114,71 @@ export default function Home({
         <NavigationButton compact icon={Settings} label="Settings" onClick={onSettings} />
       </nav>
       <section className="home-surface" aria-label="Welcome to OpenPE">
-        <div className="home-content">
-          <div className="home-intro">
-            <HomeHeroBackdrop />
-            <div className="home-hero">
-              <div className="home-brand">
-                <img src="/brand/openpe-mark.svg" width="48" height="48" alt="" draggable={false} />
-                <span>
-                  Open<span className="home-brand-ee">PE</span>
-                </span>
-              </div>
-              <h1>
-                What will you <span>Power</span> next, <span>Engineer?</span>
-              </h1>
-            </div>
-            {error && (
-              <p className="home-recovery-error" role="alert">
-                {error}
-              </p>
-            )}
-            {previewError && (
-              <p role="alert">
-                {previewError}{' '}
-                <button className="secondary" onClick={() => setPreviewError('')}>
-                  Retry previews
-                </button>
-              </p>
-            )}
-            {discoveryError && <p role="alert">{discoveryError}</p>}
-            {actionError && <p role="alert">{actionError}</p>}
-            <AgentComposer
-              {...composer}
-              requiresAgent={false}
-              className="home-composer"
-              input={brief}
-              setInput={setBrief}
-              inputLabel="Describe your circuit"
-              submitLabel="Start project"
-              maxLength={16000}
-              onSubmit={() => onNew(brief.trim())}
-            />
-          </div>
-          {sections.map((section) => (
-            <HomeProjectSection key={section.id} title={section.title}>
-              {(expanded) =>
-                section.examples.map((example) => (
-                  <HomeProjectCard
-                    key={example.id}
-                    entry={example}
-                    active={active && expanded}
-                    recent={section.id === 'recent-heading'}
-                    revision={revision}
-                    preview={previews.get(example.id)}
-                    onOpen={onExample}
-                    onError={setActionError}
+        <HomeBackdrop />
+        <div className="home-scroll">
+          <div className="home-content">
+            <div className="home-intro">
+              <div className="home-hero">
+                <div className="home-brand">
+                  <img
+                    src="/brand/openpe-mark.svg"
+                    width="36"
+                    height="36"
+                    alt=""
+                    draggable={false}
                   />
-                ))
-              }
-            </HomeProjectSection>
-          ))}
+                  <span>OpenPE</span>
+                </div>
+                <h1>
+                  What will you <strong>Power</strong> next, <strong>Engineer</strong>
+                </h1>
+              </div>
+              {error && (
+                <p className="home-recovery-error" role="alert">
+                  {error}
+                </p>
+              )}
+              {previewError && (
+                <p role="alert">
+                  {previewError}{' '}
+                  <button className="secondary" onClick={() => setPreviewError('')}>
+                    Retry previews
+                  </button>
+                </p>
+              )}
+              {discoveryError && <p role="alert">{discoveryError}</p>}
+              {actionError && <p role="alert">{actionError}</p>}
+              <AgentComposer
+                {...composer}
+                requiresAgent={false}
+                className="home-composer"
+                input={brief}
+                setInput={setBrief}
+                inputLabel="Describe your circuit"
+                submitLabel="Start project"
+                maxLength={16000}
+                onSubmit={() => onNew(brief.trim())}
+              />
+            </div>
+            {sections.map((section) => (
+              <HomeProjectSection key={section.id} title={section.title}>
+                {(expanded) =>
+                  section.examples.map((example) => (
+                    <HomeProjectCard
+                      key={example.id}
+                      entry={example}
+                      active={active && expanded}
+                      recent={section.id === 'recent-heading'}
+                      revision={revision}
+                      preview={previews.get(example.id)}
+                      onOpen={onExample}
+                      onError={setActionError}
+                    />
+                  ))
+                }
+              </HomeProjectSection>
+            ))}
+          </div>
         </div>
       </section>
     </div>

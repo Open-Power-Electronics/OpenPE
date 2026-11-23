@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { agentQuestions, createAgentQuestionBridge } from '../server/agent-questions.mjs';
 import { startServer } from '../server/index.mjs';
-import { runAgent } from '../server/agents.mjs';
+import { runAgent, runRawAgent } from '../server/agents.mjs';
 import { readChatEvents, type AgentQuestionRequest } from '../lib/chat-stream';
 import { updateAgentProcess } from '../lib/agent-process';
 import AgentProcess from '../components/AgentProcess';
@@ -158,82 +158,115 @@ test('live work displays directly and completed work stays collapsed without an 
   );
 });
 
-test('all runnable harnesses receive the user answer through their native tool and continue the same run', async (t) => {
-  for (const provider of ['codex', 'claude', 'deepseek', 'pi'] as const) {
-    await t.test(provider, async () => {
-      const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-questions-test-'));
-      const service = await startServer({
-        dataDir: directory,
-        agentRunner: (id, request, cwd, emit, signal, options) =>
-          runAgent(id, request, cwd, emit, signal, {
-            ...options,
-            resolve: async () => ({
-              file: process.execPath,
-              args: [path.resolve('tests/fixtures/agent-question-cli.mjs'), provider],
-              env: { ...process.env },
-            }),
-          }),
-      });
-      try {
-        const headers = { 'Content-Type': 'application/json', 'X-OpenPE-Token': service.token };
-        const response = await fetch(service.base + '/api/chat', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
+for (const rawMode of [false, true]) {
+  test(`${rawMode ? 'Raw KiCad' : 'Workbench'} delivers answers to native Agent tools in the same run`, async (t) => {
+    for (const provider of ['codex', 'claude', 'deepseek', 'pi'] as const)
+      await t.test(provider, async () => {
+        const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-questions-test-'));
+        const resolve = async () => ({
+          file: process.execPath,
+          args: [
+            path.resolve('tests/fixtures/agent-question-cli.mjs'),
             provider,
-            prompt: 'Configure output',
-            context: { title: 'Fixture' },
-            history: [],
-            sessionId: provider,
-          }),
+            ...(rawMode ? ['raw-kicad'] : []),
+          ],
+          env: { ...process.env },
         });
-        let request: AgentQuestionRequest | undefined;
-        const answers: Promise<void>[] = [];
-        const progress: string[] = [];
-        let text = '',
-          outcome = '';
-        await readChatEvents(response.body!, (event) => {
-          if (event.type === 'process') progress.push(event.text);
-          if (event.type === 'question-request') {
-            request = event;
-            answers.push(
-              (async () => {
-                const { type: _, questions, ...identity } = event;
-                const reply = await fetch(service.base + '/api/chat/answer', {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({ ...identity, answers: { [questions[0].id]: ['12 V'] } }),
-                });
-                assert.equal(reply.status, 200);
-              })(),
-            );
+        const service = await startServer({
+          dataDir: directory,
+          agentRunner: (id, request, cwd, emit, signal, options) =>
+            runAgent(id, request, cwd, emit, signal, { ...options, resolve }),
+          rawAgentRunner: (id, request, emit, signal, options) =>
+            runRawAgent(id, request, emit, signal, { ...options, resolve }),
+        });
+        try {
+          const headers = {
+            'Content-Type': 'application/json',
+            'X-OpenPE-Token': service.token,
+            Origin: service.base,
+          };
+          let sessionId: string = provider;
+          if (rawMode) {
+            const file = path.join(directory, 'design.kicad_sch');
+            await writeFile(file, '(kicad_sch)\r\n');
+            service.setRawKiCadMode(true);
+            sessionId = (await service.selectRawKiCadFiles([file])).id;
           }
-          if (event.type === 'text-delta') text += event.delta;
-          if (event.type === 'text-replace') text = event.text;
-          if (event.type === 'error') assert.fail(event.text);
-          if (event.type === 'done') outcome = event.outcome || '';
-        });
-        await Promise.all(answers);
-        assert.equal(outcome, 'completed');
-        assert.equal(text, 'Output is 12 V.');
-        assert.ok(progress.includes('Checking output.'));
-        assert.ok(request);
-        const stale = await fetch(service.base + '/api/chat/answer', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(request),
-        });
-        assert.equal(stale.status, 409);
-        const unauthorized = await fetch(service.base + '/api/agent-questions/' + request.runId, {
-          method: 'POST',
-          headers,
-          body: '{}',
-        });
-        assert.equal(unauthorized.status, 401);
-      } finally {
-        await service.close();
-        await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
-      }
-    });
-  }
-});
+          const response = await fetch(
+            service.base + (rawMode ? '/api/raw-kicad/chat' : '/api/chat'),
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                provider,
+                prompt: 'Configure output',
+                history: [],
+                ...(rawMode
+                  ? { selection: sessionId }
+                  : { context: { title: 'Fixture' }, sessionId }),
+              }),
+            },
+          );
+          let request: AgentQuestionRequest | undefined;
+          const answers: Promise<void>[] = [];
+          const progress: string[] = [];
+          let text = '',
+            outcome = '';
+          await readChatEvents(response.body!, (event) => {
+            if (event.type === 'process') progress.push(event.text);
+            if (event.type === 'question-request') {
+              request = event;
+              answers.push(
+                (async () => {
+                  const { type: _, questions, ...identity } = event;
+                  assert.equal(identity.sessionId, sessionId);
+                  const body = JSON.stringify({
+                    ...identity,
+                    answers: { [questions[0].id]: ['12 V'] },
+                  });
+                  const { Origin: _origin, ...otherOrigin } = headers;
+                  const wrongOrigin = await fetch(service.base + '/api/chat/answer', {
+                    method: 'POST',
+                    headers: otherOrigin,
+                    body,
+                  });
+                  assert.equal(wrongOrigin.status, 409);
+                  const reply = await fetch(service.base + '/api/chat/answer', {
+                    method: 'POST',
+                    headers,
+                    body,
+                  });
+                  assert.equal(reply.status, 200);
+                })(),
+              );
+            }
+            if (event.type === 'text-delta') text += event.delta;
+            if (event.type === 'text-replace') text = event.text;
+            if (event.type === 'error') assert.fail(event.text);
+            if (event.type === 'done') outcome = event.outcome || '';
+          });
+          await Promise.all(answers);
+          assert.equal(outcome, 'completed');
+          assert.equal(text, 'Output is 12 V.');
+          if (!rawMode) assert.ok(progress.includes('Checking output.'));
+          else assert.deepEqual(progress, []);
+          assert.ok(request);
+          const stale = await fetch(service.base + '/api/chat/answer', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(request),
+          });
+          assert.equal(stale.status, 409);
+          const unauthorized = await fetch(service.base + '/api/agent-questions/' + request.runId, {
+            method: 'POST',
+            headers,
+            body: '{}',
+          });
+          assert.equal(unauthorized.status, 401);
+        } finally {
+          await service.close();
+          await rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+        }
+      });
+  });
+}

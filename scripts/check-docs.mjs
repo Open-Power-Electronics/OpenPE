@@ -7,6 +7,7 @@ import remarkParse from 'remark-parse';
 const parser = unified().use(remarkParse);
 const entryPoints = [
   'README.md',
+  'CONTRIBUTING.md',
   'AGENTS.md',
   'DESIGN.md',
   'assets/README.md',

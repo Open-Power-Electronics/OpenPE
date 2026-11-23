@@ -4,16 +4,28 @@ OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or
 
 ## Install the app
 
-Download the host installer from [Releases](https://github.com/fleaxiao/OpenPE/releases). Run the Windows NSIS installer, drag the macOS app from its disk image to Applications, or install the Linux Debian package / executable AppImage. Solvers, libraries and examples are bundled; end users do not prepare them separately.
+Check [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) for a desktop installer for your host. If one is unavailable, [run from source](#run-from-source). Desktop installers include solvers, libraries and examples.
+
+For complete offline component previews, [add the official KiCad STEP library](LIBRARIES.md#add-the-official-step-library).
+
+Run the Windows NSIS setup wizard, choose the installation folder, then select
+**Install**. Fresh installations use the current user account. The finish page
+offers **Launch OpenPE**. On macOS,
+drag the app from its disk image to Applications. On Linux, install the Debian
+package or run the executable AppImage.
 
 The macOS build is unsigned. If Gatekeeper blocks first launch, Control-click OpenPE and choose Open, or allow it under System Settings → Privacy & Security.
 
-For Debian, use `sudo apt install ./openpe_0.1.0_amd64.deb`. Without FUSE, pass `--appimage-extract-and-run` to the AppImage.
+For Debian, install the downloaded `.deb` with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to the AppImage.
 
 ## Run from source
 
 Install Node.js 24 and Git. On macOS, install Xcode Command Line Tools with
 `xcode-select --install`.
+
+On Linux x64, prebuilt solver archives are currently unavailable. Follow the
+[Linux solver build steps](#maintainer-solver-builds) after `npm ci` and before
+starting the app, preparing examples or building OpenPE.
 
 ```sh
 npm ci
@@ -72,7 +84,7 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 
 ## Packaging
 
-`npm run package` prepares libraries, regenerates brand assets, builds the renderer and invokes electron-builder. It then checks that the packaged service resolves its runtime modules inside the application.
+`npm run package` prepares libraries, regenerates brand assets, builds the renderer and invokes electron-builder for local output. It then checks the packaged service's runtime modules and confirms that the Cursor SDK is external.
 
 | Host        | Output                                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------- |
@@ -100,9 +112,9 @@ for application-owned stores and generated files.
 
 ## Solver release access
 
-Ordinary `simulation:prepare` and `thermal:prepare` install or reuse verified host bundles; they do not compile or read credentials. `simulation:verify` and `thermal:verify` check installed resources offline. Runtime release archives require pinned SHA-256, size and file hashes; unexpected entries and links are rejected. GitHub redirects stay on approved GitHub asset hosts.
+Ordinary `simulation:prepare` and `thermal:prepare` install or reuse verified host bundles; they do not compile or read credentials. `simulation:verify` and `thermal:verify` check installed resources offline. Runtime release archives require pinned SHA-256, size and file hashes; unexpected entries and links are rejected. GitHub redirects stay on approved GitHub hosts. Signed query parameters are accepted on GitHub's asset CDN hosts.
 
-Private or unpublished macOS/Linux assets can return `Missing GitHub release asset`. Collaborators can use `gh release download` with their own authenticated account to fetch the lock's tag/asset, then install the local archives:
+If an archive is unavailable, prepare it with the [matching build command](#maintainer-solver-builds). If you already have copies of the pinned archives, install them directly:
 
 ```sh
 npm run simulation:prepare -- --archive path/to/ngspice.tar.gz
@@ -120,4 +132,4 @@ Maintainer rebuilds write to `release/solvers/`; the locks record archive names,
 
 Linux `--update-lock` explicitly refreshes reviewed file/archive pins. Before Linux archives are available, build with `npm run solvers:build-linux -- --update-lock`, review the diff, then run solver preparation before example preparation. Ordinary archive installation needs no compiler. [SPICE build details](SIMULATION.md#portable-models-and-bundled-solver) · [Thermal build details](THERMAL.md#runtime-and-lifecycle)
 
-`npm run solvers:publish` publishes the current macOS/Linux host's two archives as prereleases with `--latest=false`. **Owner approval is required before publishing.**
+`npm run solvers:publish` publishes the current macOS/Linux host's two archives to `Open-Power-Electronics/OpenPE` as prereleases with `--latest=false`. Make the corresponding sources, build scripts and notices available alongside the binary downloads. **Owner approval is required before publishing.**

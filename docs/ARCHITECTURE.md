@@ -347,7 +347,7 @@ PE Layout Skill loads only fixed IDs from pinned resources, verifies hashes/life
 
 Raw KiCad mode is a desktop window mode and starts off. `DesktopWorkspace` retains the mounted workbenches, blocks Core edits, suspends capability hosts and pauses recovery writes. Chat cancels normal generation and active reviews. Electron switches the authenticated loopback service and gates normal native operations while the mode is active. A transition interrupts in-flight service requests. The mode leaves installed plugins and their settings in place for the next workbench view.
 
-Electron's native picker admits only explicitly selected files. `server/raw-kicad-chat.mjs` reads the bounded original UTF-8 text into one in-memory selection and returns an opaque ID and filenames. On Send, the separate chat route joins the user's message, bounded raw conversation history and complete file text, then calls only the selected provider's message transport. No native design parsers, integrations or project context participate. A frame replacement or mode exit cancels raw chat, revokes the selection and resumes the regular admission rules. Unsaved work still uses normal close review. [API](API.md#raw-kicad-transport) owns limits and request shapes.
+Electron's native picker admits only explicitly selected files. `server/raw-kicad-chat.mjs` reads the bounded original UTF-8 text into one in-memory selection and returns an opaque ID and filenames. On Send, the separate chat route joins the user's message, bounded raw conversation history and complete file text. The selected provider receives that text and the same bounded clarification bridge used by Workbench. Raw KiCad renders questions with the shared Agent cards. Workbench capability and steering transports stay blocked, and native design parsers and project context stay outside this path. A frame replacement or mode exit cancels raw chat, revokes the selection and resumes the regular admission rules. Unsaved work still uses normal close review. [API](API.md#raw-kicad-transport) owns limits and request shapes.
 
 ### A transient run
 
@@ -392,7 +392,7 @@ keyboard/IME-safe Pin/Unpin and removal from the list.
 | Appearance and Layout preferences     | App data `appearance-v1.json` and `layout-preferences-v1.json`; independent settings                                             |
 | Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                            |
 | Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                         |
-| Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/`, with any existing PDFs |
+| Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/` under the [example asset rules](EXAMPLES.md#original-project-directories-and-portable-assets) |
 | Destination-bound project history     | App data `project-history-v1/<normalized-destination-sha256>.git`; outside every project directory                              |
 | Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                           |
 | Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                                 |
@@ -427,15 +427,15 @@ alongside Home preparation, while bundled solver preparation runs in parallel.
 All stages must succeed before `next build`. `npm run package` runs
 `scripts/package-desktop.mjs` after `libraries:download`. It regenerates the
 brand icons, runs the production build, then `electron-builder`.
-electron-builder packages npm dependencies and optionalDependencies.
-`@cursor/sdk` loads peer dependency `zod` (`^3.25.0 || ^4.0.0`) at runtime, so
-OpenPE declares `zod` directly (`^4.6.7`, the installed release that satisfies
-that peer range and exports `zod/v4` and `zod/v4-mini`). The command then runs
+electron-builder packages npm dependencies and matching optionalDependencies.
+The command then runs
 `scripts/check-packaged-modules.mjs` with `ELECTRON_RUN_AS_NODE=1` from the app
 resources directory. The check resolves every bare import reachable from the
-packaged service, including `@cursor/sdk`, `express`, `occt-import-js`,
-`pdfjs-dist`, `@napi-rs/canvas`, and the host Cursor platform package's
-tree-sitter natives, and fails if a module resolves outside the archive.
+packaged service, including `express`, `occt-import-js`, `pdfjs-dist`, and
+`@napi-rs/canvas`, and fails if a module resolves outside the archive or any
+Cursor SDK package is present. The service's `agent-cursor-sdk.mjs` loader
+is the explicit external-module boundary. It loads a verified version-specific
+entry from the [host's detected SDK](PLUGINS.md#provider-discovery-and-management).
 
 The supported hosts and package paths are listed in [Packaging](DEVELOPMENT.md#packaging).
 Icons derive from the Signal E master. macOS signing stays off, with entitlements
@@ -444,14 +444,13 @@ in `build/entitlements.mac.plist`. Linux desktop metadata matches
 and sets directories and executables to 0755, other files to 0644. Umask 022
 keeps later `.desktop` entries readable after root-owned installation.
 
-Shared `extraResources` are native examples, the project group, KiCad libraries,
-`resources/thermal/1`, `resources/example-catalog/simulation/models`, and the
+Shared `extraResources` are native examples, the project group, the
+[desktop KiCad library subset](LIBRARIES.md#resources-and-preparation),
+`resources/thermal/1`, and the
 ngspice manifest and source notice. ngspice runtime files are `build.win`, `build.mac` and
 `build.linux` `extraResources`, matching the `win32-x64`, `darwin-arm64` and `linux-x64` file
 lists in `resources/ngspice-lock.json` exactly. `asarUnpack` extracts
-`occt-import-js`, `@napi-rs`, and the host `@cursor/sdk` platform package
-(`@cursor/sdk-darwin-arm64`, `@cursor/sdk-win32-x64` or `@cursor/sdk-linux-x64`), including its
-tree-sitter N-API binaries and helper executables, outside the archive.
+`occt-import-js` and `@napi-rs` outside the archive.
 Development checks solver resources alongside the format and Home cache.
 Thermal checks run before ngspice checks because the bundles share source
 archives on Linux. A cache miss rebuilds formats and waits for the prepared

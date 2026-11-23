@@ -18,7 +18,7 @@ const launch = (mode = 'normal') => ({
   env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
 });
 
-test('Agent detection retains all supported identities when no CLI is installed', async () => {
+test('Agent detection retains all supported identities when no runtime is detected', async () => {
   const calls: string[] = [];
   const agents = await detectAgents({
     resolve: async (id: string) => {
@@ -27,6 +27,9 @@ test('Agent detection retains all supported identities when no CLI is installed'
     },
     exec: async () => {
       throw new Error('Missing agents must not execute');
+    },
+    findCursorSdk: async () => {
+      throw new Error('Fixture missing Cursor SDK');
     },
   });
   assert.deepEqual(calls, ['codex', 'claude', 'deepseek', 'pi']);
@@ -42,15 +45,16 @@ test('Agent detection retains all supported identities when no CLI is installed'
     assert.match(agent.error, /missing CLI/);
   }
   const missingCursor: any = agents.find((agent: any) => agent.id === 'cursor');
-  assert.equal(missingCursor?.installed, true);
+  assert.equal(missingCursor?.installed, false);
   assert.equal(missingCursor?.available, false);
-  assert.match(missingCursor?.error, /API key/);
+  assert.match(missingCursor?.error, /missing Cursor SDK/);
 });
 
 test('Detection distinguishes missing, incompatible and safely runnable agents without inference', async () => {
   const operations: string[] = [];
   const agents = await detectAgents({
     resolve: async (id: string) => ({ file: id, args: [], env: {} }),
+    findCursorSdk: async () => ({ version: 'fixture' }),
     exec: async (file: string, args: string[]) => {
       operations.push(`${file} ${args.join(' ')}`);
       return {

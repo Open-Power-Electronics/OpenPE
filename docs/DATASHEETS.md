@@ -155,8 +155,8 @@ and `examples/project/emc-flyback/datasheets/` for EMC Flyback. Original PDF byt
 and [rights notice](../public/licenses/example-datasheets.txt) are retained. A fresh checkout must run the
 download command for local PDFs. Normal builds and startup do not download
 PDFs. An explicit full-page query may download its pinned document on demand.
-Builds validate and bundle the internal Agent reference catalog; packaging
-also includes the actual example directory and any existing PDFs. The unit regressions validate metadata and exercise the
+Builds validate and bundle the internal Agent reference catalog. Desktop packages
+omit vendor PDFs. The unit regressions validate metadata and exercise the
 downloader using synthetic responses without requiring vendor files or network.
 
 `tests/project-directory.test.ts` covers grant-bound text, local PDF reads and

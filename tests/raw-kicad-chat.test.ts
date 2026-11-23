@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { readChatEvents, type AgentQuestionRequest } from '../lib/chat-stream';
 import { runRawAgent } from '../server/agents.mjs';
+import { createAgentQuestionBridge } from '../server/agent-questions.mjs';
 import { startServer } from '../server/index.mjs';
 import { createRawKiCadSession } from '../server/raw-kicad-chat.mjs';
 
@@ -44,12 +46,20 @@ test('Raw KiCad captures exact file text and preserves a valid selection on reje
 test('raw Codex transport forwards the exact prompt and skips workbench instructions and tools', async () => {
   const fixture = fileURLToPath(new URL('./fixtures/agent-cli.mjs', import.meta.url));
   const events: { type: string; text?: string; delta?: string }[] = [];
+  const signal = new AbortController().signal;
+  const questions = createAgentQuestionBridge({
+    sessionId: 'raw-fixture',
+    signal,
+    origin: undefined,
+    emit: () => {},
+  });
   const result = await runRawAgent(
     'codex',
     { prompt: 'Fixture raw prompt\r\n(kicad_pcb)' },
     (event: (typeof events)[number]) => events.push(event),
-    new AbortController().signal,
+    signal,
     {
+      questions: { ...questions, url: 'http://127.0.0.1:9/api/agent-questions/' + questions.id },
       resolve: async () => ({
         file: process.execPath,
         args: [fixture, 'raw-kicad'],
@@ -57,11 +67,12 @@ test('raw Codex transport forwards the exact prompt and skips workbench instruct
       }),
     },
   );
+  questions.close();
   assert.equal(result.outcome, 'completed', JSON.stringify(events));
   assert.ok(events.some((event) => ['text-delta', 'text-replace'].includes(event.type)));
 });
 
-test('Raw KiCad HTTP permits only message transport and revokes live turns and file IDs', async (t) => {
+test('Raw KiCad HTTP isolates capabilities and revokes live turns and file IDs', async (t) => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-raw-route-'));
   t.after(() => rm(dataDir, { recursive: true, force: true }));
   const file = path.join(dataDir, 'design.kicad_sch');
@@ -71,6 +82,7 @@ test('Raw KiCad HTTP permits only message transport and revokes live turns and f
   const normalStarted = Promise.withResolvers<void>();
   const normalStopped = Promise.withResolvers<void>();
   const rawStopped = Promise.withResolvers<void>();
+  const rawQuestions = Promise.withResolvers<{ url: string; token: string }>();
   function stopped(signal: AbortSignal) {
     return signal.aborted
       ? Promise.resolve()
@@ -97,13 +109,15 @@ test('Raw KiCad HTTP permits only message transport and revokes live turns and f
       request: { prompt: string },
       emit: (event: object) => void,
       signal: AbortSignal,
-      options: object = {},
+      options,
     ) => {
       calls.push([provider, request, Object.keys(options)]);
       emit({ type: 'status', text: 'private status' });
       emit({ type: 'question-request', token: 'private token' });
       emit({ type: 'text-delta', delta: 'Raw reply' });
       if (request.prompt.startsWith('Wait')) {
+        assert.ok(options?.questions);
+        rawQuestions.resolve(options.questions);
         await stopped(signal);
         rawStopped.resolve();
         return { outcome: 'cancelled' };
@@ -145,7 +159,10 @@ test('Raw KiCad HTTP permits only message transport and revokes live turns and f
       409,
     );
     assert.equal((await post('chat', normalBody)).status, 409);
-    assert.equal((await post('agent-questions/fixture', {})).status, 409);
+    assert.equal((await post('agent-questions/fixture', {})).status, 401);
+    assert.equal((await post('chat/tool-result', {})).status, 409);
+    assert.equal((await post('chat/steer', {})).status, 409);
+    assert.equal((await post('agent-tools/fixture', {})).status, 409);
     assert.equal((await raw(payload, { Origin: 'https://foreign.example' })).status, 403);
     assert.equal((await raw(payload, { 'X-OpenPE-Token': 'invalid' })).status, 401);
     assert.equal((await raw({ ...payload, context: {} })).status, 400);
@@ -164,16 +181,38 @@ test('Raw KiCad HTTP permits only message transport and revokes live turns and f
           effort: undefined,
           parameters: undefined,
         },
-        ['cursorCredential'],
+        ['cursorCredential', 'questions'],
       ],
     ]);
     const waiting = await raw({ ...payload, prompt: 'Wait' });
-    const ended = waiting.text().catch(() => '');
     assert.equal(waiting.status, 200);
     assert.equal((await raw(payload)).status, 409);
+    const bridge = await rawQuestions.promise;
+    const question = Promise.withResolvers<AgentQuestionRequest>();
+    const closed = Promise.withResolvers<string>();
+    const ended = readChatEvents(waiting.body!, (event) => {
+      if (event.type === 'question-request') question.resolve(event);
+      if (event.type === 'question-closed') closed.resolve(event.requestId);
+    }).catch(() => {});
+    const nativeControl = new AbortController();
+    const ask = (token: string, signal: AbortSignal) =>
+      fetch(bridge.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-OpenPE-Agent-Token': token },
+        body: JSON.stringify({ questions: [{ id: 'voltage', question: 'Output voltage?' }] }),
+        signal,
+      });
+    assert.equal((await ask('invalid', nativeControl.signal)).status, 401);
+    const nativeWait = assert.rejects(ask(bridge.token, nativeControl.signal), { name: 'AbortError' });
+    const { type: _type, questions: _questions, ...identity } = await question.promise;
+    nativeControl.abort();
+    await nativeWait;
+    assert.equal(await closed.promise, identity.requestId);
+    assert.equal((await post('chat/answer', { ...identity, answers: { voltage: ['12 V'] } })).status, 409);
     service.setRawKiCadMode(false);
     await rawStopped.promise;
     await ended;
+    assert.equal((await ask(bridge.token, AbortSignal.timeout(5000))).status, 401);
     assert.equal((await plugins()).status, 200);
     service.setRawKiCadMode(true);
     assert.equal((await raw(payload)).status, 400);

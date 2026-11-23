@@ -90,10 +90,14 @@ function agentQuestionConnection(env = process.env) {
   return { url: url.href, token: env.OPENPE_QUESTIONS_TOKEN };
 }
 
-/** Capability tools, plus the question tool only when its bridge is fully configured.
+/** Raw KiCad exposes just the question tool. Workbench always has a capability connection.
  * @param {Record<string,string|undefined>} env
  */
-export function agentMcpTools(env = process.env) {
+export function agentMcpTools(env = process.env, questionsOnly = false) {
+  if (questionsOnly) {
+    agentQuestionConnection(env);
+    return [cursorQuestionTool];
+  }
   const url = env.OPENPE_QUESTIONS_URL;
   const token = env.OPENPE_QUESTIONS_TOKEN;
   if ((url === undefined) !== (token === undefined))
@@ -103,15 +107,16 @@ export function agentMcpTools(env = process.env) {
   return [...agentCapabilityTools, cursorQuestionTool];
 }
 
-/** @param {{input?:import('node:stream').Readable, output?:import('node:stream').Writable, env?:Record<string,string|undefined>, request?:typeof fetch}} options */
+/** @param {{input?:import('node:stream').Readable, output?:import('node:stream').Writable, env?:Record<string,string|undefined>, request?:typeof fetch, questionsOnly?:boolean}} options */
 export function startAgentMCP({
   input = process.stdin,
   output = process.stdout,
   env = process.env,
   request = fetch,
+  questionsOnly = false,
 } = {}) {
-  const connection = agentMCPConnection(env);
-  const tools = agentMcpTools(env);
+  const connection = questionsOnly ? null : agentMCPConnection(env);
+  const tools = agentMcpTools(env, questionsOnly);
   const questions = tools.some((tool) => tool.name === cursorQuestionTool.name)
     ? agentQuestionConnection(env)
     : null;
@@ -180,6 +185,7 @@ export function startAgentMCP({
         reply({ content: [{ type: 'text', text: JSON.stringify({ answers: result.answers }) }] });
         return;
       }
+      if (!connection) throw new Error('This OpenPE adapter exposes only user questions.');
       validateAgentCapabilityCall(name, args);
       if (pending >= agentCapabilityLimits.pending)
         throw new Error('Too many pending capability requests.');
@@ -235,7 +241,7 @@ export function startAgentMCP({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    startAgentMCP();
+    startAgentMCP({ questionsOnly: process.argv[2] === '--questions-only' });
   } catch (error) {
     process.stderr.write(error.message + '\n');
     process.exitCode = 1;

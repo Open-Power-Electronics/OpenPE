@@ -2,9 +2,9 @@ Texas Instruments simulation models
 
 TI PSpice model bytes are excluded from the source repository. Example preparation
 downloads the original unencrypted archives from www.ti.com into a private cache
-and saves separate verified model files beside the native Home projects. The allowlisted
-models required by Home are included as separate application resources, prepared
-before examples open; Run does not download referenced models. The original archive and model
+and saves separate verified model files beside the source-tree Home projects.
+Desktop packages exclude the TI libraries. Users can obtain the required models
+through the SPICE model chooser; Run does not download referenced models. The original archive and model
 copyright and warranty notices are preserved. These models are not KiCad library
 data and do not use the KiCad library license.
 

@@ -310,7 +310,10 @@ try {
       'Resize dismisses the menu tree.',
     );
     await boundsWithinViewport(page, await showBranch(page, 'Example'));
-    await page.getByRole('heading', { name: /What will you/ }).click();
+    await page
+      .getByRole('region', { name: 'Welcome to OpenPE', exact: true })
+      .getByRole('heading', { level: 1 })
+      .click();
     assert.equal(
       await file.getAttribute('aria-expanded'),
       'false',

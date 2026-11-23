@@ -37,9 +37,10 @@ app.whenReady().then(async () => {
       safeStorage,
     });
     const apiKey = await store.read();
-    const { cursorCheckRequest, listCursorModels, loadCursorSdk, runCursorAgent } = await import(
+    const { cursorCheckRequest, listCursorModels, runCursorAgent } = await import(
       '../server/agent-cursor.mjs'
     );
+    const { loadCursorSdk } = await import('../server/agent-cursor-sdk.mjs');
     const sdk = await loadCursorSdk();
     const catalog = await listCursorModels(apiKey, sdk);
     if (!Array.isArray(catalog.unavailable))

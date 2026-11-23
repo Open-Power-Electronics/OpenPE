@@ -430,7 +430,7 @@ await writeFile(
     `Source author: ${manifest.examples[0].source.author}`,
     `Source checkout: ${manifest.examples[0].source.commit}`,
     'Selected from the local data/train, data/val and data/test directories.',
-    'The supplied checkout has no top-level dataset license. No additional license is asserted for these designs.',
+    'The nine reference circuit designs listed below are licensed under Apache-2.0. See https://www.apache.org/licenses/LICENSE-2.0.',
     'Embedded KiCad library data retains its upstream terms; see kicad-libraries.txt.',
     'Original source files are retained in resources/example-catalog/sources/<circuit-name>; SHA-256 hashes and source paths are recorded in resources/example-catalog/manifest.json.',
     `Changes: editable OpenPE conversion and KiCad 10 exports; board-edge copper-zone boundaries are clipped to a ${referenceZoneInset} mm board inset while internal partitions and local-zone outlines are retained. TPS61046 enabled copper zones are refilled by the shared OpenPE fill operation with 0.25 mm minimum clearance; the other boards retain saved copper contours. Terminal assemblies and virtual sources/loads form evenly spaced columns spanning the lower circuit. TPS61046 uses a visible 1 kohm output load; the other virtual output resistors are 100 ohms. Virtual sources/loads have no footprints and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels, completed values, explicit ESR/DCR and initial conditions. Instance reference/value text is arranged clear of symbols and wiring. Omitted print settings.`,

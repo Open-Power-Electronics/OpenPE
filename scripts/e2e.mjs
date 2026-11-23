@@ -187,7 +187,7 @@ async function checkHome(page) {
   await capture('test-results/home.png');
   await page.setViewportSize({ width: 1120, height: 760 });
   await capture('test-results/home-compact.png');
-  assert.ok(await page.locator('.home-surface').evaluate((el) => el.scrollWidth <= el.clientWidth));
+  assert.ok(await page.locator('.home-scroll').evaluate((el) => el.scrollWidth <= el.clientWidth));
   assert.equal(await state(), null);
   await page.reload();
   await home.waitFor();
@@ -732,7 +732,10 @@ async function checkAdvancedAppearance(page) {
     .check();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert.notEqual(
-    await page.locator('.home-signal-current').evaluate((el) => getComputedStyle(el).animationName),
+    await page
+      .locator('.home-signal-current')
+      .first()
+      .evaluate((el) => getComputedStyle(el).animationName),
     'none',
   );
   await dialog
@@ -740,7 +743,10 @@ async function checkAdvancedAppearance(page) {
     .getByRole('radio', { name: 'On', exact: true })
     .check();
   assert.equal(
-    await page.locator('.home-signal-current').evaluate((el) => getComputedStyle(el).animationName),
+    await page
+      .locator('.home-signal-current')
+      .first()
+      .evaluate((el) => getComputedStyle(el).animationName),
     'none',
   );
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();

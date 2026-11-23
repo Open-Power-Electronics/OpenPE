@@ -16,7 +16,9 @@ optional model archive. `npm run libraries:download` prepares
 `resources/kicad/10.0.0/`, starter symbols/search indexes and parser source
 archives. Symbols may be packed `.kicad_sym` or `.kicad_symdir` directories.
 Downloads/caches stay outside Git; locks, generators and notices remain tracked.
-`npm run package` prepares/includes versioned resources without `.git` metadata.
+`npm run package` includes the KiCad symbol and footprint libraries, search index,
+and the three starter STEP models. Curated examples retain their own model assets.
+Schematic and PCB editing use these local libraries offline.
 
 Default preparation includes these STEP models:
 
@@ -24,13 +26,31 @@ Default preparation includes these STEP models:
 - `Capacitor_SMD:C_0805_2012Metric`
 - `Package_TO_SOT_SMD:SOT-23`
 
-`npm run libraries:download-models` optionally installs the hash-pinned complete
-collection: 7,236 STEP files, no VRML. Originals/notices live in
+`npm run libraries:download-models` prepares the optional hash-pinned collection
+of 7,236 STEP files for a development checkout. Originals and notices live in
 `resources/kicad/10.0.0/models/`; the archive stays under
 `resources/third-party-source/`. Differing existing files are preserved as
-conflicts. Packaging includes the collection when present.
+conflicts.
 `node scripts/download-kicad-models.mjs --verify` checks existing resources
 offline; the complete collection is separate from default preparation.
+
+### Add the official STEP library
+
+Download the pinned KiCad 10.0.0 source archive from the
+[official KiCad 3D model repository](https://gitlab.com/kicad/libraries/kicad-packages3D/-/tree/10.0.0).
+Extract it, then copy the `*.3dshapes` folders and `LICENSE.md` from the extracted
+repository directory into your OpenPE library model directory. Keep the folder
+names and relative paths. For example, the resulting path ends in
+`library-models/10.0.0/Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step`.
+
+| Host | Library model directory |
+| --- | --- |
+| Windows | `%APPDATA%/OpenPE/library-models/10.0.0/` |
+| macOS | `~/Library/Application Support/OpenPE/library-models/10.0.0/` |
+| Linux | `$XDG_CONFIG_HOME/OpenPE/library-models/10.0.0/` (defaults to `~/.config/OpenPE/library-models/10.0.0/`) |
+
+If you set `OPENPE_DATA_DIR`, use `library-models/10.0.0/` inside that directory.
+Reopen the component preview to use the local STEP files offline.
 
 ## Symbols and embedded designs
 
@@ -534,7 +554,8 @@ embedded pads share one translation; unsafe alignment errors without rewriting
 the board.
 
 Official reads prefer bundled resources, then the private
-`OpenPE/library-models/10.0.0/` cache. A miss may download only the STEP linked by
+library model directory used by [manual STEP setup](#add-the-official-step-library)
+and on-demand caching. A miss may download only the STEP linked by
 the bundled versioned footprint or a validated NextPCB or EasyEDA reference. STEP
 reads use the owning provider's byte limit, fixed source, redirect rejection and STEP validation,
 coalesced requests and atomic verified cache writes. A 404 retains usable 2D

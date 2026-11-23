@@ -218,8 +218,9 @@ if (mode.startsWith('claude-catalog')) {
       assert.equal(e.params.sandbox, 'read-only');
       assert.equal(e.params.approvalPolicy, mode === 'raw-kicad' ? 'never' : 'untrusted');
       if (mode === 'raw-kicad') {
-        assert.equal(e.params.developerInstructions, undefined);
-        assert.equal(e.params.config['features.default_mode_request_user_input'], false);
+        assert.match(e.params.developerInstructions, /Use request_user_input for clarification/);
+        assert.doesNotMatch(e.params.developerInstructions, /workbench|proposal/i);
+        assert.equal(e.params.config['features.default_mode_request_user_input'], true);
         assert.equal(e.params.dynamicTools, undefined);
         assert.ok(process.argv.includes('features.plugins=false'));
         assert.ok(process.argv.includes('mcp_servers={}'));

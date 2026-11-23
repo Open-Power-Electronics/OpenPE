@@ -2,11 +2,10 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertLockedRelease, sha256File } from './solver-release.mjs';
+import { assertLockedRelease, sha256File, SOLVER_RELEASE_REPO } from './solver-release.mjs';
 import { hostSolverPlatform } from '../server/solver-platform.mjs';
 
 const workspace = fileURLToPath(new URL('../', import.meta.url));
-const repo = 'fleaxiao/OpenPE';
 const platform = hostSolverPlatform();
 const releases = [
   ['resources/ngspice-lock.json', `OpenPE ${platform} ngspice 47 console.`],
@@ -50,7 +49,7 @@ for (const [lockFile, summary] of releases) {
     'create',
     archive.tag,
     '--repo',
-    repo,
+    SOLVER_RELEASE_REPO,
     '--title',
     archive.tag,
     '--notes',
@@ -58,5 +57,5 @@ for (const [lockFile, summary] of releases) {
     '--latest=false',
     '--prerelease',
   ]);
-  await gh(['release', 'upload', archive.tag, file, '--repo', repo]);
+  await gh(['release', 'upload', archive.tag, file, '--repo', SOLVER_RELEASE_REPO]);
 }

@@ -33,5 +33,5 @@ process.chdir(root);
 process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
 await run(['scripts/brand-assets.mjs']);
 await run(['scripts/build.mjs']);
-await run(['node_modules/electron-builder/cli.js', ...target]);
+await run(['node_modules/electron-builder/cli.js', ...target, '--publish', 'never']);
 await run(['scripts/check-packaged-modules.mjs']);

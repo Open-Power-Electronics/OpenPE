@@ -408,7 +408,7 @@ test('automatic inspection lists the current project library without a picker or
   assert.equal(await f.inspect('models/LM2596-5.lib', f.grants.create()), null);
   for (const invalid of [
     '../vendor.lib',
-    'circuits/../vendor.lib',
+    'models/../vendor.lib',
     'models/LM2596-5.txt',
     '//host/vendor.lib',
     {},
@@ -537,11 +537,11 @@ test('invalid current-library hints fail before opening the native dialog and re
     'model.exe',
     '../model.lib',
     './model.lib',
-    'circuits/../model.lib',
+    'models/../model.lib',
     'models\\..\\model.lib',
-    'circuits//model.lib',
+    'models//model.lib',
     'models\\\\model.lib',
-    'circuits/',
+    'models/',
     'C:relative.lib',
     'https://vendor.example/model.lib',
     'file:///models/model.lib',

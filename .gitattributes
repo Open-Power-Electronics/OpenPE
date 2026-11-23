@@ -8,7 +8,7 @@ examples/**/thermal/** -diff
 # Pinned upstream assets must retain their original bytes for SHA-256 verification.
 resources/example-catalog/sources/** -text
 resources/third-party-source/newstroke-10.0.0/** -text
-examples/project/emc-flyback/circuits/EMC_flyback_control.lib -text
+examples/project/emc-flyback/models/EMC_flyback_control.lib -text
 resources/example-catalog/footprints/emc-flyback/** -text
 resources/example-catalog/footprints/models/** -text
 plugins/pe-layout-skill/resources/SKILL.md -text

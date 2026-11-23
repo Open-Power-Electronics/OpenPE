@@ -44,7 +44,7 @@ test('all ten original examples retain their actual native filenames and parse a
   });
 });
 
-test('packaging retains the original examples tree including documents and optional PDF files', async () => {
+test('packaging keeps original designs and excludes vendor documents and model libraries', async () => {
   const configuration = JSON.parse(await readFile('package.json', 'utf8'));
   const examples = configuration.build.extraResources.find(
     (entry: { from: string; to: string }) =>
@@ -66,7 +66,15 @@ test('packaging retains the original examples tree including documents and optio
     !filter
       .filter((pattern: string) => pattern.startsWith('!'))
       .some((pattern: string) => path.matchesGlob(file, pattern.slice(1)));
-  assert.ok(includes(examples.filter, 'lm2596-to220-5-buck/datasheets/controller.pdf'));
+  for (const file of [
+    'lm2596-to220-5-buck/datasheets/controller.pdf',
+    'lm2596-to220-5-buck/models/LM2596.lib',
+    'lm2596-to220-5-buck/models/ti/hash/controller.lib',
+    'lm2596-to220-5-buck/attachments/LM2596-5.lib',
+  ])
+    assert.equal(includes(examples.filter, file), false, file);
+  assert.equal(includes(projectResources.filter, 'emc-flyback/datasheets/controller.pdf'), false);
+  assert.equal(includes(projectResources.filter, 'emc-flyback/models/ti/hash/controller.lib'), false);
   assert.equal(includes(examples.filter, 'project'), false);
   for (const file of [
     'emc-flyback/emc-flyback.kicad_pro',
@@ -76,7 +84,6 @@ test('packaging retains the original examples tree including documents and optio
     'emc-flyback/footprints/EMC_Demo.pretty/device.kicad_mod',
     'emc-flyback/models/device.step',
     'emc-flyback/models/control.lib',
-    'emc-flyback/datasheets/controller.pdf',
   ]) {
     assert.ok(includes(projectResources.filter, file), file);
     assert.equal(includes(examples.filter, 'project/' + file), false, file);
@@ -101,12 +108,13 @@ test('packaging retains the original examples tree including documents and optio
   );
   assert.ok(configuration.build.files.includes('resources/example-catalog/manifest.json'));
   assert.ok(configuration.build.files.includes('server/**/*'));
-  assert.ok(
+  assert.equal(
     configuration.build.extraResources.some(
       (entry: { from: string; to: string }) =>
-        entry.from === 'public/licenses/ti-models.txt' &&
-        entry.to === 'simulation-examples/NOTICE.txt',
+        entry.from === 'resources/example-catalog/simulation/models' ||
+        entry.to.startsWith('simulation-examples/'),
     ),
+    false,
   );
 });
 
@@ -130,15 +138,27 @@ test('packaging keeps pinned manufacturer models and notices beside their shared
       'resources/example-catalog/sources/emc-flyback/design/EMC_Demo.pretty/**/*',
     ),
   );
-  assert.ok(
-    configuration.build.extraResources.some(
-      (entry: { from: string; to: string; filter: string[] }) =>
-        entry.from === 'resources/example-catalog/simulation/models' &&
-        entry.to === 'simulation-examples/models' &&
-        entry.filter.length === 1 &&
-        entry.filter[0] === '*.lib',
-    ),
+});
+
+test('packaging includes KiCad symbols, footprints and only the three starter STEP files', async () => {
+  const configuration = JSON.parse(await readFile('package.json', 'utf8'));
+  const { filter } = configuration.build.extraResources.find(
+    (entry: { from: string }) => entry.from === 'resources/kicad/10.0.0',
   );
+  const includes = (file: string) =>
+    filter.some((pattern: string) => !pattern.startsWith('!') && path.matchesGlob(file, pattern));
+  for (const file of [
+    'library-index.json',
+    'symbols/Device.kicad_sym',
+    'footprints/Resistor_SMD.pretty/R_0805_2012Metric.kicad_mod',
+    'models/LICENSE.md',
+    'models/Resistor_SMD.3dshapes/R_0805_2012Metric.step',
+    'models/Capacitor_SMD.3dshapes/C_0805_2012Metric.step',
+    'models/Package_TO_SOT_SMD.3dshapes/SOT-23.step',
+  ])
+    assert.ok(includes(file), file);
+  assert.equal(includes('models/Package_SO.3dshapes/SOIC-8.step'), false);
+  assert.equal(includes('models/openpe-source.json'), false);
 });
 
 test('ngspice packaging matches each platform lock and keeps Windows files on win', async () => {

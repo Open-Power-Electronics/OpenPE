@@ -24,8 +24,6 @@ test('packaged module hosts are explicit for macOS arm64, Windows x64 and Linux 
     packagedHost('win32', 'x64').resources,
     path.join(root, 'release', 'win-unpacked', 'resources'),
   );
-  assert.equal(packagedHost('darwin', 'arm64').cursor, '@cursor/sdk-darwin-arm64');
-  assert.equal(packagedHost('win32', 'x64').cursor, '@cursor/sdk-win32-x64');
   assert.equal(packagedHost('darwin', 'arm64').canvas, '@napi-rs/canvas-darwin-arm64');
   assert.equal(packagedHost('win32', 'x64').canvas, '@napi-rs/canvas-win32-x64-msvc');
   assert.equal(
@@ -36,44 +34,21 @@ test('packaged module hosts are explicit for macOS arm64, Windows x64 and Linux 
     packagedHost('linux', 'x64').resources,
     path.join(root, 'release/linux-unpacked/resources'),
   );
-  assert.equal(packagedHost('linux', 'x64').cursor, '@cursor/sdk-linux-x64');
   assert.equal(packagedHost('linux', 'x64').canvas, '@napi-rs/canvas-linux-x64-gnu');
   assert.throws(() => packagedHost('linux', 'arm64'), /Unsupported package host/);
 });
 
-test('Cursor SDK static imports include zod subpaths and skip the Bun sqlite loader', () => {
-  const source = readFileSync(
-    path.join(root, 'node_modules', '@cursor', 'sdk', 'dist', 'esm', 'index.js'),
-    'utf8',
-  );
-  const closed = collectRuntimeSpecifiers(source, 'index.js', { dynamicImports: false });
-  for (const specifier of [
-    'zod',
-    'zod/v3',
-    'zod/v4',
-    'zod/v4-mini',
-    '@bufbuild/protobuf',
-    '@connectrpc/connect',
-  ])
-    assert.equal(closed.imported.includes(specifier), true, specifier);
-  assert.equal(
-    [...closed.imported, ...closed.required, ...closed.resolved].includes('bun:sqlite'),
-    false,
-  );
-  assert.equal(source.includes('import("bun:sqlite")'), true);
-});
-
-test('service specifier scan keeps Cursor and ignores bundled ajv source strings', () => {
+test('service specifier scan detects literal dependencies and ignores bundled ajv source strings', () => {
   const sample = `
     import express from 'express';
-    const sdk = await import('@cursor/sdk');
-    require.resolve('@cursor/sdk');
+    const sdk = await import('occt-import-js');
+    require.resolve('occt-import-js');
     const code = 'require("ajv/dist/runtime/equal").default';
     await import('./agent-acp.mjs');
   `;
   const specifiers = collectRuntimeSpecifiers(sample, 'agent.mjs', { dynamicImports: true });
-  assert.deepEqual(specifiers.imported, ['express', '@cursor/sdk', './agent-acp.mjs']);
-  assert.deepEqual(specifiers.resolved, ['@cursor/sdk']);
+  assert.deepEqual(specifiers.imported, ['express', 'occt-import-js', './agent-acp.mjs']);
+  assert.deepEqual(specifiers.resolved, ['occt-import-js']);
   assert.deepEqual(specifiers.required, []);
   const generated = readFileSync(path.join(root, 'server', 'project-format.mjs'), 'utf8');
   const format = collectRuntimeSpecifiers(generated, 'project-format.mjs', {
@@ -87,18 +62,10 @@ test('service specifier scan keeps Cursor and ignores bundled ajv source strings
   );
 });
 
-test('zod dependency satisfies the Cursor SDK peer range', () => {
+test('Cursor SDK is external to the desktop package and dependency lock', () => {
   const app = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const sdk = JSON.parse(
-    readFileSync(path.join(root, 'node_modules', '@cursor', 'sdk', 'package.json'), 'utf8'),
-  );
-  const installed = JSON.parse(
-    readFileSync(path.join(root, 'node_modules', 'zod', 'package.json'), 'utf8'),
-  );
-  assert.equal(sdk.peerDependencies.zod, '^3.25.0 || ^4.0.0');
-  assert.equal(sdk.peerDependenciesMeta?.zod?.optional, undefined);
-  assert.equal(app.dependencies.zod, '^4.6.7');
-  assert.equal(installed.version, '4.6.7');
-  assert.equal(typeof installed.exports['./v4'].import, 'string');
-  assert.equal(typeof installed.exports['./v4-mini'].import, 'string');
+  const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+  assert.equal(Object.hasOwn(app.dependencies, '@cursor/sdk'), false);
+  assert.equal(Object.keys(lock.packages).some((name) => name.includes('/@cursor/sdk')), false);
+  assert.equal(app.build.asarUnpack.some((name: string) => name.includes('@cursor/sdk')), false);
 });

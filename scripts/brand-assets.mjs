@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { writeInstallerUi } from './installer-ui-assets.mjs';
 
 // The editable mark is the only source for icon geometry. All exports retain
 // transparency; the presentation sheet alone supplies light and dark surfaces.
@@ -21,7 +22,10 @@ await writeFile(
 const charcoal = '#292929';
 const green = '#87ea5c';
 const mono = master
-  .replace(/(<path data-role="body"[^>]*?) stroke="[^"]*" stroke-width="[^"]*" stroke-linejoin="[^"]*" paint-order="[^"]*"/, '$1')
+  .replace(
+    /(<path data-role="body"[^>]*?) stroke="[^"]*" stroke-width="[^"]*" stroke-linejoin="[^"]*" paint-order="[^"]*"/,
+    '$1',
+  )
   .replaceAll(green, charcoal)
   .replace('</title>', ', monochrome</title>');
 await writeFile(at('public/brand/openpe-mark-mono.svg'), mono);
@@ -38,13 +42,14 @@ function lockup(markPaths, foreground, secondary) {
 await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, charcoal, '#666666'));
 await mkdir(at('build'), { recursive: true });
 await sharp(Buffer.from(master)).resize(512, 512).png().toFile(at('public/brand/openpe-icon.png'));
-await sharp(at('public/brand/openpe-lockup.svg')).resize(1080, 312).png().toFile(at('public/brand/openpe-lockup.png'));
+await sharp(at('public/brand/openpe-lockup.svg'))
+  .resize(1080, 312)
+  .png()
+  .toFile(at('public/brand/openpe-lockup.png'));
 
-const sizes = [16, 24, 32, 48, 64, 128, 256];
-async function writeIcon(svg, file) {
+async function writeIcon(file, sizes, render) {
   const images = [];
-  for (const size of sizes)
-    images.push(await sharp(Buffer.from(svg)).resize(size, size).png().toBuffer());
+  for (const size of sizes) images.push(await render(size));
   const header = Buffer.alloc(6 + 16 * sizes.length);
   header.writeUInt16LE(1, 2);
   header.writeUInt16LE(sizes.length, 4);
@@ -63,8 +68,76 @@ async function writeIcon(svg, file) {
 }
 // Native chrome supplies surrounding spacing, so use a tighter square crop.
 const windowIcon = master.replace('viewBox="0 0 64 64"', 'viewBox="4 4 56 56"');
-await writeIcon(windowIcon, 'build/openpe.ico');
-await writeIcon(windowIcon, 'public/brand/openpe-window.ico');
+const windowIconSizes = [16, 24, 32, 48, 64, 128, 256];
+const renderWindowIcon = (size) =>
+  sharp(Buffer.from(windowIcon)).resize(size, size).png().toBuffer();
+await writeIcon('build/openpe.ico', windowIconSizes, renderWindowIcon);
+await writeIcon('public/brand/openpe-window.ico', windowIconSizes, renderWindowIcon);
+
+// Setup uses 32/64 logical pixels. Rasterize common Windows DPI sizes from the
+// square master at 4× before downsampling so the native controls stay crisp.
+const installerIconSizes = [
+  16, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80, 96, 112, 128, 144, 160, 192, 224, 256,
+];
+await writeIcon('build/installer-mark.ico', installerIconSizes, (size) =>
+  sharp(Buffer.from(master), { density: (size * 4 * 72) / 64 })
+    .resize(size, size)
+    .png()
+    .toBuffer(),
+);
+
+// NSIS Modern UI accepts uncompressed, bottom-up 24-bit BMPs.
+async function writeInstallerBitmap(svg, file) {
+  const { data, info } = await sharp(Buffer.from(svg))
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const rowBytes = Math.ceil((width * 3) / 4) * 4;
+  const bitmap = Buffer.alloc(54 + rowBytes * height);
+  bitmap.write('BM');
+  bitmap.writeUInt32LE(bitmap.length, 2);
+  bitmap.writeUInt32LE(54, 10);
+  bitmap.writeUInt32LE(40, 14);
+  bitmap.writeInt32LE(width, 18);
+  bitmap.writeInt32LE(height, 22);
+  bitmap.writeUInt16LE(1, 26);
+  bitmap.writeUInt16LE(24, 28);
+  bitmap.writeUInt32LE(rowBytes * height, 34);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const source = (y * width + x) * 3;
+      const target = 54 + (height - 1 - y) * rowBytes + x * 3;
+      bitmap[target] = data[source + 2];
+      bitmap[target + 1] = data[source + 1];
+      bitmap[target + 2] = data[source];
+    }
+  }
+  await writeFile(at(file), bitmap);
+}
+
+const homeCircuit = await readFile(at('public/brand/site-circuit.svg'), 'utf8');
+const installerCircuit = homeCircuit
+  .replace(
+    /^<svg\b[^>]*>/,
+    '<svg width="144" height="139" viewBox="0 0 1440 1320" preserveAspectRatio="xMidYMid slice">',
+  )
+  .replaceAll('black', '#728374');
+const installerSidebar = `<svg xmlns="http://www.w3.org/2000/svg" width="288" height="628" viewBox="0 0 144 314">
+  <defs>
+    <radialGradient id="icon-clear">
+      <stop offset=".82" stop-color="#fafafa"/>
+      <stop offset="1" stop-color="#fafafa" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="144" height="314" fill="#fafafa"/>
+  <g opacity=".22">${installerCircuit}</g>
+  <circle cx="72" cy="69" r="51" fill="url(#icon-clear)"/>
+  <path d="M143.5 0v314" stroke="#ededed"/>
+</svg>`;
+await writeInstallerBitmap(installerSidebar, 'build/installerSidebar.bmp');
+await writeInstallerUi(at('build/installer-ui.dll'));
+
 const icnsTypes = [
   [16, 'icp4'],
   [32, 'icp5'],
@@ -90,10 +163,12 @@ await writeFile(at('build/openpe.icns'), Buffer.concat([icnsHeader, icnsBody]));
 
 await mkdir(at('references'), { recursive: true });
 const actualSizes = [16, 24, 32, 48];
-const sizeSamples = actualSizes.map((size, index) => {
-  const x = 853 + index * 90;
-  return `<g transform="translate(${x - size / 2} ${675 - size / 2}) scale(${size / 64})">${geometry}</g><text x="${x}" y="732" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#737373">${size} px</text>`;
-}).join('\n');
+const sizeSamples = actualSizes
+  .map((size, index) => {
+    const x = 853 + index * 90;
+    return `<g transform="translate(${x - size / 2} ${675 - size / 2}) scale(${size / 64})">${geometry}</g><text x="${x}" y="732" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="11" fill="#737373">${size} px</text>`;
+  })
+  .join('\n');
 const preview = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
   <rect width="1280" height="800" fill="#f6f6f4"/>
   <text x="56" y="63" font-family="Segoe UI,Arial,sans-serif" font-size="24" font-weight="600" letter-spacing="-.5" fill="${charcoal}">OpenPE</text>
@@ -130,5 +205,9 @@ const titlebarPreview = `<svg xmlns="http://www.w3.org/2000/svg" width="880" hei
   <text x="28" y="129" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#fafafa">OpenPE · Electrical Engineering Studio</text>
 </svg>
 `;
-await sharp(Buffer.from(titlebarPreview)).png().toFile(at('references/openpe-titlebar-preview.png'));
-console.log('Generated dark OpenPE Signal E marks, transparent PNGs, Windows and macOS icons and identity previews.');
+await sharp(Buffer.from(titlebarPreview))
+  .png()
+  .toFile(at('references/openpe-titlebar-preview.png'));
+console.log(
+  'Generated dark OpenPE Signal E marks, transparent PNGs, Windows and macOS icons and identity previews.',
+);

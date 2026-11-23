@@ -22,7 +22,6 @@ const hosts = {
   'linux:x64': {
     executable: path.join(root, 'release', 'linux-unpacked', 'openpe'),
     resources: path.join(root, 'release', 'linux-unpacked', 'resources'),
-    cursor: '@cursor/sdk-linux-x64',
     canvas: '@napi-rs/canvas-linux-x64-gnu',
   },
   'darwin:arm64': {
@@ -36,13 +35,11 @@ const hosts = {
       'OpenPE',
     ),
     resources: path.join(root, 'release', 'mac-arm64', 'OpenPE.app', 'Contents', 'Resources'),
-    cursor: '@cursor/sdk-darwin-arm64',
     canvas: '@napi-rs/canvas-darwin-arm64',
   },
   'win32:x64': {
     executable: path.join(root, 'release', 'win-unpacked', 'OpenPE.exe'),
     resources: path.join(root, 'release', 'win-unpacked', 'resources'),
-    cursor: '@cursor/sdk-win32-x64',
     canvas: '@napi-rs/canvas-win32-x64-msvc',
   },
 };
@@ -190,6 +187,37 @@ async function checkPackagedModules({ resources, host }) {
   const asarPath = path.join(resources, 'app.asar');
   const unpackedPath = `${asarPath}.unpacked`;
   if (!existsSync(asarPath)) throw new Error(`Packaged archive is missing: ${asarPath}`);
+  for (const archive of [asarPath, unpackedPath]) {
+    const scope = path.join(archive, 'node_modules', '@cursor');
+    if (existsSync(scope) && readdirSync(scope).some((name) => /^sdk(?:-|$)/.test(name)))
+      throw new Error('The packaged app contains a Cursor SDK package.');
+  }
+  for (const [directory, excluded] of [
+    ['examples-native', /\.(?:pdf|lib)$/i],
+    ['project-native', /\.pdf$/i],
+  ]) {
+    const files = readdirSync(path.join(resources, directory), {
+      recursive: true,
+      withFileTypes: true,
+    });
+    if (files.some((entry) => entry.isFile() && excluded.test(entry.name)))
+      throw new Error(`Packaged ${directory} contains vendor reference assets.`);
+  }
+  const libraryModels = readdirSync(path.join(resources, 'kicad', '10.0.0', 'models'), {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort();
+  const starterModels = [
+    'C_0805_2012Metric.step',
+    'LICENSE.md',
+    'R_0805_2012Metric.step',
+    'SOT-23.step',
+  ];
+  if (JSON.stringify(libraryModels) !== JSON.stringify(starterModels))
+    throw new Error('Packaged KiCad models must match the three starter assets and notice.');
   const serverEntry = path.join(asarPath, 'server', 'index.mjs');
   if (!existsSync(serverEntry))
     throw new Error(`Packaged service entry is missing: ${serverEntry}`);
@@ -432,22 +460,6 @@ async function checkPackagedModules({ resources, host }) {
   for (const name of fieldNames(appManifest, 'dependencies'))
     queueRuntime(assertDependency(name, serverEntry));
   drainScans();
-  const cursor = packages.get(host.cursor);
-  if (!cursor) throw new Error(`Host Cursor platform package ${host.cursor} was not packaged.`);
-  const vendor = path.join(cursor.dir, 'vendor');
-  if (!existsSync(vendor) || !statSync(vendor).isDirectory())
-    throw new Error(`Cursor platform package is missing vendor natives: ${vendor}`);
-  const nativeNames = readdirSync(vendor);
-  for (const required of ['tree-sitter', 'tree-sitter-bash']) {
-    if (!nativeNames.includes(required))
-      throw new Error(`Cursor platform package is missing ${required}.`);
-  }
-  for (const name of nativeNames) {
-    const index = containedFile(vendor, path.join(name, 'index.js'), name);
-    const binding = containedFile(vendor, path.join(name, 'binding.node'), name);
-    if (!statSync(binding).isFile()) throw new Error(`Cursor native ${name} binding is missing.`);
-    requireFrom(index)(index);
-  }
   if (!packages.has(host.canvas))
     throw new Error(`Host canvas package ${host.canvas} was not packaged.`);
   requireFrom(serverEntry)(host.canvas);
