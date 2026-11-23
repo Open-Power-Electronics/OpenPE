@@ -1,29 +1,26 @@
 # Setup and development
 
-OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or equivalent). Linux arm64 and musl are unsupported. [AGENTS.md](../AGENTS.md#verification-and-delivery) owns validation requirements; [Architecture](ARCHITECTURE.md#storage-and-build-boundaries) owns process, build and storage boundaries.
+OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or equivalent). Linux arm64 and musl are unsupported. The v0.1.0 Beta publishes unsigned installers for Windows x64 and macOS arm64. Linux x64 is not yet published as an installer or solver download. [AGENTS.md](../AGENTS.md#verification-and-delivery) owns validation requirements; [Architecture](ARCHITECTURE.md#storage-and-build-boundaries) owns process, build and storage boundaries.
 
 ## Install the app
 
-Check [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) for a desktop installer for your host. If one is unavailable, [run from source](#run-from-source). Desktop installers include solvers, libraries and examples.
+[Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) has the unsigned v0.1.0 Beta installers for Windows x64 and macOS arm64. Those installers include solvers, libraries and examples. Linux x64 is not yet published as an installer or solver download. [Run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
 
 For complete offline component previews, [add the official KiCad STEP library](LIBRARIES.md#add-the-official-step-library).
 
 Run the Windows NSIS setup wizard, choose the installation folder, then select
 **Install**. Fresh installations use the current user account. The finish page
 offers **Launch OpenPE**. On macOS,
-drag the app from its disk image to Applications. On Linux, install the Debian
-package or run the executable AppImage.
+drag the app from its disk image to Applications.
 
 The macOS build is unsigned. If Gatekeeper blocks first launch, Control-click OpenPE and choose Open, or allow it under System Settings → Privacy & Security.
-
-For Debian, install the downloaded `.deb` with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to the AppImage.
 
 ## Run from source
 
 Install Node.js 24 and Git. On macOS, install Xcode Command Line Tools with
 `xcode-select --install`.
 
-On Linux x64, prebuilt solver archives are currently unavailable. Follow the
+On Linux x64, installer and solver downloads are not yet published. Follow the
 [Linux solver build steps](#maintainer-solver-builds) after `npm ci` and before
 starting the app, preparing examples or building OpenPE.
 
@@ -92,6 +89,8 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 | macOS arm64 | `release/mac-arm64/OpenPE.app` and `release/OpenPE-<version>-arm64.dmg`                                       |
 | Linux x64   | `release/linux-unpacked/openpe`, `release/OpenPE-<version>.AppImage` and `release/openpe_<version>_amd64.deb` |
 
+Linux x64 installer and solver downloads are not yet published. `npm run package` still builds the Linux outputs above on Linux x64. Install a locally built Debian package with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to a locally built AppImage.
+
 `package.json` supplies the version and supported package targets.
 
 ## Workspace artifacts
@@ -101,7 +100,6 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 | `.openpe/`                   | Development and test caches, temporary fixtures, local inputs and optional app data overrides                                 |
 | `test-results/`              | Check outputs, temporary profiles, audit inputs and [benchmark snapshots](LAYOUT.md#examples-and-verification)                 |
 | `.next/`, `out/`, `release/` | Renderer builds, packages and maintainer solver archives                                                                      |
-| `promotion/`                 | Separate local Remotion workspace with source, recordings and renders                                                         |
 | `tmp/`                       | Local experiments                                                                                                             |
 
 Classify ignored files by their consumers before cleanup. Resolve each target
@@ -130,6 +128,6 @@ Maintainer rebuilds write to `release/solvers/`; the locks record archive names,
 | macOS arm64   | `npm run solvers:build-macos` | Apple clang 17.0.0, SDK 26.2, Homebrew GCC 16.2.0, CMake 4.4.5                           |
 | Debian 13 x64 | `npm run solvers:build-linux` | GCC/GFortran 14.2.0, glibc 2.41, CMake 4.4.5; Make, Python 3, curl, patch, tar, patchelf |
 
-Linux `--update-lock` explicitly refreshes reviewed file/archive pins. Before Linux archives are available, build with `npm run solvers:build-linux -- --update-lock`, review the diff, then run solver preparation before example preparation. Ordinary archive installation needs no compiler. [SPICE build details](SIMULATION.md#portable-models-and-bundled-solver) · [Thermal build details](THERMAL.md#runtime-and-lifecycle)
+Linux `--update-lock` explicitly refreshes reviewed file/archive pins. Linux x64 solver archives are not yet published; build them with `npm run solvers:build-linux -- --update-lock`, review the diff, then run solver preparation before example preparation. Ordinary archive installation needs no compiler. [SPICE build details](SIMULATION.md#portable-models-and-bundled-solver) · [Thermal build details](THERMAL.md#runtime-and-lifecycle)
 
 `npm run solvers:publish` publishes the current macOS/Linux host's two archives to `Open-Power-Electronics/OpenPE` as prereleases with `--latest=false`. Make the corresponding sources, build scripts and notices available alongside the binary downloads. **Owner approval is required before publishing.**
