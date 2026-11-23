@@ -20,7 +20,7 @@ Start with a curated example or your own circuit. Save a portable KiCad project 
 
 ## Get OpenPE
 
-OpenPE targets **Windows x64**, **macOS arm64** and **Linux x64**. See [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) for available desktop installers and the [installation guide](docs/DEVELOPMENT.md#install-the-app) for host requirements.
+The v0.1.0 Beta publishes unsigned installers for **Windows x64** and **macOS arm64** on [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases). **Linux x64** is not yet published as an installer or solver download. Linux users [run from source](docs/DEVELOPMENT.md#run-from-source) and build solvers locally with the [Linux solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds). See the [installation guide](docs/DEVELOPMENT.md#install-the-app) for host requirements.
 
 Use Node.js 24 and Git to [run from source](docs/DEVELOPMENT.md#run-from-source). The development guide also covers browser mode, offline solver preparation, checks and packaging.
 
