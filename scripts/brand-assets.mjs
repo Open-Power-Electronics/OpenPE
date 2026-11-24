@@ -42,11 +42,7 @@ function lockup(markPaths, foreground, secondary) {
 `;
 }
 await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, charcoal, '#666666'));
-const darkGeometry = geometry.replaceAll(`fill="${charcoal}"`, `fill="${darkHeading}"`);
-await writeFile(
-  at('public/brand/openpe-lockup-dark.svg'),
-  lockup(darkGeometry, darkHeading, darkMuted),
-);
+await writeFile(at('public/brand/openpe-lockup-dark.svg'), lockup(geometry, darkHeading, darkMuted));
 await mkdir(at('build'), { recursive: true });
 await sharp(Buffer.from(master)).resize(512, 512).png().toFile(at('public/brand/openpe-icon.png'));
 await sharp(at('public/brand/openpe-lockup.svg'))
