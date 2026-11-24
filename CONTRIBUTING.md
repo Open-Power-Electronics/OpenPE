@@ -6,6 +6,8 @@
 
 ## Submit a change
 
+Code changes currently come from the OpenPE core team. Core developers follow these steps:
+
 1. Set up your checkout with the [development guide](docs/DEVELOPMENT.md).
 2. Read the [engineering contract](AGENTS.md) and follow the feature contracts it points to for the area you are changing.
 3. Keep each pull request focused. Update the affected documentation with the change. Maintained documentation and UI copy are in English.

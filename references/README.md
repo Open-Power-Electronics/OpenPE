@@ -28,7 +28,7 @@ After an intentional master change, regenerate assets from the repository root:
 node scripts/brand-assets.mjs
 ```
 
-The script writes SVG variants/lockups and transparent PNG/ICO production assets under `public/brand/` and `build/`, plus the three OpenPE preview files listed above. It does not recreate the Open Design research snapshots. Use the original charcoal Signal E mark on both light and dark application surfaces. Light and reversed logo variants are not generated or delivered.
+The script writes SVG variants/lockups and transparent PNG/ICO production assets under `public/brand/` and `build/`, plus the three OpenPE preview files listed above. It does not recreate the Open Design research snapshots. Use the original charcoal Signal E mark on both light and dark application surfaces. `public/brand/openpe-lockup-dark.svg` and `openpe-lockup-dark.png` repeat that lockup for dark document backgrounds, with the body and wordmark in dark-surface text-strong (`#f0f0f0`) and the tagline in dark-surface muted (`#b5b5b5`).
 
 The logo presentation sheet supplies its own backgrounds. Production marks retain transparency. The title preview illustrates product identity; the actual Windows caption-toolbar layout is specified in DESIGN.md and implemented in `electron/main.cjs` and the renderer.
 

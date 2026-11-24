@@ -1,6 +1,6 @@
 # OpenPE engineering contract
 
-Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench with Agent conversation on the left and editable power-electronics design on the right. This file defines shared engineering obligations; the contracts below own detailed behaviour. Read the relevant contracts before editing and verify them against the working tree. Replace obsolete rules rather than appending exceptions, history or plans. Maintained documentation and UI copy are English; preserve electrical symbols, references and units.
+Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench with Agent conversation on the left and editable power-electronics design on the right. This file defines shared engineering obligations; the contracts below own detailed behaviour. Read the relevant contracts before editing and verify them against the working tree. Replace obsolete rules rather than appending exceptions, history or plans. Maintained documentation and UI copy are English; `README.zh-CN.md` is the one Simplified Chinese translation and mirrors `README.md` in the same change. Preserve electrical symbols, references and units.
 
 ## Read by responsibility
 

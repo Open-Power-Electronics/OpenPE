@@ -21,6 +21,8 @@ await writeFile(
 
 const charcoal = '#292929';
 const green = '#87ea5c';
+const darkHeading = '#f0f0f0';
+const darkMuted = '#b5b5b5';
 const mono = master
   .replace(
     /(<path data-role="body"[^>]*?) stroke="[^"]*" stroke-width="[^"]*" stroke-linejoin="[^"]*" paint-order="[^"]*"/,
@@ -40,12 +42,21 @@ function lockup(markPaths, foreground, secondary) {
 `;
 }
 await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, charcoal, '#666666'));
+const darkGeometry = geometry.replaceAll(`fill="${charcoal}"`, `fill="${darkHeading}"`);
+await writeFile(
+  at('public/brand/openpe-lockup-dark.svg'),
+  lockup(darkGeometry, darkHeading, darkMuted),
+);
 await mkdir(at('build'), { recursive: true });
 await sharp(Buffer.from(master)).resize(512, 512).png().toFile(at('public/brand/openpe-icon.png'));
 await sharp(at('public/brand/openpe-lockup.svg'))
   .resize(1080, 312)
   .png()
   .toFile(at('public/brand/openpe-lockup.png'));
+await sharp(at('public/brand/openpe-lockup-dark.svg'))
+  .resize(1080, 312)
+  .png()
+  .toFile(at('public/brand/openpe-lockup-dark.png'));
 
 async function writeIcon(file, sizes, render) {
   const images = [];
