@@ -91,7 +91,7 @@ You can also install a local JavaScript plugin with declared inputs and optional
 
 | Platform | Installer | Status |
 | --- | --- | --- |
-| Windows x64 | `OpenPE-Setup-0.1.0.exe` | v0.1.0 Beta, unsigned |
+| Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta, unsigned |
 | macOS arm64 | `OpenPE-0.1.0-arm64.dmg` | v0.1.0 Beta, unsigned and not notarized |
 | Linux x64 | None yet | Run from source and build solvers locally |
 

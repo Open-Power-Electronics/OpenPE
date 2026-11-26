@@ -93,7 +93,7 @@ OpenPE 连接你单独安装的 Agent 运行时。不同 Agent 的权限如下�
 
 | 平台 | 安装包 | 状态 |
 | --- | --- | --- |
-| Windows x64 | `OpenPE-Setup-0.1.0.exe` | v0.1.0 Beta，未签名 |
+| Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta，未签名 |
 | macOS arm64 | `OpenPE-0.1.0-arm64.dmg` | v0.1.0 Beta，未签名、未公证 |
 | Linux x64 | 暂未发布 | 从源码运行，并在本地构建求解器 |
 

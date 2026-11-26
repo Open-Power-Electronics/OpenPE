@@ -4,7 +4,7 @@ OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or
 
 ## Install the app
 
-[Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) has the unsigned v0.1.0 Beta installers for Windows x64 and macOS arm64. Those installers include solvers, libraries and examples. Linux x64 is not yet published as an installer or solver download. [Run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
+Download the unsigned [v0.1.1 Beta installer for Windows x64](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.1) or the unsigned [v0.1.0 Beta installer for macOS arm64](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.0). Both installers include solvers, libraries and examples. On Linux x64, [run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
 
 For complete offline component previews, [add the official KiCad STEP library](LIBRARIES.md#add-the-official-step-library).
 
@@ -107,9 +107,7 @@ toolchain, then prepares them locally. File or archive hash differences fail
 the build; the workflow never updates solver locks. A mismatch requires a
 separate maintainer rebuild and reviewed pin update before a candidate can ship.
 
-Candidate release notes are kept under `docs/releases/`; the
-[v0.1.1 notes](releases/v0.1.1.md) describe the current patch candidate. Published
-download availability is separate from local version and candidate build status.
+The [v0.1.1 release notes](releases/v0.1.1.md) record the published installer and its SHA-256 checksum.
 
 ## Workspace artifacts
 
