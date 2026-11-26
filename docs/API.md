@@ -1179,6 +1179,10 @@ Agent identities are shared by the renderer, recovery and generated service cata
 
 On Windows, Codex detection, model discovery and execution share CLI lookup. The npm installation in the standard per-user prefix takes precedence over the desktop process's inherited PATH. OpenPE launches its native Windows executable directly with the console hidden and owns its stdio and process lifecycle. If the npm installation is incomplete, lookup checks PATH and then the standard standalone installation directory.
 
+Claude Code detection, model discovery and execution also share CLI lookup. On Windows, an npm launcher resolves only its fixed sibling `node_modules/@anthropic-ai/claude-code/bin/claude.exe`, which OpenPE launches directly without a shell. Lookup also checks the standard per-user npm prefix when it is absent from the desktop process's inherited PATH. Claude Code must support `--bare` for isolated model discovery.
+
+DeepSeek Harness detection, model discovery and execution share the same launcher. On Windows, the npm launcher resolves its fixed sibling `node_modules/@deepseek-ai/dsh/lib/bin.js` and uses an external Node.js executable: a sibling `node.exe`, then absolute `node.exe` results from PATH discovery. Runtime discovery checks the sibling and at most eight PATH candidates within a shared ten-second budget, with each probe limited to five seconds. It requires Node.js 24.9.0 or newer and rejects Electron. Missing or unsupported runtimes fail detection with a diagnostic. OpenPE never substitutes its embedded Electron runtime for DeepSeek's Node.js host; the harness's native loader requires its supported runtime. Launches use argument arrays without a shell, and the harness retains responsibility for its configuration and authentication.
+
 | ID         | Display name     | CLI                 | Runtime boundary                                                              |
 | ---------- | ---------------- | ------------------- | ----------------------------------------------------------------------------- |
 | `codex`    | Codex            | `codex`             | Scoped live OpenPE tools through `app-server`.                                |
@@ -1392,8 +1396,7 @@ the default for the picker. A Chat request without `effort` leaves the native
 Codex setting in effect. Claude discovery
 uses a bounded, initialization-only `--bare` control session with empty tools
 and MCP configuration and no session persistence, so hooks, plugins and prompts
-cannot run. It reads only returned model metadata and supported effort levels, retaining the Default alias when advertised;
-an unsupported CLI fails visibly. This catalog does not establish authentication,
+cannot run. It uses the returned `resolvedModel`, or an already concrete native `value` when that optional field is absent, as each selectable ID and label. Default and unresolved aliases are omitted. IDs retain provider prefixes and context-window suffixes. Duplicate IDs share one entry only when their effort metadata agrees; malformed resolutions, conflicting efforts and catalogs with no concrete models fail visibly. The picker has no implicit Claude default, and submission passes the selected concrete ID unchanged through `--model`. Discovery reads only public model metadata and supported effort levels. This catalog does not establish authentication,
 account entitlements, configured alias overrides or managed-policy limits.
 Pi derives native levels from each model's `reasoning` and `thinkingLevelMap`,
 including explicit `xhigh`/`max` mappings and disabled levels; non-reasoning

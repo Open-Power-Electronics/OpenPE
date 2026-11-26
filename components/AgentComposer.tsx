@@ -147,12 +147,16 @@ export default function AgentComposer({
   const catalog = useAgentModelCatalog({ provider, available, value: model, observedModel });
   const selected = catalog.selected;
   const modelEfforts = selected?.efforts ?? null;
-  const effortOptions = (modelEfforts ?? []).map((value) => ({ value, label: effortLabels[value] }));
+  const effortOptions = (modelEfforts ?? []).map((value) => ({
+    value,
+    label: effortLabels[value],
+  }));
   const cursorParameters = provider === 'cursor' && selected ? selected.parameters : undefined;
   const supportsEffort =
     modelEfforts === null
       ? !selected && (provider === 'codex' || agentSupportsEffort)
       : modelEfforts.length > 0;
+  const showEffort = supportsEffort && effortOptions.length > 0;
   const [parameterChoices, setParameterChoices] = useState<Record<string, Record<string, string>>>(
     {},
   );
@@ -276,7 +280,8 @@ export default function AgentComposer({
             const input = e.currentTarget;
             const event = e.nativeEvent as InputEvent;
             if (
-              allowSmartPunctuation && document.documentElement.dataset.smartPunctuation === 'true' &&
+              allowSmartPunctuation &&
+              document.documentElement.dataset.smartPunctuation === 'true' &&
               event.inputType === 'insertText' &&
               !composing.current &&
               !event.isComposing
@@ -397,7 +402,7 @@ export default function AgentComposer({
           )}
           <div
             className="composer-settings"
-            data-single-effort={supportsEffort && !cursorParameters ? true : undefined}
+            data-single-effort={showEffort && !cursorParameters ? true : undefined}
           >
             <ModelSelect
               key={provider}
@@ -420,21 +425,23 @@ export default function AgentComposer({
               <>
                 {cursorParameters.map((parameter) =>
                   parameter.id === selected?.effortParameter ? (
-                    <Select
-                      key={parameter.id}
-                      label="Reasoning effort"
-                      value={effectiveEffort}
-                      disabled={busy || !available || catalog.loading || !modelEfforts?.length}
-                      compact
-                      showChevron={false}
-                      triggerClassName="composer-effort-trigger"
-                      popupClassName="composer-choice-menu composer-effort-menu"
-                      popupMatchWidth="content"
-                      popupPlacement="top-end"
-                      placeholder={effortLabels[effectiveEffort]}
-                      onChange={(value) => setEffort(value as ReasoningEffort)}
-                      options={effortOptions}
-                    />
+                    showEffort ? (
+                      <Select
+                        key={parameter.id}
+                        label="Reasoning effort"
+                        value={effectiveEffort}
+                        disabled={busy || !available || catalog.loading || !modelEfforts?.length}
+                        compact
+                        showChevron={false}
+                        triggerClassName="composer-effort-trigger"
+                        popupClassName="composer-choice-menu composer-effort-menu"
+                        popupMatchWidth="content"
+                        popupPlacement="top-start"
+                        placeholder={effortLabels[effectiveEffort]}
+                        onChange={(value) => setEffort(value as ReasoningEffort)}
+                        options={effortOptions}
+                      />
+                    ) : null
                   ) : isCursorBooleanParameter(parameter) ? (
                     <span key={parameter.id} className="composer-boolean">
                       <span>{parameter.label}</span>
@@ -495,16 +502,8 @@ export default function AgentComposer({
                     />
                   ),
                 )}
-                {!supportsEffort && (
-                  <span
-                    className="composer-effort-default"
-                    aria-description="This model does not expose a reasoning effort."
-                  >
-                    No reasoning effort
-                  </span>
-                )}
               </>
-            ) : supportsEffort ? (
+            ) : showEffort ? (
               <Select
                 label="Reasoning effort"
                 value={effectiveEffort}
@@ -514,23 +513,12 @@ export default function AgentComposer({
                 triggerClassName="composer-effort-trigger"
                 popupClassName="composer-choice-menu composer-effort-menu"
                 popupMatchWidth="content"
-                popupPlacement="top-end"
+                popupPlacement="top-start"
                 placeholder={effortLabels[effectiveEffort]}
                 onChange={(value) => setEffort(value as ReasoningEffort)}
                 options={effortOptions}
               />
-            ) : provider === 'cursor' ? null : (
-              <span
-                className="composer-effort-default"
-                aria-description={
-                  provider === 'claude'
-                    ? 'Effort: CLI default. Update Claude Code to choose reasoning effort.'
-                    : 'This model uses its default reasoning effort.'
-                }
-              >
-                Default effort
-              </span>
-            )}
+            ) : null}
           </div>
           {busy && allowFollowUp && hasDraft && (
             <button

@@ -87,7 +87,7 @@ export default function Select({
   popupClassName?: string;
   popupMaxHeight?: number;
   popupMaxOptions?: number;
-  popupPlacement?: 'bottom' | 'right' | 'top-end';
+  popupPlacement?: 'bottom' | 'right' | 'top-start' | 'top-end';
   popupAnchor?: string;
   popupBoundary?: string;
   popupMatchWidth?: 'trigger' | 'parent' | 'content';
@@ -208,7 +208,8 @@ export default function Select({
     const anchor = (popupAnchor && button.closest(popupAnchor)) || widthAnchor;
     const boundary = popupBoundary ? button.closest(popupBoundary) : null;
     const topEnd = popupPlacement === 'top-end';
-    const gap = topEnd ? 8 : 6;
+    const aboveAnchor = topEnd || popupPlacement === 'top-start';
+    const gap = aboveAnchor ? 8 : 6;
     const place = () => {
       const rect = anchor.getBoundingClientRect();
       const bounds = boundary?.getBoundingClientRect();
@@ -245,7 +246,7 @@ export default function Select({
       );
       const below = Math.max(0, bottomEdge - rect.bottom - gap);
       const above = Math.max(0, rect.top - topEdge - gap);
-      const flip = topEnd || (below < height && above > below);
+      const flip = aboveAnchor || (below < height && above > below);
       const right = popupPlacement === 'right';
       const maxHeight = Math.min(
         right ? bottomEdge - topEdge : flip ? above : below,

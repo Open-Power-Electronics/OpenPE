@@ -1141,13 +1141,6 @@ body[data-workspace-resizing='true'] * {
   flex-wrap: nowrap;
 }
 
-.composer-effort-default {
-  font-size: var(--font-caption);
-  white-space: nowrap;
-  margin-left: 6px;
-  color: var(--soft);
-}
-
 .composer-boolean {
   display: inline-flex;
   align-items: center;
@@ -6220,7 +6213,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 2px;
-  width: clamp(8rem, 62%, 11rem);
+  width: max-content;
   min-width: 0;
   max-width: 100%;
 }

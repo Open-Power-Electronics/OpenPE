@@ -12,6 +12,8 @@ import { loadCursorSdk } from './agent-cursor-sdk.mjs';
 import { listPiModels } from './agent-pi.mjs';
 import { stopOwnedProcess } from './owned-process.mjs';
 
+const claudeModelAlias = /^(?:default|best|opus|sonnet|haiku|fable|opusplan)(?:\[1m\])?$/;
+
 // Model discovery starts no inference. Cursor receives only the key returned by
 // the host reader; discovery never reads another tool's credential files.
 // Claude initializes its bounded control protocol; ACP creates an empty session.
@@ -148,19 +150,16 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
             new Error('Claude Code returned an invalid model list. Update Claude Code and retry.'),
           );
         for (const item of catalog) {
-          if (!item || !validModelId(item.value)) continue;
-          const alias = ['default', 'sonnet', 'opus', 'haiku', 'fable', 'best', 'opusplan'].includes(
-            item.value,
-          );
-          models.set(item.value, {
-            id: item.value,
-            label:
-              typeof item.displayName === 'string' ? item.displayName.slice(0, 100) : item.value,
-            description: alias
-              ? 'Claude Code alias · resolved by your CLI'
-              : typeof item.description === 'string'
-                ? item.description.slice(0, 300)
-                : item.value,
+          if (!item || !validModelId(item.value) || item.value === 'default') continue;
+          if (item.resolvedModel !== undefined && !validModelId(item.resolvedModel))
+            return finish(new Error('Claude Code returned an invalid resolved model ID.'));
+          const id = item.resolvedModel ?? item.value;
+          if (claudeModelAlias.test(id)) continue;
+          const model = {
+            id,
+            label: id,
+            description:
+              typeof item.description === 'string' ? item.description.slice(0, 300) : id,
             ...(item.supportsEffort === false
               ? { efforts: [] }
               : Array.isArray(item.supportedEffortLevels)
@@ -174,8 +173,20 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
                     ],
                   }
                 : {}),
-          });
+          };
+          const existing = models.get(id);
+          if (existing) {
+            if (
+              JSON.stringify(existing.efforts?.slice().sort()) !==
+              JSON.stringify(model.efforts?.slice().sort())
+            )
+              return finish(new Error('Claude Code returned conflicting model effort metadata.'));
+          } else models.set(id, model);
         }
+        if (!models.size)
+          return finish(
+            new Error('Claude Code returned no concrete model IDs. Update Claude Code and retry.'),
+          );
         return finish();
       }
       if (e.id !== undefined && e.method) {

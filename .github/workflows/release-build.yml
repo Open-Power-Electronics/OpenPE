@@ -1,0 +1,190 @@
+name: Release build (no publication)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Package version to verify before building
+        required: true
+        default: '0.1.1'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            runner: windows-latest
+          - platform: macos-arm64
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify requested version and native host
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+          assert.match(process.env.EXPECTED_VERSION, /^\d+\.\d+\.\d+$/);
+          assert.equal(pkg.version, process.env.EXPECTED_VERSION);
+          assert.ok((process.platform === 'win32' && process.arch === 'x64') ||
+            (process.platform === 'darwin' && process.arch === 'arm64'));
+          console.log(`Building OpenPE ${pkg.version} on ${process.platform}-${process.arch}`);
+          NODE
+      - run: npm ci
+      - run: npm run libraries:download
+      - run: npm run simulation:prepare
+      - run: npm run thermal:prepare
+      - run: npm run examples:prepare
+      - run: npm run check:docs
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package
+      - name: Stage installers and checksums
+        env:
+          ARTIFACT_PLATFORM: ${{ matrix.platform }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { createReadStream } from 'node:fs';
+          import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+          import path from 'node:path';
+          const version = process.env.EXPECTED_VERSION;
+          const names = process.platform === 'win32'
+            ? [`OpenPE-${version}-x64.exe`]
+            : [`OpenPE-${version}-arm64.dmg`];
+          const directory = path.join('release', 'artifacts', process.env.ARTIFACT_PLATFORM);
+          await mkdir(directory, { recursive: true });
+          const sums = [];
+          for (const name of names) {
+            const source = path.join('release', name);
+            const hash = createHash('sha256');
+            for await (const chunk of createReadStream(source)) hash.update(chunk);
+            await copyFile(source, path.join(directory, name));
+            sums.push(`${hash.digest('hex')}  ${name}`);
+          }
+          await writeFile(path.join(directory, 'SHA256SUMS'), sums.join('\n') + '\n');
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenPE-${{ inputs.expected_version }}-${{ matrix.platform }}
+          path: release/artifacts/${{ matrix.platform }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  linux:
+    name: Build linux-x64 on Debian 13
+    runs-on: ubuntu-24.04
+    container: debian:13
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      DEBIAN_FRONTEND: noninteractive
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Install native build and packaged-runtime dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential gfortran autoconf automake libtool \
+            pkg-config patch patchelf python3 python3-venv unzip xz-utils file \
+            fakeroot libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libnotify4 libxss1 \
+            libxtst6 libatspi2.0-0t64 libuuid1 libsecret-1-0 xdg-utils libglu1-mesa \
+            libgl1 libxrender1 libxcursor1 libxfixes3 libxext6 libxft2 libfontconfig1 \
+            libxinerama1 libx11-6
+          python3 -m venv /opt/openpe-build-tools
+          /opt/openpe-build-tools/bin/pip install --disable-pip-version-check cmake==4.4.5
+          printf '%s\n' /opt/openpe-build-tools/bin >> "$GITHUB_PATH"
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify requested version and native host
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+          assert.match(process.env.EXPECTED_VERSION, /^\d+\.\d+\.\d+$/);
+          assert.equal(pkg.version, process.env.EXPECTED_VERSION);
+          assert.equal(process.platform, 'linux');
+          assert.equal(process.arch, 'x64');
+          console.log(`Building OpenPE ${pkg.version} on Debian 13 x64`);
+          NODE
+      - run: npm ci
+      - name: Reproduce the locked Linux solver archives
+        # The builder requires GCC/GFortran 14.2.0, glibc 2.41 and CMake 4.4.5.
+        # A file/archive hash mismatch fails the job; release builds never repin.
+        run: npm run solvers:build-linux
+      - run: npm run libraries:download
+      - run: npm run simulation:prepare -- --archive release/solvers/ngspice-47-linux-x64-1.tar.gz
+      - run: npm run thermal:prepare -- --archive release/solvers/thermal-1-linux-x64-1.tar.gz
+      - run: npm run examples:prepare
+      - run: npm run check:docs
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package
+      - name: Verify solver pins are unchanged
+        run: git diff --exit-code -- resources/ngspice-lock.json resources/thermal-lock.json
+      - name: Stage installers and checksums
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { createReadStream } from 'node:fs';
+          import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+          import path from 'node:path';
+          const version = process.env.EXPECTED_VERSION;
+          const names = [`OpenPE-${version}.AppImage`, `openpe_${version}_amd64.deb`];
+          const directory = path.join('release', 'artifacts', 'linux-x64');
+          await mkdir(directory, { recursive: true });
+          const sums = [];
+          for (const name of names) {
+            const source = path.join('release', name);
+            const hash = createHash('sha256');
+            for await (const chunk of createReadStream(source)) hash.update(chunk);
+            await copyFile(source, path.join(directory, name));
+            sums.push(`${hash.digest('hex')}  ${name}`);
+          }
+          await writeFile(path.join(directory, 'SHA256SUMS'), sums.join('\n') + '\n');
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenPE-${{ inputs.expected_version }}-linux-x64
+          path: release/artifacts/linux-x64/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

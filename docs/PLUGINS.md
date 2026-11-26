@@ -388,6 +388,7 @@ render as images.
 | `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                                                       | Schemas, review/revisions, cancellation and synthetic scoped transports                                                          |
 | `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands, model-specific effort selection and Cursor catalog parameters                   |
 | `node scripts/e2e-plugins.mjs`                                                                                         | Opt-in desktop checks with fixtures; no real installs                                                                            |
+| `node scripts/check-deepseek-agent-ui.mjs --run` | Opt-in real desktop and installed DeepSeek check: isolated OpenPE data, model discovery/selection and one fixed chat request; uses the harness's existing authentication |
 
 Mock tests do not establish installed-provider compatibility or authentication.
 Documentation changes need static checks; real provider mutations and desktop

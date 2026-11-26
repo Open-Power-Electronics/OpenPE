@@ -43,6 +43,73 @@ if (mode.startsWith('claude-catalog')) {
           error: 'Fixture catalog error',
         },
       });
+    let models = [
+      {
+        value: 'default',
+        resolvedModel: 'claude-fixture-opus-1',
+        displayName: 'Default',
+        supportsEffort: false,
+      },
+      {
+        value: 'opus',
+        resolvedModel: 'claude-fixture-opus-1',
+        displayName: 'Opus',
+        description: 'Fixture Opus model',
+        supportsEffort: true,
+        supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'high', 'ultra'],
+      },
+      {
+        value: 'best',
+        resolvedModel: 'claude-fixture-opus-1',
+        displayName: 'Best',
+        supportsEffort: true,
+        supportedEffortLevels: ['max', 'xhigh', 'high', 'medium', 'low'],
+      },
+      {
+        value: 'sonnet[1m]',
+        resolvedModel: 'claude-fixture-sonnet-1[1m]',
+        displayName: 'Sonnet',
+        supportsEffort: true,
+        supportedEffortLevels: ['low', 'medium', 'high'],
+      },
+      {
+        value: 'haiku',
+        resolvedModel: 'claude-fixture-haiku-1',
+        displayName: 'Haiku',
+        supportsEffort: false,
+        supportedEffortLevels: ['low', 'high'],
+      },
+      { value: 'fable', displayName: 'Unresolved Fable' },
+      { value: 'opusplan', displayName: 'Unresolved Opus Plan' },
+      { value: 'best[1m]', displayName: 'Unresolved Best' },
+      { value: 'provider/fixture-custom', displayName: 'Custom', description: 'Custom model' },
+      {
+        value: 'fixture-missing-levels',
+        displayName: 'Missing levels',
+        supportsEffort: true,
+      },
+      {
+        value: 'fixture-invalid-levels',
+        displayName: 'Invalid levels',
+        supportsEffort: true,
+        supportedEffortLevels: 'medium',
+      },
+      { value: '--bad' },
+    ];
+    if (mode === 'claude-catalog-unresolved-only')
+      models = ['default', 'best', 'opus', 'sonnet', 'haiku', 'fable', 'opusplan'].flatMap(
+        (value) => [{ value }, { value: `${value}[1m]` }],
+      );
+    if (mode === 'claude-catalog-default-only')
+      models = [{ value: 'default', resolvedModel: 'claude-fixture-opus-1' }];
+    if (mode === 'claude-catalog-invalid-resolved')
+      models.push({ value: 'fixture-native-model', resolvedModel: '--bad' });
+    if (mode === 'claude-catalog-null-resolved')
+      models.push({ value: 'fixture-native-model', resolvedModel: null });
+    if (mode === 'claude-catalog-conflicting-effort')
+      models.push({ value: 'claude-fixture-opus-1', supportsEffort: false });
+    if (mode === 'claude-catalog-conflicting-unknown-effort')
+      models.push({ value: 'claude-fixture-opus-1' });
     send({
       type: 'control_response',
       response: {
@@ -50,40 +117,7 @@ if (mode.startsWith('claude-catalog')) {
         request_id: message.request_id,
         response: {
           account: { email: 'private@example.invalid' },
-          models: [
-            { value: 'default', displayName: 'Default' },
-            {
-              value: 'opus',
-              displayName: 'Opus',
-              supportsEffort: true,
-              supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
-            },
-            {
-              value: 'sonnet',
-              displayName: 'Sonnet',
-              supportsEffort: true,
-              supportedEffortLevels: ['low', 'medium', 'high'],
-            },
-            {
-              value: 'haiku',
-              displayName: 'Haiku',
-              supportsEffort: false,
-              supportedEffortLevels: ['low', 'high'],
-            },
-            { value: 'fixture-custom', displayName: 'Custom', description: 'Custom model' },
-            {
-              value: 'fixture-missing-levels',
-              displayName: 'Missing levels',
-              supportsEffort: true,
-            },
-            {
-              value: 'fixture-invalid-levels',
-              displayName: 'Invalid levels',
-              supportsEffort: true,
-              supportedEffortLevels: 'medium',
-            },
-            { value: '--bad' },
-          ],
+          models,
         },
       },
     });
@@ -91,9 +125,12 @@ if (mode.startsWith('claude-catalog')) {
   input.on('close', () => process.exit(0));
 } else if (mode.startsWith('claude')) {
   assert.ok(process.argv.includes('--include-partial-messages'));
-  if (mode === 'claude-native-default') {
+  if (mode === 'claude-native-model') {
     assert.ok(!process.argv.includes('--effort'));
-    assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'default');
+    assert.equal(
+      process.argv[process.argv.indexOf('--model') + 1],
+      'provider/claude-fixture-sonnet-1[1m]',
+    );
   } else {
     assert.equal(
       process.env.CLAUDE_CODE_EFFORT_LEVEL,
@@ -124,7 +161,11 @@ if (mode.startsWith('claude-catalog')) {
       assert.match(input.message.content[0].text, /Reference/);
       writeFileSync('annotation-input.json', JSON.stringify(input));
     }
-    send({ type: 'system', subtype: 'init', model: 'fixture' });
+    send({
+      type: 'system',
+      subtype: 'init',
+      model: mode === 'claude-native-model' ? 'provider/claude-fixture-sonnet-1[1m]' : 'fixture',
+    });
     send({ type: 'stream_event', event: { type: 'message_start', message: { id: 'a' } } });
     for (const text of ['电感', ' ripple.']) {
       await delay(50);

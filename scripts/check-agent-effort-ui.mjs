@@ -23,9 +23,18 @@ const catalogs = {
     ],
   },
   claude: {
+    defaultModel: null,
     models: [
-      { id: 'default', label: 'Default' },
-      { id: 'fixture/claude-custom', label: 'Claude custom' },
+      {
+        id: 'claude-sonnet-4-6',
+        label: 'claude-sonnet-4-6',
+        efforts: ['low', 'medium', 'high'],
+      },
+      {
+        id: 'claude-haiku-4-5-20251001',
+        label: 'claude-haiku-4-5-20251001',
+        efforts: [],
+      },
     ],
   },
   deepseek: {
@@ -244,12 +253,75 @@ try {
     await picker.click();
     await page.getByRole('option', { name: label, exact: true }).click();
   };
-  const assertNoEffortChoices = async () => {
-    await waitForAsync(page, () => {
-      const picker = document.querySelector('[aria-label="Reasoning effort"][role="combobox"]');
-      return !picker || picker.disabled;
+  const checkCompactModelTrigger = async () => {
+    const size = await model.evaluate((field) => {
+      const label = field.querySelector('.select-value');
+      const text = document.createRange();
+      text.selectNodeContents(label);
+      return {
+        field: field.getBoundingClientRect().width,
+        text: text.getBoundingClientRect().width,
+        wrapper: field.closest('.composer-model-picker').getBoundingClientRect().width,
+        clipped: label.scrollWidth > label.clientWidth + 1,
+      };
     });
-    assert.ok((await effort.count()) === 0 || (await effort.isDisabled()));
+    assert.equal(size.clipped, false, 'The selected model label fits its compact trigger.');
+    assert.ok(
+      size.field >= size.text && size.field - size.text <= 20,
+      'The model trigger reserves only its selected text and control padding.',
+    );
+    assert.ok(
+      size.wrapper - size.field <= 2,
+      'The model picker does not reserve unused width beside its trigger.',
+    );
+    return size.field;
+  };
+  const checkModelPopup = async () => {
+    const geometry = await modelList.evaluate((menu) => {
+      const box = menu.getBoundingClientRect();
+      return {
+        width: box.width,
+        bounded:
+          box.left >= 7 &&
+          box.right <= window.innerWidth - 7 &&
+          box.top >= 7 &&
+          box.bottom <= window.innerHeight - 7,
+        horizontalOverflow: menu.scrollWidth > menu.clientWidth + 1,
+        clipped: [...menu.querySelectorAll('.select-option strong')]
+          .filter((label) => {
+            const text = document.createRange();
+            text.selectNodeContents(label);
+            return label.scrollWidth > label.clientWidth + 1 || text.getClientRects().length !== 1;
+          })
+          .map((label) => label.textContent),
+      };
+    });
+    assert.ok(
+      geometry.width > (await model.boundingBox()).width,
+      'The model popup sizes to its options independently of the compact trigger.',
+    );
+    assert.equal(geometry.bounded, true, 'The model popup stays inside the viewport margins.');
+    assert.equal(geometry.horizontalOverflow, false, 'The model popup has no horizontal overflow.');
+    assert.deepEqual(
+      geometry.clipped,
+      [],
+      'Every model name fits on one line, including beside a scrollbar.',
+    );
+    return geometry.width;
+  };
+  const assertNoEffortChoices = async ({ allowDisabled = false } = {}) => {
+    await waitForAsync(
+      page,
+      (allowDisabled) => {
+        const picker = document.querySelector('[aria-label="Reasoning effort"][role="combobox"]');
+        return !picker || (allowDisabled && picker.disabled);
+      },
+      allowDisabled,
+    );
+    if (allowDisabled && (await effort.count())) assert.equal(await effort.isDisabled(), true);
+    else assert.equal(await effort.count(), 0);
+    assert.equal(await page.getByText('Default effort', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
     assert.equal(
       await page.getByRole('listbox', { name: 'Reasoning effort', exact: true }).count(),
       0,
@@ -272,8 +344,8 @@ try {
     assert.equal((await submissions()).length, count, 'Enter cannot bypass model discovery.');
   };
 
-  await waitEffort('Medium');
   await page.getByPlaceholder('Loading models…', { exact: true }).waitFor();
+  await assertNoEffortChoices();
   await main.evaluate((element) => (element.style.width = '328px'));
   const loadingHeight = await composerHeight();
   assert.equal(await availability.count(), 0);
@@ -318,25 +390,62 @@ try {
     'Max',
     'Ultra',
   ]);
-  const checkEffortPlacement = async () => {
+  const checkEffortPlacement = async ({ clamped = false } = {}) => {
     const menuBox = await effortMenu.boundingBox();
     const fieldBox = await effort.boundingBox();
+    const viewport = page.viewportSize();
     assert.ok(menuBox.width > fieldBox.width, 'The menu can grow beyond the compact field.');
-    assert.ok(Math.abs(menuBox.x + menuBox.width - fieldBox.x - fieldBox.width) < 1);
-    assert.ok(Math.abs(fieldBox.y - menuBox.y - menuBox.height - 8) < 1);
-    const truncated = await effortMenu.locator('strong').evaluateAll((labels) =>
-      labels.filter((label) => label.scrollWidth > label.clientWidth).map((label) => label.textContent),
+    const expectedLeft = clamped
+      ? Math.max(8, Math.min(fieldBox.x, viewport.width - menuBox.width - 8))
+      : fieldBox.x;
+    assert.ok(
+      Math.abs(menuBox.x - expectedLeft) < 1,
+      'The effort popup aligns its left edge to the trigger within viewport bounds.',
     );
+    assert.ok(Math.abs(fieldBox.y - menuBox.y - menuBox.height - 8) < 1);
+    assert.ok(menuBox.x >= 7 && menuBox.x + menuBox.width <= viewport.width - 7);
+    assert.ok(menuBox.y >= 7 && menuBox.y + menuBox.height <= viewport.height - 7);
+    const truncated = await effortMenu
+      .locator('strong')
+      .evaluateAll((labels) =>
+        labels
+          .filter((label) => label.scrollWidth > label.clientWidth)
+          .map((label) => label.textContent),
+      );
     assert.deepEqual(truncated, [], 'All effort options show their full labels.');
   };
   await checkEffortPlacement();
+  await mkdir('test-results/agent-effort', { recursive: true });
+  const effortScreenshot = await page.evaluate(() => {
+    const boxes = [
+      document.querySelector('.composer').getBoundingClientRect(),
+      document.querySelector('.composer-effort-menu').getBoundingClientRect(),
+    ];
+    const x = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.left)) - 8));
+    const y = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.top)) - 8));
+    return {
+      x,
+      y,
+      width: Math.min(innerWidth, Math.ceil(Math.max(...boxes.map((box) => box.right)) + 8)) - x,
+      height: Math.min(innerHeight, Math.ceil(Math.max(...boxes.map((box) => box.bottom)) + 8)) - y,
+    };
+  });
+  await page.screenshot({
+    path: 'test-results/agent-effort/effort-left-aligned.png',
+    clip: effortScreenshot,
+  });
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.documentElement.style.setProperty('--font-step', '4px'));
   await checkEffortLabelGap();
   await effort.click();
   await checkEffortPlacement();
-  await page.evaluate(() => document.documentElement.style.removeProperty('--font-step'));
   await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 360, height: 740 });
+  await effort.click();
+  await checkEffortPlacement({ clamped: true });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.evaluate(() => document.documentElement.style.removeProperty('--font-step'));
   await main.evaluate((element) => (element.style.width = ''));
   await submitEffort('medium');
   assert.equal((await submissions()).at(-1).model, 'fixture/full');
@@ -404,7 +513,7 @@ try {
   await agentSettings.press('Enter');
   assert.deepEqual(await page.evaluate(() => window.effortFixture.settingsOpens), ['codex']);
   assert.ok(await input.evaluate((field) => document.activeElement === field));
-  await assertNoEffortChoices();
+  await assertNoEffortChoices({ allowDisabled: true });
   assert.equal(await model.isDisabled(), true);
   assert.equal(await send.isDisabled(), true);
   const beforeUnavailable = (await submissions()).length;
@@ -418,7 +527,7 @@ try {
   await patch({ requiresAgent: true });
   await assertSendBlocked();
   await patch({ available: true, busy: true });
-  await assertNoEffortChoices();
+  await assertNoEffortChoices({ allowDisabled: true });
   assert.equal(await model.isDisabled(), true);
   await input.press('Enter');
   assert.equal((await submissions()).length, beforeUnavailable + 1);
@@ -452,13 +561,32 @@ try {
   await submitEffort('off');
   assert.equal((await submissions()).at(-1).model, 'fixture/pi');
   await patch({ provider: 'claude', model: '', agentSupportsEffort: true });
-  await choose(model, 'Claude custom');
+  await assertSendBlocked();
+  await model.click();
+  const claudeSonnet = modelList.getByRole('option', { name: 'claude-sonnet-4-6', exact: true });
+  await claudeSonnet.waitFor();
+  assert.equal(await modelList.getByRole('option', { name: 'Default', exact: true }).count(), 0);
+  assert.deepEqual(await modelList.getByRole('option').allTextContents(), [
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5-20251001',
+  ]);
+  const claudePopupWidth = await checkModelPopup();
+  await claudeSonnet.click();
+  const sonnetTriggerWidth = await checkCompactModelTrigger();
+  await model.click();
+  assert.ok(Math.abs((await checkModelPopup()) - claudePopupWidth) <= 1);
+  await model.press('Escape');
+  await waitEffort('Medium');
+  await submitEffort('medium');
+  assert.equal((await submissions()).at(-1).model, 'claude-sonnet-4-6');
+  await choose(model, 'claude-haiku-4-5-20251001');
+  assert.ok(
+    (await checkCompactModelTrigger()) > sonnetTriggerWidth,
+    'The trigger grows with the selected concrete model name.',
+  );
   await assertNoEffortChoices();
   await submitEffort(null);
-  assert.equal((await submissions()).at(-1).model, 'fixture/claude-custom');
-  await choose(model, 'Default');
-  await submitEffort(null);
-  assert.equal((await submissions()).at(-1).model, 'default');
+  assert.equal((await submissions()).at(-1).model, 'claude-haiku-4-5-20251001');
   await patch({ provider: 'deepseek', model: '', agentSupportsEffort: false });
   await model.getByText('DeepSeek Flash', { exact: true }).waitFor();
   await submitEffort(null);
@@ -479,7 +607,6 @@ try {
   await main.evaluate((element) => {
     element.style.width = '328px';
   });
-  await mkdir('test-results/agent-effort', { recursive: true });
   await main
     .locator('.composer')
     .screenshot({ path: 'test-results/agent-effort/model-retry-328.png' });
@@ -553,35 +680,20 @@ try {
   await assertSendBlocked();
   assert.equal((await snapshot()).model, 'fixture/retired');
   assert.equal((await model.textContent()).trim(), 'Choose model');
-  const modelLabelGap = await model.evaluate((field) => {
-    const modelLabel = document.createRange();
-    modelLabel.selectNodeContents(field.querySelector('.select-value'));
-    const effortLabel = document.createRange();
-    effortLabel.selectNodeContents(
-      document.querySelector('[aria-label="Reasoning effort"] .select-value'),
-    );
-    return effortLabel.getBoundingClientRect().left - modelLabel.getBoundingClientRect().right;
-  });
-  assert.ok(modelLabelGap >= 0 && modelLabelGap <= 10, 'Model and effort labels sit together.');
+  await assertNoEffortChoices();
   await model.click();
   assert.equal(await modelList.getByRole('option', { name: 'fixture/retired' }).count(), 0);
   assert.equal(
     await modelList.getByRole('option', { name: /^(GPT-Reserve|Codex Auto Review)$/ }).count(),
     0,
   );
-  const wideModelWidth = (await model.boundingBox()).width;
-  assert.equal((await modelList.boundingBox()).width, wideModelWidth);
+  await checkCompactModelTrigger();
+  const wideModelPopupWidth = await checkModelPopup();
   await main.evaluate((element) => (element.style.width = '328px'));
-  await waitForAsync(
-    page,
-    (wideWidth) => {
-      const fieldWidth = document
-        .querySelector('[role="combobox"][aria-label="Choose model"]')
-        .getBoundingClientRect().width;
-      const menuWidth = document.querySelector('.model-menu').getBoundingClientRect().width;
-      return fieldWidth < wideWidth && fieldWidth === menuWidth;
-    },
-    wideModelWidth,
+  await checkCompactModelTrigger();
+  assert.ok(
+    Math.abs((await checkModelPopup()) - wideModelPopupWidth) <= 1,
+    'Narrowing the composer does not force the model popup to match the field.',
   );
   const astra = modelList.getByRole('option', { name: 'GPT-6-Astra', exact: true });
   assert.equal(
@@ -602,6 +714,17 @@ try {
   await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
   assert.equal(await composerHeight(), emptyHeight);
   assert.equal((await model.textContent()).trim(), 'GPT-6-Astra');
+  await checkCompactModelTrigger();
+  const modelLabelGap = await model.evaluate((field) => {
+    const modelLabel = document.createRange();
+    modelLabel.selectNodeContents(field.querySelector('.select-value'));
+    const effortLabel = document.createRange();
+    effortLabel.selectNodeContents(
+      document.querySelector('[aria-label="Reasoning effort"] .select-value'),
+    );
+    return effortLabel.getBoundingClientRect().left - modelLabel.getBoundingClientRect().right;
+  });
+  assert.ok(modelLabelGap >= 0 && modelLabelGap <= 10, 'Model and effort labels sit together.');
   await input.fill(draftBeforeChoice);
   await submitEffort('medium');
   assert.equal((await submissions()).at(-1).model, 'fixture/gpt-6-astra');
@@ -612,7 +735,10 @@ try {
   await model.click();
   await astra.waitFor();
   assert.equal(codexRequests, refreshRequests);
-  assert.equal(await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).count(), 0);
+  assert.equal(
+    await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).count(),
+    0,
+  );
   await model.press('Escape');
   holdCodexList = true;
   await redetect();
@@ -645,6 +771,17 @@ try {
     true,
     'The model popup opens with room for five rows and scrolls to show the rest.',
   );
+  await checkModelPopup();
+  await model.press('Escape');
+  await main.evaluate((element) => (element.style.width = '328px'));
+  await page.setViewportSize({ width: 360, height: 740 });
+  await model.click();
+  await checkModelPopup();
+  await page.screenshot({ path: 'test-results/agent-effort/model-content-width-360.png' });
+  await model.press('Escape');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await main.evaluate((element) => (element.style.width = ''));
+  await model.click();
   await modelList.hover();
   await page.mouse.wheel(0, 120);
   await waitForAsync(page, () => {
@@ -658,6 +795,7 @@ try {
     'true',
   );
   await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).click();
+  await checkCompactModelTrigger();
   await assertNoEffortChoices();
   await submitEffort(null);
   assert.equal((await submissions()).at(-1).model, 'gpt-6.2-astra');
@@ -749,7 +887,6 @@ try {
     ],
   });
   await choose(model, 'Plain');
-  await page.getByText('No reasoning effort', { exact: true }).waitFor();
   await assertNoEffortChoices();
   assert.equal(
     await page.getByRole('switch', { name: 'Fast', exact: true }).getAttribute('aria-checked'),
@@ -772,7 +909,7 @@ try {
   assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: startup catalog sharing, request-free model selection, matched popup width, exact submitted values, explicit redetection, offline Home submission and keyboard/IME behavior.',
+    'PASS: startup catalog sharing, request-free model selection, compact model triggers and content-sized bounded popups, exact submitted values, explicit redetection, offline Home submission and keyboard/IME behavior.',
   );
 } finally {
   await browser.close();

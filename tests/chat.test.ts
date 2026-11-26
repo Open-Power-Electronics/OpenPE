@@ -359,18 +359,22 @@ test('explicit Claude effort overrides only the child environment without claimi
   await assertStopped(cwd);
 });
 
-test('Claude executes the advertised Default alias with native reasoning settings', async () => {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-default-model-'));
+test('Claude passes a concrete provider-qualified model and context suffix unchanged with omitted effort', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-concrete-model-'));
   const events: any[] = [];
   const result = await runAgent(
     'claude',
-    { ...request, model: 'default' },
+    { ...request, model: 'provider/claude-fixture-sonnet-1[1m]' },
     cwd,
     (event) => events.push(event),
     new AbortController().signal,
-    { resolve: resolver('claude-native-default') },
+    { resolve: resolver('claude-native-model') },
   );
   assert.equal(result.outcome, 'completed', JSON.stringify(events));
+  assert.deepEqual(events.find((event) => event.type === 'agent-info'), {
+    type: 'agent-info',
+    model: 'provider/claude-fixture-sonnet-1[1m]',
+  });
   await assertStopped(cwd);
 });
 
@@ -723,7 +727,7 @@ test('Codex discovery keeps hidden and new models across pages and describes inp
   await assertStopped(cwd);
 });
 
-test('Claude discovers per-model effort capabilities without prompting or exposing account metadata', async () => {
+test('Claude discovers concrete models, deduplicates resolutions and preserves effort capabilities without account metadata', async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-models-'));
   const result = await listAgentModels('claude', cwd, new AbortController().signal, {
     resolve: resolver('claude-catalog'),
@@ -731,40 +735,63 @@ test('Claude discovers per-model effort capabilities without prompting or exposi
   assert.deepEqual(result, {
     defaultModel: null,
     models: [
-      { id: 'default', label: 'Default', description: 'Claude Code alias · resolved by your CLI' },
       {
-        id: 'opus',
-        label: 'Opus',
-        description: 'Claude Code alias · resolved by your CLI',
+        id: 'claude-fixture-opus-1',
+        label: 'claude-fixture-opus-1',
+        description: 'Fixture Opus model',
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       },
       {
-        id: 'sonnet',
-        label: 'Sonnet',
-        description: 'Claude Code alias · resolved by your CLI',
+        id: 'claude-fixture-sonnet-1[1m]',
+        label: 'claude-fixture-sonnet-1[1m]',
+        description: 'claude-fixture-sonnet-1[1m]',
         efforts: ['low', 'medium', 'high'],
       },
       {
-        id: 'haiku',
-        label: 'Haiku',
-        description: 'Claude Code alias · resolved by your CLI',
+        id: 'claude-fixture-haiku-1',
+        label: 'claude-fixture-haiku-1',
+        description: 'claude-fixture-haiku-1',
         efforts: [],
       },
-      { id: 'fixture-custom', label: 'Custom', description: 'Custom model' },
+      {
+        id: 'provider/fixture-custom',
+        label: 'provider/fixture-custom',
+        description: 'Custom model',
+      },
       {
         id: 'fixture-missing-levels',
-        label: 'Missing levels',
+        label: 'fixture-missing-levels',
         description: 'fixture-missing-levels',
       },
       {
         id: 'fixture-invalid-levels',
-        label: 'Invalid levels',
+        label: 'fixture-invalid-levels',
         description: 'fixture-invalid-levels',
       },
     ],
   });
   assert.equal(JSON.stringify(result).includes('private@example.invalid'), false);
   await assertStopped(cwd);
+});
+
+test('Claude concrete model discovery rejects malformed resolutions, missing models and conflicting effort metadata', async () => {
+  for (const [mode, expected] of [
+    ['claude-catalog-unresolved-only', /no concrete model IDs/],
+    ['claude-catalog-default-only', /no concrete model IDs/],
+    ['claude-catalog-invalid-resolved', /invalid resolved model ID/],
+    ['claude-catalog-null-resolved', /invalid resolved model ID/],
+    ['claude-catalog-conflicting-effort', /conflicting model effort metadata/],
+    ['claude-catalog-conflicting-unknown-effort', /conflicting model effort metadata/],
+  ] as const) {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-model-resolution-'));
+    await assert.rejects(
+      listAgentModels('claude', cwd, new AbortController().signal, {
+        resolve: resolver(mode),
+      }),
+      expected,
+    );
+    await assertStopped(cwd);
+  }
 });
 
 test('Claude model discovery rejects interactive requests, failures and timeouts', async () => {

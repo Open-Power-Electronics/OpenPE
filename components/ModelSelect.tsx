@@ -246,6 +246,7 @@ export default function ModelSelect({
         label="Choose model"
         popupStatus={popupStatus}
         popupClassName="model-menu composer-choice-menu"
+        popupMatchWidth="content"
         popupMaxOptions={5}
         value={selected ? currentModel : ''}
         placeholder={placeholder}

@@ -33,6 +33,8 @@ import {
   rawCodexIsolationArgs,
   verifyPiIsolation,
   windowsCodexNpmLaunch,
+  windowsClaudeNpmLaunch,
+  windowsDeepSeekNpmLaunch,
 } from './agent-provider-runtime.mjs';
 import {
   readCursorApiKey,
@@ -131,6 +133,16 @@ export async function resolveAgent(id, options = {}) {
     if (/\.cmd$/i.test(candidate)) {
       if (id === 'codex') {
         const launch = windowsCodexNpmLaunch(candidate, exists);
+        if (launch) return launch;
+        continue;
+      }
+      if (id === 'claude') {
+        const launch = windowsClaudeNpmLaunch(candidate, exists);
+        if (launch) return launch;
+        continue;
+      }
+      if (id === 'deepseek') {
+        const launch = await windowsDeepSeekNpmLaunch(candidate, exists, run);
         if (launch) return launch;
         continue;
       }

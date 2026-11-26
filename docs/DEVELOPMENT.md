@@ -1,6 +1,6 @@
 # Setup and development
 
-OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or equivalent). Linux arm64 and musl are unsupported. The v0.1.0 Beta publishes unsigned installers for Windows x64 and macOS arm64. Linux x64 is not yet published as an installer or solver download. [AGENTS.md](../AGENTS.md#verification-and-delivery) owns validation requirements; [Architecture](ARCHITECTURE.md#storage-and-build-boundaries) owns process, build and storage boundaries.
+OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or equivalent). Linux arm64 and musl are unsupported. [AGENTS.md](../AGENTS.md#verification-and-delivery) owns validation requirements; [Architecture](ARCHITECTURE.md#storage-and-build-boundaries) owns process, build and storage boundaries.
 
 ## Install the app
 
@@ -20,8 +20,8 @@ The macOS build is unsigned. If Gatekeeper blocks first launch, Control-click Op
 Install Node.js 24 and Git. On macOS, install Xcode Command Line Tools with
 `xcode-select --install`.
 
-On Linux x64, installer and solver downloads are not yet published. Follow the
-[Linux solver build steps](#maintainer-solver-builds) after `npm ci` and before
+On Linux x64, follow the [Linux solver build steps](#maintainer-solver-builds)
+after `npm ci` and before
 starting the app, preparing examples or building OpenPE.
 
 ```sh
@@ -85,22 +85,40 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 
 | Host        | Output                                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------- |
-| Windows x64 | `release/win-unpacked/` and `release/OpenPE Setup <version>.exe`                                              |
+| Windows x64 | `release/win-unpacked/` and `release/OpenPE-<version>-x64.exe`                                                |
 | macOS arm64 | `release/mac-arm64/OpenPE.app` and `release/OpenPE-<version>-arm64.dmg`                                       |
 | Linux x64   | `release/linux-unpacked/openpe`, `release/OpenPE-<version>.AppImage` and `release/openpe_<version>_amd64.deb` |
 
-Linux x64 installer and solver downloads are not yet published. `npm run package` still builds the Linux outputs above on Linux x64. Install a locally built Debian package with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to a locally built AppImage.
+Install a locally built Debian package with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to a locally built AppImage.
 
 `package.json` supplies the version and supported package targets.
 
+### Release candidates
+
+The manual [Release build workflow](../.github/workflows/release-build.yml) builds
+Windows x64 and macOS arm64 on native runners and Linux x64 in Debian 13. Its
+requested version must match `package.json`. It runs documentation, type and
+full test checks before packaging, and uploads only the matching installers and
+SHA-256 checksums as workflow artifacts. It does not push code, create tags or
+publish GitHub Releases. Review all platform results before approving publication.
+
+The Linux job rebuilds the existing pinned solver archives with the documented
+toolchain, then prepares them locally. File or archive hash differences fail
+the build; the workflow never updates solver locks. A mismatch requires a
+separate maintainer rebuild and reviewed pin update before a candidate can ship.
+
+Candidate release notes are kept under `docs/releases/`; the
+[v0.1.1 notes](releases/v0.1.1.md) describe the current patch candidate. Published
+download availability is separate from local version and candidate build status.
+
 ## Workspace artifacts
 
-| Path                         | Contents                                                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `.openpe/`                   | Development and test caches, temporary fixtures, local inputs and optional app data overrides                                 |
-| `test-results/`              | Check outputs, temporary profiles, audit inputs and [benchmark snapshots](LAYOUT.md#examples-and-verification)                 |
-| `.next/`, `out/`, `release/` | Renderer builds, packages and maintainer solver archives                                                                      |
-| `tmp/`                       | Local experiments                                                                                                             |
+| Path                         | Contents                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `.openpe/`                   | Development and test caches, temporary fixtures, local inputs and optional app data overrides                  |
+| `test-results/`              | Check outputs, temporary profiles, audit inputs and [benchmark snapshots](LAYOUT.md#examples-and-verification) |
+| `.next/`, `out/`, `release/` | Renderer builds, packages and maintainer solver archives                                                       |
+| `tmp/`                       | Local experiments                                                                                              |
 
 Classify ignored files by their consumers before cleanup. Resolve each target
 inside the workspace and reject links before recursive operations. Keep native

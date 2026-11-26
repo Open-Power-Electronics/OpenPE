@@ -6,7 +6,7 @@ import path from 'node:path';
 import { detectAgents, resolveAgent, runAgent } from '../server/agents.mjs';
 import { listAgentModels } from '../server/agent-models.mjs';
 import { createEventNormalizer } from '../server/agent-events.mjs';
-import { piIsolationFlags } from '../server/agent-provider-runtime.mjs';
+import { piIsolationFlags, windowsDeepSeekNpmLaunch } from '../server/agent-provider-runtime.mjs';
 import { annotationFixture } from './fixtures/annotation';
 import { waitForProcessStopped } from '../scripts/process-test-helpers.mjs';
 
@@ -348,6 +348,242 @@ test(
     });
     assert.equal(incomplete.file, olderCodex);
     assert.deepEqual(incomplete.args, []);
+  },
+);
+
+test(
+  'Windows Claude npm lookup launches its native executable directly from a PATH shim',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const npmBin = 'C:\\Claude npm prefix';
+    const shim = path.join(npmBin, 'claude.cmd');
+    const executable = path.join(
+      npmBin,
+      'node_modules',
+      '@anthropic-ai',
+      'claude-code',
+      'bin',
+      'claude.exe',
+    );
+    const native = await resolveAgent('claude', {
+      exec: async () => ({ stdout: `${shim}\r\n` }),
+      exists: (file: string) => [shim, executable].includes(file),
+    });
+    assert.equal(native.file, executable);
+    assert.deepEqual(native.args, []);
+    assert.equal(native.env, process.env);
+  },
+);
+
+test(
+  'Windows Claude lookup finds the per-user npm executable when PATH has no launcher',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    assert.ok(process.env.APPDATA);
+    const npmBin = path.join(process.env.APPDATA, 'npm');
+    const shim = path.join(npmBin, 'claude.cmd');
+    const executable = path.join(
+      npmBin,
+      'node_modules',
+      '@anthropic-ai',
+      'claude-code',
+      'bin',
+      'claude.exe',
+    );
+    const native = await resolveAgent('claude', {
+      exec: async () => {
+        throw new Error('not on PATH');
+      },
+      exists: (file: string) => [shim, executable].includes(file),
+    });
+    assert.equal(native.file, executable);
+    assert.deepEqual(native.args, []);
+  },
+);
+
+test(
+  'Windows Claude lookup rejects a retired JavaScript npm entry without its native executable',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const npmBin = 'C:\\Incomplete Claude npm';
+    const shim = path.join(npmBin, 'claude.cmd');
+    const retiredEntry = path.join(npmBin, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+    await assert.rejects(
+      resolveAgent('claude', {
+        exec: async () => ({ stdout: `${shim}\r\n` }),
+        exists: (file: string) => [shim, retiredEntry].includes(file),
+      }),
+      /Could not detect Claude Code/,
+    );
+  },
+);
+
+test(
+  'Windows Claude lookup preserves direct native executable discovery',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const executable = 'C:\\Standalone Claude\\claude.exe';
+    const native = await resolveAgent('claude', {
+      exec: async () => ({ stdout: `${executable}\r\n` }),
+      exists: (file: string) => file === executable,
+    });
+    assert.equal(native.file, executable);
+    assert.deepEqual(native.args, []);
+    assert.equal(native.env, process.env);
+  },
+);
+
+test(
+  'Windows DeepSeek npm lookup prefers its external sibling Node and clears the Electron selector',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const directory = 'C:\\DeepSeek npm';
+    const shim = path.join(directory, 'dsh.cmd');
+    const entry = path.join(directory, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    const node = path.join(directory, 'node.exe');
+    const previous = process.env.ELECTRON_RUN_AS_NODE;
+    process.env.ELECTRON_RUN_AS_NODE = '1';
+    try {
+      const calls: string[][] = [];
+      const native = await resolveAgent('deepseek', {
+        exists: (file: string) => [shim, entry, node].includes(file),
+        exec: async (file: string, args: string[], options: any) => {
+          calls.push([file, ...args]);
+          if (file === 'where.exe') {
+            assert.deepEqual(args, ['dsh']);
+            return { stdout: shim };
+          }
+          assert.equal(file, node);
+          assert.equal(args[0], '--eval');
+          assert.equal(options.windowsHide, true);
+          assert.equal(options.env.ELECTRON_RUN_AS_NODE, '1');
+          return { stdout: JSON.stringify({ node: '24.22.0', electron: null }) };
+        },
+      });
+      assert.equal(native.file, node);
+      assert.deepEqual(native.args, [entry]);
+      assert.equal(native.env.ELECTRON_RUN_AS_NODE, undefined);
+      assert.equal(process.env.ELECTRON_RUN_AS_NODE, '1');
+      assert.deepEqual(
+        calls.map(([file]) => file),
+        ['where.exe', node],
+      );
+    } finally {
+      if (previous === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = previous;
+    }
+  },
+);
+
+test(
+  'Windows DeepSeek npm lookup rejects Electron, old Node and relative or shell candidates before using PATH Node',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const directory = 'C:\\DeepSeek npm';
+    const shim = path.join(directory, 'dsh.cmd');
+    const entry = path.join(directory, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    const electron = path.join(directory, 'node.exe');
+    const oldNode = 'C:\\Old Node\\node.exe';
+    const node = 'C:\\Program Files\\nodejs\\node.exe';
+    const probes: string[] = [];
+    const native = await resolveAgent('deepseek', {
+      exists: (file: string) =>
+        [shim, entry, electron, oldNode, node, 'node.exe', 'C:\\other\\node.cmd'].includes(file),
+      exec: async (file: string, args: string[]) => {
+        if (file === 'where.exe')
+          return {
+            stdout:
+              args[0] === 'dsh'
+                ? shim
+                : `node.exe\r\nC:\\other\\node.cmd\r\n${electron}\r\n${oldNode}\r\n${node}\r\n`,
+          };
+        probes.push(file);
+        assert.equal(args[0], '--eval');
+        return {
+          stdout: JSON.stringify({
+            node: file === oldNode ? '22.16.0' : '24.9.0',
+            electron: file === electron ? '45.0.0' : null,
+          }),
+        };
+      },
+    });
+    assert.deepEqual(probes, [electron, oldNode, node]);
+    assert.equal(native.file, node);
+    assert.deepEqual(native.args, [entry]);
+  },
+);
+
+test(
+  'Windows DeepSeek npm lookup fails without verified external Node instead of using the host runtime',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    assert.ok(process.env.APPDATA);
+    const directory = path.join(process.env.APPDATA, 'npm');
+    const shim = path.join(directory, 'dsh.cmd');
+    const entry = path.join(directory, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    const node = path.join(directory, 'node.exe');
+    for (const metadata of [
+      JSON.stringify({ node: '24.22.0', electron: '45.0.0' }),
+      JSON.stringify({ node: '24.8.9', electron: null }),
+      JSON.stringify({ node: 'not a version', electron: null }),
+      'invalid metadata',
+    ]) {
+      await assert.rejects(
+        resolveAgent('deepseek', {
+          exists: (file: string) => [shim, entry, node, process.execPath].includes(file),
+          exec: async (file: string, args: string[]) => {
+            if (file === 'where.exe') {
+              if (args[0] === 'dsh') throw new Error('stale desktop PATH');
+              assert.deepEqual(args, ['node.exe']);
+              return { stdout: node };
+            }
+            assert.equal(file, node);
+            return { stdout: metadata };
+          },
+        }),
+        /DeepSeek Harness requires an external Node\.js 24\.9\.0 or newer executable/,
+      );
+    }
+  },
+);
+
+test(
+  'Windows DeepSeek Node discovery bounds candidate count and shares a ten-second deadline',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const directory = 'C:\\DeepSeek npm';
+    const shim = path.join(directory, 'dsh.cmd');
+    const entry = path.join(directory, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    const nodes = Array.from({ length: 12 }, (_, index) => `C:\\Node ${index}\\node.exe`);
+    let clock = 0;
+    t.mock.method(performance, 'now', () => clock);
+    for (const elapsedPerProbe of [0, 4000]) {
+      const calls: { file: string; timeout: number }[] = [];
+      await assert.rejects(
+        windowsDeepSeekNpmLaunch(
+          shim,
+          (file: string) => file === entry || nodes.includes(file),
+          async (file: string, args: string[], options: any) => {
+            calls.push({ file, timeout: options.timeout });
+            if (file === 'where.exe') {
+              assert.deepEqual(args, ['node.exe']);
+              return { stdout: nodes.join('\r\n') };
+            }
+            clock += Math.min(elapsedPerProbe, options.timeout);
+            throw new Error('Fixture incompatible Node');
+          },
+        ),
+        /requires an external Node/,
+      );
+      assert.deepEqual(
+        calls.map(({ file }) => file),
+        ['where.exe', ...nodes.slice(0, elapsedPerProbe ? 3 : 8)],
+      );
+      assert.deepEqual(
+        calls.map(({ timeout }) => timeout),
+        elapsedPerProbe ? [5000, 5000, 5000, 2000] : Array(9).fill(5000),
+      );
+    }
   },
 );
 
