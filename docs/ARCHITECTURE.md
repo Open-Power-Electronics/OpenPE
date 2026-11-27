@@ -440,8 +440,9 @@ is the explicit external-module boundary. It loads a verified version-specific
 entry from the [host's detected SDK](PLUGINS.md#provider-discovery-and-management).
 
 The supported hosts and package paths are listed in [Packaging](DEVELOPMENT.md#packaging).
-Icons derive from the Signal E master. macOS signing stays off, with entitlements
-in `build/entitlements.mac.plist`. Linux desktop metadata matches
+Icons derive from the Signal E master. The macOS packager seals the app using an
+ad hoc signature and `build/entitlements.mac.plist`, then checks the signature
+and the packaged solver hashes. Linux desktop metadata matches
 `ai.openpe.desktop`. `build/after-pack.cjs` rejects links and special files
 and sets directories and executables to 0755, other files to 0644. Umask 022
 keeps later `.desktop` entries readable after root-owned installation.

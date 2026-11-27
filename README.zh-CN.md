@@ -94,7 +94,7 @@ OpenPE 连接你单独安装的 Agent 运行时。不同 Agent 的权限如下�
 | 平台 | 安装包 | 状态 |
 | --- | --- | --- |
 | Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta，未签名 |
-| macOS arm64 | `OpenPE-0.1.0-arm64.dmg` | v0.1.0 Beta，未签名、未公证 |
+| macOS arm64 | `OpenPE-0.1.1-arm64.dmg` | v0.1.1 Beta，本地临时签名，未经 Apple 公证 |
 | Linux x64 | 暂未发布 | 从源码运行，并在本地构建求解器 |
 
 安装包可从 [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) 下载。首次启动和系统要求见[安装指南](docs/DEVELOPMENT.md#install-the-app)。Linux 用户请按 [Linux solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds) 操作。

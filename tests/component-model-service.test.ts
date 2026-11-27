@@ -67,10 +67,17 @@ test('unsaved grants preview exact pinned and imported models without authorizin
     item.libraryId.startsWith('Package_SON:WSON-8-1EP'),
   )!;
   const pinnedPath = footprint.models![0].path;
+  // Each request exercises a distinct grant. Large model serialization can
+  // outlive the previous loopback connection's keep-alive window.
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-OpenPE-Token': server.token,
+    Connection: 'close',
+  };
   const request = (fileId: string) =>
     fetch(server.base + '/api/component-model', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': server.token },
+      headers,
       body: JSON.stringify({ source: serializeProject(project), fileId, footprintId: footprint.id, index: 0 }),
     });
   const unsaved = grants.create();
@@ -108,7 +115,7 @@ test('unsaved grants preview exact pinned and imported models without authorizin
   const previewPackage = (selector: object) =>
     fetch(server.base + '/api/component-model', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': server.token },
+      headers,
       body: JSON.stringify({ source: serializeProject(withLocalPackage), fileId: unsaved, index: 0, ...selector }),
     });
   const packagePreview = await previewPackage({ libraryId: packageId });

@@ -4,7 +4,7 @@ OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or
 
 ## Install the app
 
-Download the unsigned [v0.1.1 Beta installer for Windows x64](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.1) or the unsigned [v0.1.0 Beta installer for macOS arm64](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.0). Both installers include solvers, libraries and examples. On Linux x64, [run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
+Download the Windows x64 or macOS arm64 installer from [OpenPE v0.1.1 Beta](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.1). Both installers include solvers, libraries and examples. On Linux x64, [run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
 
 For complete offline component previews, [add the official KiCad STEP library](LIBRARIES.md#add-the-official-step-library).
 
@@ -13,7 +13,11 @@ Run the Windows NSIS setup wizard, choose the installation folder, then select
 offers **Launch OpenPE**. On macOS,
 drag the app from its disk image to Applications.
 
-The macOS build is unsigned. If Gatekeeper blocks first launch, Control-click OpenPE and choose Open, or allow it under System Settings → Privacy & Security.
+The macOS beta has no Developer ID or Apple notarization. If macOS cannot verify
+the developer, confirm the download and its published SHA-256 before choosing
+**Open Anyway** in System Settings → Privacy & Security. If macOS reports that
+the app is damaged, stop and report the installer version and checksum.
+[Apple’s first-launch guidance](https://support.apple.com/102445)
 
 ## Run from source
 
@@ -93,6 +97,10 @@ Install a locally built Debian package with `sudo apt install ./<filename>.deb`,
 
 `package.json` supplies the version and supported package targets.
 
+macOS arm64 beta builds use a local ad hoc signature to seal the finished app
+bundle. The embedded ngspice and thermal files retain their pinned bytes inside
+that seal. This build uses no Apple signing credentials and is not notarized.
+
 ### Release candidates
 
 The manual [Release build workflow](../.github/workflows/release-build.yml) builds
@@ -108,7 +116,7 @@ toolchain, then prepares them locally. File or archive hash differences fail
 the build; the workflow never updates solver locks. A mismatch requires a
 separate maintainer rebuild and reviewed pin update before a candidate can ship.
 
-The [v0.1.1 release notes](releases/v0.1.1.md) record the published installer and its SHA-256 checksum.
+The [v0.1.1 release notes](releases/v0.1.1.md) record the published installers and their SHA-256 checksums.
 
 ## Workspace artifacts
 

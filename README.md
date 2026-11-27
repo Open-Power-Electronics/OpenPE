@@ -92,7 +92,7 @@ You can also install a local JavaScript plugin with declared inputs and optional
 | Platform | Installer | Status |
 | --- | --- | --- |
 | Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta, unsigned |
-| macOS arm64 | `OpenPE-0.1.0-arm64.dmg` | v0.1.0 Beta, unsigned and not notarized |
+| macOS arm64 | `OpenPE-0.1.1-arm64.dmg` | v0.1.1 Beta, ad hoc signed, not notarized |
 | Linux x64 | None yet | Run from source and build solvers locally |
 
 Download installers from [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases). The [installation guide](docs/DEVELOPMENT.md#install-the-app) covers first launch and host requirements. Linux users follow the [Linux solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds).
