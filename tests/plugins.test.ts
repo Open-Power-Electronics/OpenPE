@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { setTimeout as pause } from 'node:timers/promises';
 import { readPluginMetadata } from '../server/plugin-metadata.mjs';
 import os from 'node:os';
 import path from 'node:path';
@@ -342,18 +343,62 @@ test('plugin subprocess closes stdin, bounds output/time, and cancels its proces
     runPluginCommand('codex', ['list'], cwd, signal(), { ...options('overflow'), maxBytes: 1000 }),
     /exceeded/,
   );
+  const timeoutCwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-plugin-timeout-'));
+  const timeoutOptions = options('hang');
+  const launchBeforeFixture = await timeoutOptions.resolve();
+  launchBeforeFixture.args.unshift(
+    '--import',
+    'data:text/javascript,' +
+      encodeURIComponent('await new Promise((resolve) => setTimeout(resolve, 15000));'),
+  );
   await assert.rejects(
-    runPluginCommand('codex', ['list'], cwd, signal(), { ...options('hang'), timeoutMs: 250 }),
+    runPluginCommand('codex', ['list'], timeoutCwd, signal(), {
+      resolve: async () => launchBeforeFixture,
+      timeoutMs: 250,
+    }),
     /timed out/,
   );
+  await assert.rejects(readFile(path.join(timeoutCwd, 'plugin-pids.json')), { code: 'ENOENT' });
+
   const control = new AbortController();
-  const pending = runPluginCommand('codex', ['list'], cwd, control.signal, options('hang'));
-  const rejection = assert.rejects(pending, /cancelled/);
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  control.abort();
-  await rejection;
-  const pids = JSON.parse(await readFile(path.join(cwd, 'plugin-pids.json'), 'utf8'));
-  for (const pid of pids) await waitForProcessStopped(pid);
+  const cancelOptions = options('hang');
+  const pending = runPluginCommand('codex', ['list'], cwd, control.signal, cancelOptions);
+  let settled = false;
+  const finished = pending
+    .catch(() => {})
+    .then(() => {
+      settled = true;
+    });
+  try {
+    const pidFile = path.join(cwd, 'plugin-pids.json');
+    const deadline = Date.now() + cancelOptions.timeoutMs;
+    let pids: unknown;
+    while (!settled && Date.now() < deadline) {
+      try {
+        pids = JSON.parse(await readFile(pidFile, 'utf8'));
+        break;
+      } catch (error) {
+        // The file can be visible before the fixture has written the complete JSON.
+        if (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== 'ENOENT')
+          throw error;
+      }
+      await pause(20);
+    }
+    assert.ok(
+      Array.isArray(pids) &&
+        pids.length === 2 &&
+        pids.every((pid) => Number.isSafeInteger(pid) && pid > 0),
+      'The plugin fixture must report both the parent and descendant PIDs before cancellation.',
+    );
+    assert.notEqual(pids[0], pids[1]);
+    for (const pid of pids) assert.doesNotThrow(() => process.kill(pid, 0));
+    control.abort();
+    await assert.rejects(pending, /cancelled/);
+    for (const pid of pids) await waitForProcessStopped(pid);
+  } finally {
+    control.abort();
+    await finished;
+  }
 });
 
 test('plugin API enforces token, origin, bounded actions, concurrency and shutdown cancellation', async () => {

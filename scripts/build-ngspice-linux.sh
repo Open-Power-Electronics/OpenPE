@@ -1,12 +1,11 @@
 #!/bin/bash
 # Maintainer build. Ordinary preparation installs the hash-pinned archive.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
 source "$root/scripts/linux-bundle.sh"
 linux_toolchain
+linux_begin_build ngspice
 downloads="$root/.openpe/downloads"
-mkdir -p "$downloads" "$root/.openpe/build"
-work="$(mktemp -d "$root/.openpe/build/ngspice-linux-XXXXXX")"
 prefix="$work/deps"
 linux_fetch 'https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/47/ngspice-47.tar.gz' \
   "$downloads/ngspice-47.tar.gz" '894e649651f1838a14095e5a5439e7d3aa63e87ede14d283173fda4fcdef675f'
@@ -18,6 +17,8 @@ for name in ngspice-47 libsndfile-1.2.2 libsamplerate-0.2.2; do
   tar -xzf "$downloads/$name.tar.gz" -C "$work"
 done
 patch -p1 --directory "$work/ngspice-47" < "$root/scripts/patches/ngspice-47-linux-codemodel-path.patch"
+mkdir "$work/cmake"
+cp "$root/scripts/cmake/FindPythonInterp.cmake" "$work/cmake/"
 export CFLAGS="-O2 -ffile-prefix-map=$work=/openpe-build"
 export CXXFLAGS="$CFLAGS"
 cmake_common=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=ON -DBUILD_TESTING=OFF)
@@ -25,7 +26,7 @@ cmake -S "$work/libsamplerate-0.2.2" -B "$work/samplerate-build" "${cmake_common
 cmake --build "$work/samplerate-build" --parallel 6
 cmake --install "$work/samplerate-build"
 cmake -S "$work/libsndfile-1.2.2" -B "$work/sndfile-build" "${cmake_common[@]}" \
-  -DCMAKE_MODULE_PATH="$root/scripts/cmake" -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF \
+  -DCMAKE_MODULE_PATH="$work/cmake" -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF \
   -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF
 cmake --build "$work/sndfile-build" --parallel 6
 cmake --install "$work/sndfile-build"

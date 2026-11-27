@@ -395,8 +395,11 @@
       },
       "toolchain": {
         "gcc": "14.2.0",
+        "gccDebianPackage": "14.2.0-19",
         "glibc": "2.41",
-        "cmake": "4.4.5"
+        "cmake": "4.4.5",
+        "patchelf": "0.18.0",
+        "patchelfDebianPackage": "0.18.0-1.4"
       },
       "sources": [
         {
@@ -421,22 +424,22 @@
         }
       ],
       "files": {
-        "elmer/bin/ElmerGrid": "23852ea554e13ba7afb53859d31022df30c45ac78d89334e827d3579a539fe73",
-        "elmer/bin/ElmerSolver": "06d602fb97f97f7e32689e26354c35deae661fdec490d061f3cc7f586f8fba9f",
-        "elmer/lib/libarpack.so": "4df443d30e8ee678ec643f02c1ba7ab7a065f51e4b6c98c28933cec342e76322",
-        "elmer/lib/libelmersolver.so": "a57147603bfb4ff98c48c683a25bb9b183af755af67b627a50eb04dce98b2a1b",
-        "elmer/lib/libfhuti.so": "c01e92fe462da691aec9c04b0d077f2a1b474ded6bbcb218a9851ac709e50a59",
-        "elmer/lib/libgcc_s.so.1": "047290a73c669c32ba86bf7a97672f1e5d9b8128f4f7d8c94504b0db3fb02db0",
-        "elmer/lib/libgfortran.so.5": "a1b9977fd58b84fdda9f5cff4750b6f259cff3be15557a066566046c2a2a1b3c",
-        "elmer/lib/libmatc.so": "45b0bb657931cbc2d3bc029c5df9c5cc5a589241884e8f612ac8968224953afc",
-        "elmer/lib/libmpi_stubs.so": "c999c80228ec9614f69031f39dafe16f4ba654e87ebb2a50d3b308fda85124f7",
-        "elmer/lib/libopenblas.so.0": "329e4bb633ecf432f7340fd24e63ee3eae03d6fd7f50d305c64532e3ed8ea075",
+        "elmer/bin/ElmerGrid": "a94d8f5ce627975f7c49c499461655547b92944c154d8dddc095dc9646a049ed",
+        "elmer/bin/ElmerSolver": "fd9e39d2dd88e389d3ad40302c568267cac4e772c3a46f1967063a2c55fbcd71",
+        "elmer/lib/libarpack.so": "ad375b5d75145fbc13838c19a9e08de31c139e28fe086b0a5e1e7d0d3525a418",
+        "elmer/lib/libelmersolver.so": "fa0680f1f8114f1df80e98c62472bf459ebfbd81072f88344100997f64242618",
+        "elmer/lib/libfhuti.so": "ae2323e49a97b5fd20c6ced0898c573e5444dcbcdb979fc9f51a7df4ce5d6b7b",
+        "elmer/lib/libgcc_s.so.1": "2e27829e48fe2d9fff3e694c659bac860e0cc3780633778ee74c65a4d4f5d31e",
+        "elmer/lib/libgfortran.so.5": "45dd2d553dc53b49eddf906bf0332e9abcbeb88ecf6b201fa8082da956c4170a",
+        "elmer/lib/libmatc.so": "d1eec427049d830ba89628102fc230c2c9294fef8938e982429be83e3c084b7f",
+        "elmer/lib/libmpi_stubs.so": "90896d8c3f97463d1f208f78855cd2943dd36b5e2ff9fc3ed8205e998739c9cb",
+        "elmer/lib/libopenblas.so.0": "a4d39328b2f11fd179c2e0d98316faeb2703cae438e53088d6b27e4aafe49755",
         "elmer/licenses/OpenBLAS/LICENSE": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff",
         "elmer/licenses/gcc/COPYING.LIB": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
         "elmer/licenses/gcc/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
         "elmer/licenses/gcc/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
-        "elmer/share/elmersolver/lib/HeatSolve.so": "f5f6119a08f1e07607403fdc45ba5fd4af7cb6356a7b6ca0b17420996d76dbc4",
-        "elmer/share/elmersolver/lib/ResultOutputSolve.so": "638fcb59a059c1199feb16bc9b81bb1f8d7f169bfa54fda87ba73029ad6ab829",
+        "elmer/share/elmersolver/lib/HeatSolve.so": "cafdad4a1c810a9ecdc688de45b4f3470047a29a6407dcba45dde12172f8509b",
+        "elmer/share/elmersolver/lib/ResultOutputSolve.so": "f62f1112be9936aeae9e33924133a272af3496c42cb64e9a8dd794e8122f5ffc",
         "elmer/share/elmersolver/lib/SOLVER.KEYWORDS": "a3940f36400a23e32a24466ba195eb2ca9200c57c5ebde288ccd8ed44db1f277",
         "elmer/share/elmersolver/lib/elements.def": "fd7797060c26856026a246dc986c3a8e1e0b56e9de0843b99c81f1176609edbd",
         "elmer/share/elmersolver/license_texts/GPL-2.txt": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670",
@@ -446,20 +449,20 @@
         "gmsh/CREDITS.txt": "533ee9363d1bb9522812de1a68655f17752b75577414245c9ba4ca1d80bcebf1",
         "gmsh/LICENSE.txt": "32085d8c954e2e22dc667c089f360049e8f1af955f946fb0a18f29d70390276a",
         "gmsh/bin/gmsh": "e3765f4c597fff7409923be6f7fb1d026393a174b4b3ad318cb83907538af275",
-        "gmsh/lib/libgcc_s.so.1": "047290a73c669c32ba86bf7a97672f1e5d9b8128f4f7d8c94504b0db3fb02db0",
+        "gmsh/lib/libgcc_s.so.1": "2e27829e48fe2d9fff3e694c659bac860e0cc3780633778ee74c65a4d4f5d31e",
         "gmsh/lib/libgmsh.so.4.15": "d8704077d86d39657268e63de4947ca404ebd70291c6ac860ab6c756185c3a6f",
-        "gmsh/lib/libgomp.so.1": "e5b3bf2dfefd35cb2ccdc23e870d271e1f7d6bcc701081cde3668c6095c6989b",
-        "gmsh/lib/libstdc++.so.6": "9e082db3d01e6077d71a41637f72de352f0392fe88664435056727d46a568a6c",
-        "sources/openpe/build-thermal-linux.sh": "36adddf22d078cbe929eab36c34ee6bf6a462ac80e2472d3774bae40f8d41bfa",
+        "gmsh/lib/libgomp.so.1": "c22f1d399b7d661a9f758ecb82b6d90e595a5fbe241fecbfd4a37b9806d406b5",
+        "gmsh/lib/libstdc++.so.6": "20fe3a0946c2ab9216f408749684a38d545ca8e34c421e4c88a558b5f14bd409",
+        "sources/openpe/build-thermal-linux.sh": "edd8a05df55a696731db2a78149961a0a9e50c5cee82b1b0f24e97a77ec5dd49",
         "sources/openpe/gmsh-linux.c": "9b4028ead5ea3b5b52e160109ed362a32dba90655c537a77a4ed5c0f8709902f",
-        "sources/openpe/linux-bundle.sh": "f4d85afd8064b32962c425a603b493d14a54a19c2e1fcbfae73618fd821855d0"
+        "sources/openpe/linux-bundle.sh": "4dfd23fb0607808b8db9d43ab1d4bf9ee8b23b0cf9f18acd6fe8fa40e8231b10"
       },
       "archive": {
-        "name": "thermal-1-linux-x64-1.tar.gz",
-        "tag": "solvers-thermal-1-linux-x64-1",
-        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-thermal-1-linux-x64-1/thermal-1-linux-x64-1.tar.gz",
-        "size": 47785804,
-        "sha256": "bf52ad45a74e089b1c7c2f0c6c54010abad2200e50885ca574754f42ed643151"
+        "name": "thermal-1-linux-x64-3.tar.gz",
+        "tag": "solvers-thermal-1-linux-x64-3",
+        "url": "https://github.com/Open-Power-Electronics/OpenPE/releases/download/solvers-thermal-1-linux-x64-3/thermal-1-linux-x64-3.tar.gz",
+        "size": 47639403,
+        "sha256": "84d06da13c99539b976a1d89684f8888ac7abdc1a81259f3a2a026fd8ab7bd63"
       }
     }
   }

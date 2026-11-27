@@ -96,11 +96,12 @@ Install a locally built Debian package with `sudo apt install ./<filename>.deb`,
 ### Release candidates
 
 The manual [Release build workflow](../.github/workflows/release-build.yml) builds
-Windows x64 and macOS arm64 on native runners and Linux x64 in Debian 13. Its
-requested version must match `package.json`. It runs documentation, type and
-full test checks before packaging, and uploads only the matching installers and
-SHA-256 checksums as workflow artifacts. It does not push code, create tags or
-publish GitHub Releases. Review all platform results before approving publication.
+Windows x64 and macOS arm64 on native runners and Linux x64 in a digest-pinned
+Debian 13 container. The requested version must match `package.json`. It runs
+documentation, type and full test checks before packaging, and uploads only the
+matching installers and SHA-256 checksums as workflow artifacts. It does not
+push code, create tags or publish GitHub Releases. Review all platform results
+before approving publication.
 
 The Linux job rebuilds the existing pinned solver archives with the documented
 toolchain, then prepares them locally. File or archive hash differences fail
@@ -142,8 +143,21 @@ Maintainer rebuilds write to `release/solvers/`; the locks record archive names,
 | Host          | Rebuild command               | Pinned toolchain                                                                         |
 | ------------- | ----------------------------- | ---------------------------------------------------------------------------------------- |
 | macOS arm64   | `npm run solvers:build-macos` | Apple clang 17.0.0, SDK 26.2, Homebrew GCC 16.2.0, CMake 4.4.5                           |
-| Debian 13 x64 | `npm run solvers:build-linux` | GCC/GFortran 14.2.0, glibc 2.41, CMake 4.4.5; Make, Python 3, curl, patch, tar, patchelf |
+| Debian 13 x64 | `npm run solvers:build-linux` | Debian GCC/GFortran and compiler runtimes 14.2.0-19, glibc 2.41, CMake 4.4.5, Debian patchelf 0.18.0-1.4, Make, Python 3, curl, patch and tar |
 
-Linux `--update-lock` explicitly refreshes reviewed file/archive pins. Linux x64 solver archives are not yet published; build them with `npm run solvers:build-linux -- --update-lock`, review the diff, then run solver preparation before example preparation. Ordinary archive installation needs no compiler. [SPICE build details](SIMULATION.md#portable-models-and-bundled-solver) · [Thermal build details](THERMAL.md#runtime-and-lifecycle)
+The Linux builders reserve private directories at `/tmp/openpe-ngspice-linux`
+and `/tmp/openpe-thermal-linux` to stabilize absolute build paths embedded by
+upstream tools. Each build moves its working files to a separate private
+directory under `.openpe/build/` on exit. If an interrupted build still occupies
+a reserved path, move your build directory aside before retrying. The builders
+reuse hash-verified source downloads in `.openpe/downloads/`.
+
+The current Linux x64 solver archives use revision `-3`. Build them locally
+until the release assets are published. For a new archive revision, generate
+the pins with `npm run solvers:build-linux -- --update-lock`, review the diff,
+and verify a fresh build with `npm run solvers:build-linux` before preparing
+solvers and examples. Give changed archive bytes new archive names and release
+tags. Ordinary archive installation needs no compiler.
+[SPICE build details](SIMULATION.md#portable-models-and-bundled-solver) · [Thermal build details](THERMAL.md#runtime-and-lifecycle)
 
 `npm run solvers:publish` publishes the current macOS/Linux host's two archives to `Open-Power-Electronics/OpenPE` as prereleases with `--latest=false`. Make the corresponding sources, build scripts and notices available alongside the binary downloads. **Owner approval is required before publishing.**

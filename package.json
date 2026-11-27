@@ -2,6 +2,7 @@
   "name": "openpe",
   "version": "0.1.1",
   "description": "Local electrical engineering studio",
+  "homepage": "https://open-power-electronics.github.io/",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",

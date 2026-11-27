@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // can leave app.asar and hit a workspace copy. Resolution uses Electron's
 // asar-aware createRequire and rejects every path outside the packaged resources.
 // `electron` is the host binary, not an archive dependency.
-// Optional dependencies are required only when package-lock os/cpu matches this
+// Optional dependencies are required only when the binary matches this
 // host. electron-builder packages the host install, not the other platform builds.
 // asar stat reports the archived mode. Unpacked files keep the executable bit
 // Electron extracts for the host, so bin checks stat that extracted file.
@@ -51,6 +51,26 @@ export function packagedHost(platform = process.platform, arch = process.arch) {
       `Unsupported package host ${platform} ${arch}. OpenPE packages Windows x64, macOS arm64 and Linux x64.`,
     );
   return host;
+}
+
+export function optionalDependencyApplies(
+  name,
+  lock,
+  platform = process.platform,
+  arch = process.arch,
+) {
+  const needle = `node_modules/${name}`;
+  const entries = Object.entries(lock.packages).filter(
+    ([key]) => key === needle || key.endsWith(`/${needle}`),
+  );
+  if (!entries.length) throw new Error(`Lockfile is missing optional dependency ${name}.`);
+  // Both Linux canvas binaries have identical os/cpu fields in the lock.
+  if (name.startsWith('@napi-rs/canvas-')) return name === packagedHost(platform, arch).canvas;
+  return entries.some(([, entry]) => {
+    if (entry.os && !entry.os.includes(platform)) return false;
+    if (entry.cpu && !entry.cpu.includes(arch)) return false;
+    return platform !== 'linux' || !entry.libc || entry.libc.includes('glibc');
+  });
 }
 
 export function collectRuntimeSpecifiers(source, fileName, { dynamicImports = false } = {}) {
@@ -297,18 +317,6 @@ async function checkPackagedModules({ resources, host }) {
       return containedFile(owned.dir, exported.import, name);
     return resolved;
   };
-  const optionalApplies = (name) => {
-    const needle = `node_modules/${name}`;
-    const entries = Object.entries(lock.packages).filter(
-      ([key]) => key === needle || key.endsWith(`/${needle}`),
-    );
-    if (!entries.length) throw new Error(`Lockfile is missing optional dependency ${name}.`);
-    return entries.some(([, entry]) => {
-      if (entry.os && !entry.os.includes(process.platform)) return false;
-      if (entry.cpu && !entry.cpu.includes(process.arch)) return false;
-      return true;
-    });
-  };
   const expanded = new Set();
   const packages = new Map();
   const scanQueue = [];
@@ -404,7 +412,7 @@ async function checkPackagedModules({ resources, host }) {
     }
     for (const name of names) assertDependency(name, owned.pkgPath);
     for (const name of fieldNames(owned.pkg, 'optionalDependencies')) {
-      if (!optionalApplies(name)) continue;
+      if (!optionalDependencyApplies(name, lock)) continue;
       assertDependency(name, owned.pkgPath);
     }
   }

@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { collectRuntimeSpecifiers, packagedHost } from '../scripts/check-packaged-modules.mjs';
+import {
+  collectRuntimeSpecifiers,
+  optionalDependencyApplies,
+  packagedHost,
+} from '../scripts/check-packaged-modules.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -38,6 +42,18 @@ test('packaged module hosts are explicit for macOS arm64, Windows x64 and Linux 
   assert.throws(() => packagedHost('linux', 'arm64'), /Unsupported package host/);
 });
 
+test('Linux package checks require the GNU native canvas binding', () => {
+  const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+  assert.equal(
+    optionalDependencyApplies('@napi-rs/canvas-linux-x64-gnu', lock, 'linux', 'x64'),
+    true,
+  );
+  assert.equal(
+    optionalDependencyApplies('@napi-rs/canvas-linux-x64-musl', lock, 'linux', 'x64'),
+    false,
+  );
+});
+
 test('service specifier scan detects literal dependencies and ignores bundled ajv source strings', () => {
   const sample = `
     import express from 'express';
@@ -66,6 +82,12 @@ test('Cursor SDK is external to the desktop package and dependency lock', () => 
   const app = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   assert.equal(Object.hasOwn(app.dependencies, '@cursor/sdk'), false);
-  assert.equal(Object.keys(lock.packages).some((name) => name.includes('/@cursor/sdk')), false);
-  assert.equal(app.build.asarUnpack.some((name: string) => name.includes('@cursor/sdk')), false);
+  assert.equal(
+    Object.keys(lock.packages).some((name) => name.includes('/@cursor/sdk')),
+    false,
+  );
+  assert.equal(
+    app.build.asarUnpack.some((name: string) => name.includes('@cursor/sdk')),
+    false,
+  );
 });

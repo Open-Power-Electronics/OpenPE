@@ -1,13 +1,12 @@
 #!/bin/bash
 # Maintainer-only glibc Linux x64 Gmsh 4.15.2 / Elmer 26.1 / OpenBLAS 0.3.13.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd -P)"
 source "$root/scripts/linux-bundle.sh"
 linux_toolchain
 [[ "$("${FC:-gfortran}" -dumpfullversion)" == 14.2.0 ]] || linux_fail 'GFortran 14.2.0 is required.'
+linux_begin_build thermal
 downloads="$root/.openpe/downloads"
-mkdir -p "$downloads" "$root/.openpe/build"
-work="$(mktemp -d "$root/.openpe/build/thermal-linux-XXXXXX")"
 linux_fetch 'https://github.com/OpenMathLib/OpenBLAS/archive/refs/tags/v0.3.13.tar.gz' \
   "$downloads/OpenBLAS-0.3.13.tar.gz" '79197543b17cc314b7e43f7a33148c308b0807cd6381ee77f77e15acf3e6459e'
 linux_fetch 'https://github.com/ElmerCSC/elmerfem/releases/download/release-26.1/elmerfem-release-26.1.tar.gz' \
@@ -21,7 +20,8 @@ export CFLAGS="-O2 -Wno-error=implicit-function-declaration -ffile-prefix-map=$w
 export CXXFLAGS="$CFLAGS"
 export FFLAGS="$CFLAGS -fallow-argument-mismatch"
 blas="$work/openblas"
-blas_make=(TARGET=GENERIC DYNAMIC_ARCH=0 USE_OPENMP=0 USE_THREAD=0 NO_SHARED=0 FC="${FC:-gfortran}" PREFIX="$blas")
+# OpenBLAS otherwise embeds the build host CPU count even with threading disabled.
+blas_make=(TARGET=GENERIC DYNAMIC_ARCH=0 USE_OPENMP=0 USE_THREAD=0 NUM_THREADS=1 NO_SHARED=0 FC="${FC:-gfortran}" PREFIX="$blas")
 # These goals write the same archive; running them concurrently corrupts it.
 for goal in libs netlib shared; do
   make -C "$work/OpenBLAS-0.3.13" -j6 "${blas_make[@]}" "$goal"
@@ -54,7 +54,8 @@ with ZipFile(sys.argv[1]) as archive:
     ]:
         target.write_bytes(archive.read(base + source))
 PY
-gcc "$root/scripts/gmsh-linux.c" -I"$work" -L"$bundle/gmsh/lib" -l:libgmsh.so.4.15 \
+cp "$root/scripts/gmsh-linux.c" "$work/"
+gcc "$work/gmsh-linux.c" -I"$work" -L"$bundle/gmsh/lib" -l:libgmsh.so.4.15 \
   -Wl,-rpath,'$ORIGIN/../lib' -o "$bundle/gmsh/bin/gmsh"
 linux_relocate "$bundle/gmsh/lib/libgmsh.so.4.15" "$bundle/gmsh/lib" '$ORIGIN'
 linux_relocate "$bundle/gmsh/bin/gmsh" "$bundle/gmsh/lib" '$ORIGIN/../lib'

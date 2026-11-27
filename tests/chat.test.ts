@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -229,6 +229,107 @@ async function assertStopped(cwd: string) {
     await pause(100);
   }
   assert.fail('The fixture child process was not cleaned up');
+}
+
+function observeModelDiscoveryChildren(t: TestContext) {
+  type ObservedChild = {
+    child: ChildProcess;
+    command: unknown;
+    args: unknown;
+    windowsHide: boolean | undefined;
+    events: { spawned: boolean; exited: boolean; closed: boolean };
+    spawned: Promise<void>;
+    exited: Promise<void>;
+    closed: Promise<void>;
+  };
+  const observed = new Map<string, ObservedChild[]>();
+  const spawn = childProcess.spawn;
+  const observe = t.mock.method(childProcess, 'spawn', ((...args: unknown[]) => {
+    const child = Reflect.apply(spawn, childProcess, args) as ChildProcess;
+    const options = args[2] as SpawnOptions | undefined;
+    const cwd = options?.cwd;
+    const records = typeof cwd === 'string' ? observed.get(cwd) : undefined;
+    if (records) {
+      // Observe the OS child even when a timeout prevents the fixture's JS from running.
+      const events = { spawned: false, exited: false, closed: false };
+      records.push({
+        child,
+        command: args[0],
+        args: args[1],
+        windowsHide: options?.windowsHide,
+        events,
+        spawned: new Promise<void>((resolve) =>
+          child.once('spawn', () => {
+            events.spawned = true;
+            resolve();
+          }),
+        ),
+        exited: new Promise<void>((resolve) =>
+          child.once('exit', () => {
+            events.exited = true;
+            resolve();
+          }),
+        ),
+        closed: new Promise<void>((resolve) =>
+          child.once('close', () => {
+            events.closed = true;
+            resolve();
+          }),
+        ),
+      });
+    }
+    return child;
+  }) as typeof childProcess.spawn);
+  syncBuiltinESMExports();
+  return {
+    watch(cwd: string) {
+      observed.set(cwd, []);
+    },
+    async assertStopped(cwd: string, mode: string) {
+      const records = observed.get(cwd) ?? [];
+      assert.equal(records.length, 1, 'Discovery must spawn exactly the known fixture child.');
+      const record = records[0];
+      assert.equal(record.command, process.execPath);
+      assert.equal(record.windowsHide, true);
+      assert.ok(record.child.pid && record.child.pid > 0, 'The fixture must have an OS process.');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.all([record.spawned, record.exited, record.closed]),
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `The fixture child was not cleaned up: ${JSON.stringify({
+                      mode,
+                      pid: record.child.pid,
+                      ...record.events,
+                      exitCode: record.child.exitCode,
+                      signalCode: record.child.signalCode,
+                    })}`,
+                  ),
+                ),
+              3000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      assert.ok(record.child.exitCode !== null || record.child.signalCode !== null);
+      return record.args;
+    },
+    restore() {
+      // Test cleanup cannot turn a missed lifecycle assertion into a pass.
+      for (const records of observed.values())
+        for (const { child } of records)
+          if (child.pid && child.exitCode === null && child.signalCode === null)
+            child.kill('SIGKILL');
+      observe.mock.restore();
+      syncBuiltinESMExports();
+    },
+  };
 }
 
 test('real child transport streams before completion, sends effort and records ordered milestones', async () => {
@@ -794,23 +895,36 @@ test('Claude concrete model discovery rejects malformed resolutions, missing mod
   }
 });
 
-test('Claude model discovery rejects interactive requests, failures and timeouts', async () => {
-  for (const [mode, expected] of [
-    ['claude-catalog-interactive', /interactive action/],
-    ['claude-catalog-error', /Could not load Claude models/],
-    ['claude-catalog-null', /invalid model response/],
-    ['claude-catalog-array', /invalid model response/],
-    ['claude-catalog-hang', /timed out/],
-  ] as const) {
-    const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-model-failure-'));
-    await assert.rejects(
-      listAgentModels('claude', cwd, new AbortController().signal, {
-        resolve: resolver(mode),
-        timeoutMs: mode.endsWith('hang') ? 500 : 15000,
-      }),
-      expected,
-    );
-    await assertStopped(cwd);
+test('Claude model discovery rejects interactive requests, failures and timeouts', async (t) => {
+  const children = observeModelDiscoveryChildren(t);
+  try {
+    for (const [mode, expected] of [
+      ['claude-catalog-interactive', /interactive action/],
+      ['claude-catalog-error', /Could not load Claude models/],
+      ['claude-catalog-null', /invalid model response/],
+      ['claude-catalog-array', /invalid model response/],
+      ['claude-catalog-hang', /timed out/],
+    ] as const) {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-model-failure-'));
+      const timesOut = mode === 'claude-catalog-hang';
+      if (timesOut) children.watch(cwd);
+      await assert.rejects(
+        listAgentModels('claude', cwd, new AbortController().signal, {
+          resolve: resolver(mode),
+          timeoutMs: timesOut ? 500 : 15000,
+        }),
+        expected,
+      );
+      if (timesOut) {
+        const args = await children.assertStopped(cwd, mode);
+        assert.ok(Array.isArray(args));
+        assert.deepEqual(args.slice(0, 2), [fixture, mode]);
+      } else {
+        await assertStopped(cwd);
+      }
+    }
+  } finally {
+    children.restore();
   }
 });
 
@@ -831,57 +945,7 @@ test('Codex discovery uses the native recommendation when config has no model', 
 });
 
 test('model discovery errors, approval requests, timeout and cancellation never leave a child running', async (t) => {
-  type ObservedChild = {
-    child: ChildProcess;
-    command: unknown;
-    args: unknown;
-    windowsHide: boolean | undefined;
-    events: { spawned: boolean; exited: boolean; closed: boolean };
-    spawned: Promise<void>;
-    exited: Promise<void>;
-    closed: Promise<void>;
-  };
-  const expected = new Map<string, string[]>();
-  const observed = new Map<string, ObservedChild[]>();
-  const spawn = childProcess.spawn;
-  const observe = t.mock.method(childProcess, 'spawn', ((...args: unknown[]) => {
-    const child = Reflect.apply(spawn, childProcess, args) as ChildProcess;
-    const options = args[2] as SpawnOptions | undefined;
-    const cwd = options?.cwd;
-    if (typeof cwd === 'string' && expected.has(cwd)) {
-      // Observe OS lifecycle immediately, before a loaded child can exit. The
-      // fixture PID file proves readiness elsewhere, not whether spawn occurred.
-      const events = { spawned: false, exited: false, closed: false };
-      const record: ObservedChild = {
-        child,
-        command: args[0],
-        args: args[1],
-        windowsHide: options?.windowsHide,
-        events,
-        spawned: new Promise<void>((resolve) =>
-          child.once('spawn', () => {
-            events.spawned = true;
-            resolve();
-          }),
-        ),
-        exited: new Promise<void>((resolve) =>
-          child.once('exit', () => {
-            events.exited = true;
-            resolve();
-          }),
-        ),
-        closed: new Promise<void>((resolve) =>
-          child.once('close', () => {
-            events.closed = true;
-            resolve();
-          }),
-        ),
-      };
-      observed.set(cwd, [...(observed.get(cwd) ?? []), record]);
-    }
-    return child;
-  }) as typeof childProcess.spawn);
-  syncBuiltinESMExports();
+  const children = observeModelDiscoveryChildren(t);
   try {
     for (const mode of [
       'catalog-error',
@@ -902,7 +966,7 @@ test('model discovery errors, approval requests, timeout and cancellation never 
           'data:text/javascript,' +
             encodeURIComponent('await new Promise((resolve) => setTimeout(resolve, 15000));'),
         );
-      expected.set(cwd, [...launch.args, 'app-server', '--listen', 'stdio://']);
+      children.watch(cwd);
       const control = new AbortController();
       const pending = listAgentModels('codex', cwd, control.signal, {
         resolve: async () => launch,
@@ -930,50 +994,13 @@ test('model discovery errors, approval requests, timeout and cancellation never 
         control.abort();
         await settled;
       }
-      const records = observed.get(cwd) ?? [];
-      assert.equal(records.length, 1, 'Discovery must spawn exactly the known fixture child.');
-      const record = records[0];
-      assert.equal(record.command, process.execPath);
-      assert.deepEqual(record.args, expected.get(cwd));
-      assert.equal(record.windowsHide, true);
-      assert.ok(record.child.pid && record.child.pid > 0, 'The fixture must have an OS process.');
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          Promise.all([record.spawned, record.exited, record.closed]),
-          new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `The fixture child was not cleaned up: ${JSON.stringify({
-                      mode,
-                      pid: record.child.pid,
-                      ...record.events,
-                      exitCode: record.child.exitCode,
-                      signalCode: record.child.signalCode,
-                    })}`,
-                  ),
-                ),
-              3000,
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
-      assert.ok(record.child.exitCode !== null || record.child.signalCode !== null);
+      const args = await children.assertStopped(cwd, mode);
+      assert.deepEqual(args, [...launch.args, 'app-server', '--listen', 'stdio://']);
       if (mode === 'timeout-before-pid')
         await assert.rejects(readFile(path.join(cwd, 'fixture.pid'), 'utf8'), { code: 'ENOENT' });
     }
   } finally {
-    // Test cleanup cannot turn a missed lifecycle assertion into a pass.
-    for (const records of observed.values())
-      for (const { child } of records)
-        if (child.pid && child.exitCode === null && child.signalCode === null)
-          child.kill('SIGKILL');
-    observe.mock.restore();
-    syncBuiltinESMExports();
+    children.restore();
   }
 });
 

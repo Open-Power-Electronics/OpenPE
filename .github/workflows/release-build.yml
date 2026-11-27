@@ -101,7 +101,7 @@ jobs:
   linux:
     name: Build linux-x64 on Debian 13
     runs-on: ubuntu-24.04
-    container: debian:13
+    container: debian:13@sha256:3cda3ca472ce45507a5109c6a3907093e24d9ae67d55954c9a07a45665dafba2
     timeout-minutes: 120
     defaults:
       run:
@@ -150,8 +150,8 @@ jobs:
         # A file/archive hash mismatch fails the job; release builds never repin.
         run: npm run solvers:build-linux
       - run: npm run libraries:download
-      - run: npm run simulation:prepare -- --archive release/solvers/ngspice-47-linux-x64-1.tar.gz
-      - run: npm run thermal:prepare -- --archive release/solvers/thermal-1-linux-x64-1.tar.gz
+      - run: npm run simulation:prepare -- --archive release/solvers/ngspice-47-linux-x64-3.tar.gz
+      - run: npm run thermal:prepare -- --archive release/solvers/thermal-1-linux-x64-3.tar.gz
       - run: npm run examples:prepare
       - run: npm run check:docs
       - run: npx next typegen

@@ -7,7 +7,9 @@ import { createStepParserPool } from '../server/libraries.mjs';
 
 test('Würth STEP assembly previews recover source colours without changing posed geometry', async () => {
   const parser = await createRequire(import.meta.url)('occt-import-js')();
-  const pool = createStepParserPool();
+  // Exercise geometry and colour on emulated build hosts as well. The parser
+  // pool's timeout and worker retirement are covered in step-parser-pool.test.ts.
+  const pool = createStepParserPool({ timeoutMs: 180_000 });
   const library = '../resources/example-catalog/footprints/';
   const models = [
     'models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-DD-7345straight.step',

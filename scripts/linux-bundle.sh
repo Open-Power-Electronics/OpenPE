@@ -3,24 +3,73 @@
 linux_fail() { printf 'Linux bundle: %s\n' "$1" >&2; exit 1; }
 
 linux_fetch() {
-  local url="$1" file="$2" expected="$3" actual
+  local url="$1" file="$2" expected="$3" actual partial
+  [[ ! -L "$file" ]] || linux_fail "Download path is a link: $file"
   if [[ ! -f "$file" ]]; then
-    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-      --retry 2 --output "$file.partial" "$url"
-    mv "$file.partial" "$file"
+    [[ ! -e "$file" ]] || linux_fail "Download path is not a regular file: $file"
+    partial="$(mktemp "$file.partial-XXXXXX")"
+    if ! curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      --retry 2 --output "$partial" "$url"; then
+      rm -- "$partial"
+      linux_fail "Could not download $(basename "$file")"
+    fi
+    actual="$(sha256sum "$partial" | cut -d' ' -f1)"
+    if [[ "$actual" != "$expected" ]]; then
+      rm -- "$partial"
+      linux_fail "SHA-256 mismatch for $(basename "$file")"
+    fi
+    if ! mv -nT -- "$partial" "$file"; then
+      rm -- "$partial"
+      linux_fail "Could not store download: $file"
+    fi
+    [[ ! -e "$partial" ]] || rm -- "$partial"
   fi
+  [[ -f "$file" && ! -L "$file" ]] || linux_fail "Download path is not a regular file: $file"
   actual="$(sha256sum "$file" | cut -d' ' -f1)"
   [[ "$actual" == "$expected" ]] || linux_fail "SHA-256 mismatch for $(basename "$file")"
 }
 
 linux_toolchain() {
+  local package
   [[ "$(uname -s)-$(uname -m)" == Linux-x86_64 ]] || linux_fail 'Build on Linux x64.'
   [[ "$(gcc -dumpfullversion)" == 14.2.0 ]] || linux_fail 'GCC 14.2.0 is required.'
   [[ "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.41' ]] || linux_fail 'Build on glibc 2.41.'
   [[ "$(cmake --version | head -n1)" == 'cmake version 4.4.5' ]] || linux_fail 'CMake 4.4.5 is required.'
-  command -v patchelf >/dev/null || linux_fail 'patchelf is required.'
-  export SOURCE_DATE_EPOCH=1786424074
+  for package in gcc-14-x86-64-linux-gnu gfortran-14-x86-64-linux-gnu libgcc-s1 libgfortran5 libgomp1 libstdc++6; do
+    [[ "$(dpkg-query --show --showformat='${Version}' "$package")" == 14.2.0-19 ]] ||
+      linux_fail "Debian package $package version 14.2.0-19 is required."
+  done
+  [[ "$(patchelf --version)" == 'patchelf 0.18.0' &&
+    "$(dpkg-query --show --showformat='${Version}' patchelf)" == 0.18.0-1.4 ]] ||
+    linux_fail 'Debian patchelf 0.18.0-1.4 is required.'
+  export LC_ALL=C SOURCE_DATE_EPOCH=1786424074
   umask 022
+}
+
+linux_preserve_build() {
+  local status=$? saved
+  if [[ -d "$work" && ! -L "$work" && -O "$work" && ! -L "$root/.openpe" && ! -L "$root/.openpe/build" ]] &&
+    saved="$(mktemp -d "$root/.openpe/build/${work##*/}-XXXXXX")" &&
+    mv -nT -- "$work" "$saved/work"; then
+    printf 'Linux bundle: saved build files in %s\n' "$saved/work"
+    exit "$status"
+  fi
+  linux_fail "Could not preserve $work. Move your build directory aside before retrying."
+}
+
+linux_begin_build() {
+  local directory
+  for directory in "$root/.openpe" "$root/.openpe/build" "$root/.openpe/downloads"; do
+    [[ ! -L "$directory" ]] || linux_fail "Build path is a link: $directory"
+    mkdir -p -- "$directory"
+  done
+  [[ -d /tmp && ! -L /tmp && -k /tmp ]] || linux_fail 'Build requires a real, sticky /tmp directory.'
+  # A fixed path also stabilizes C strings and ELF metadata that prefix mapping cannot rewrite.
+  work="/tmp/openpe-$1-linux"
+  mkdir -m 0700 -- "$work" || linux_fail "Cannot reserve $work. Move your previous build aside before retrying."
+  trap linux_preserve_build EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 }
 
 linux_install_bundle() {
