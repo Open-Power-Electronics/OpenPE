@@ -60,7 +60,7 @@ The Schematic severity selector shows Error, Warning or Off. Output conflicts an
 
 ## Layout DRC
 
-DRC inspects visible and hidden board copper. Transformed pads, straight tracks, through vias, supported copper graphics and stored zone fills retain their actual copper layers, holes and board cutouts. Same-net contact is permitted; different copper layers do not create a short without a physical connection. Unassigned copper contacts produce warnings and incomplete coverage rather than being treated as a known same-net connection.
+DRC inspects visible and hidden board copper. Transformed pads, straight and arc tracks, supported vias and copper graphics, and stored zone fills retain their actual copper layers, holes and board cutouts. Same-net contact is permitted. Different copper layers require a physical connection to create a short. Unassigned copper contacts produce warnings and incomplete coverage.
 
 | Rule                              | Reported condition                                                                                                 |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -69,13 +69,16 @@ DRC inspects visible and hidden board copper. Transformed pads, straight tracks,
 | `pcb.courtyard-overlap`           | Two footprint courtyards overlap on the same side of the board.                                                    |
 | `pcb.short` / `pcb.clearance`     | Known different-net copper touches or is closer than the chosen clearance on a shared layer.                       |
 | `pcb.track-width`                 | A track is narrower than the chosen minimum.                                                                       |
-| `pcb.via-drill` / `pcb.pad-drill` | A through via or pad drill is smaller than the shared board-wide minimum.                                          |
-| `pcb.via-diameter`                | A through via diameter is smaller than the chosen minimum.                                                         |
+| `pcb.via-drill` / `pcb.pad-drill` | A supported primary drill is smaller than the board minimum or a backdrill cutter cannot remove its barrel.        |
+| `pcb.via-diameter`                | A via land diameter is smaller than the chosen minimum.                                                            |
 | `pcb.annular-ring`                | A via or plated through-hole pad has insufficient annular ring.                                                    |
 | `pcb.copper-edge`                 | Copper extends outside the board, into a cutout or too close to an edge.                                           |
 | `pcb.copper-hole`                 | Copper is too close to a non-plated or foreign-net plated hole; legitimate same-net plated contacts are permitted. |
+| `pcb.holes-co-located`            | Primary round drills share a centre on overlapping drill spans.                                                    |
 | `pcb.keepout`                     | Copper enters a keepout whose track/via/pad/pour flag applies.                                                     |
 | `pcb.unrouted`                    | Assigned pads of a net remain in disconnected copper groups.                                                       |
+
+OpenPE assembles closed board and footprint `Edge.Cuts` shapes into material contours for board-edge checks. Saved zone fills on `Edge.Cuts` remain technical artwork and are excluded from the material contour and copper checks. Native curved board edges, including cubic Bézier segments, are subdivided to a maximum 0.0005 mm error. A clearance within 0.0006 mm of a curved outline decision boundary may yield a partial result with `pcb.geometry-limit`. OpenPE runs these checks locally with the stored board geometry. [KiCad 10 outline assembly](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/convert_shape_list_to_polygon.cpp)
 
 The Rule popup exposes board-wide minimum copper clearance, minimum track width, copper-to-board-edge distance, minimum through-hole diameter and minimum via diameter. All thresholds are editable in Settings → Rule and independent of routing tool settings.
 
@@ -97,26 +100,74 @@ The table lists defaults for thresholds absent from the native project. Enabled 
 
 The Workbench starts with all implemented checks enabled. Off omits a rule's findings and checked rule ID. A disabled check or a query with a subset of groups yields a partial report. See the rule settings tabs and controls in [Design](../DESIGN.md#settings-and-appearance).
 
+An admitted board returns a DRC report even when it has design violations or
+uses geometry that some checks cannot measure. A `pcb.coverage` finding explains
+skipped rules. Independent track-width, outline, courtyard and silkscreen checks
+continue where their own inputs are supported. Design errors remain findings in
+the report. The `complete` flag describes coverage of the enabled checks.
+
 Manual and automatic Workbench DRC and direct queries use the project thresholds and supported KiCad net-class and custom clearance rules by default. The board-wide minimum copper clearance is a floor for every applicable pair, including saved zone fills. Direct queries may also enable saved-zone clearance values. With those options enabled, disabling a conditional rule falls through to the next matching rule or the ordinary clearance. Disabling a net-class limit leaves its assignment available to conditions. Source overrides apply to current source keys and leave native files and saved fill geometry intact.
 
-For each foreign-net pair, the last matching supported conditional rule in the project’s `.kicad_dru` supplies the clearance, with the editable global clearance as a floor. Otherwise, DRC takes the maximum of the global limit, participating enabled zone values and enabled net-class values. The diagnostic names the controlling zone, class or rule. The KiCad source supports `.kicad_pro` net-class clearance and exact net-name patterns, and `.kicad_dru` version 1 rules containing a single minimum clearance in millimetres or mils. Supported conditions combine `A` and `B` net-class and object-type comparisons and exact-reference `intersectsCourtyard()` with `&&`, `||` and parentheses. Conditions test both operand orders. Unsupported project rules produce an incomplete clearance report when the KiCad source is enabled. [KiCad 10 custom rules](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#custom-design-rules)
+For each foreign-net pair, a positive native pad or inherited footprint clearance takes precedence over the supported conditional rules and net classes. The larger local setting applies when both objects have one. A pad's explicit zero bypasses its footprint setting and falls through to the rules. The editable board minimum and enabled zone clearances remain floors for the local override. Without a positive local override, the last matching supported conditional rule in `.kicad_dru` supplies the clearance, with the board minimum as a floor. Otherwise, DRC takes the maximum of the global limit, participating enabled zone values and enabled net-class values. The diagnostic names the controlling source. The KiCad source supports `.kicad_pro` net-class clearance and exact net-name patterns, and `.kicad_dru` version 1 rules containing a single minimum clearance in millimetres or mils. Supported conditions combine `A` and `B` net-class and object-type comparisons and exact-reference `intersectsCourtyard()` with `&&`, `||` and parentheses. Conditions test both operand orders. Unsupported project rules produce an incomplete clearance report when the KiCad source is enabled. [KiCad 10 custom rules](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#custom-design-rules)
+
+DRC checks imported circular tracks for width, clearance, edge spacing,
+keepouts and connectivity. It checks a via's actual copper spans and land sizes.
+It checks a backdrill's bore from the entry through its must-cut layer, where
+the retained copper land no longer connects to the plated barrel. Native
+backdrill geometry participates in hole spacing and copper-to-hole clearance.
+Layer-specific padstacks map each land to its physical copper layers around the
+common drill. Native custom pads use the union of their anchor and copper
+primitives. Clearance decisions within the custom contour's precision can make
+the report partial.
+
+Native net ties retain their independently assigned pad networks. Clearance
+between pads in the same declared group is waived within the owning footprint.
+Artwork bridges are checked against their physical contacts on each layer.
+External copper uses the allowance of an artwork primitive touching its own
+network's declared pad. Connectivity requires the route to reach its assigned
+pad, and a contact with an undeclared pad or unrelated network remains a short.
 
 Courtyard checks use the native `F.CrtYd` and `B.CrtYd` contours at the footprint's current placement and rotation, regardless of locks or layer visibility. Each side is checked independently. Intersections of positive area are errors, while a shared edge at zero minimum spacing is allowed. Stroke width does not expand the courtyard. Missing courtyards are ignored by default, and invalid contours make coverage incomplete. Locating an overlap selects both footprints where visible and centers the marker at their overlap. Custom courtyard clearances and holes entering another footprint's courtyard are outside this check. [KiCad 10 DRC rules](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html)
 
-Hole-to-hole clearance measures the gap between through holes across all nets. It uses the actual centre for round holes and the full tool centreline for slots, with the tool radius and any pad drill offset applied. Silkscreen clearance compares same-side solid shapes and supported stroke text, excluding shape pairs belonging to the same footprint or the board itself. Visible native text supplies the height and stroke thickness checks. Display-only reference fallbacks are excluded. Unsupported dashed artwork, dimensions or unresolved stroke text make the relevant silkscreen report partial. Set a positive minimum to run any of these four threshold checks.
+Hole-to-hole clearance measures the gap across all nets on overlapping drill spans. It uses the actual centre for round holes and the full tool centreline for slots, with the tool radius and any pad drill offset applied. Primary round holes whose centres are less than 0.0005 mm apart on overlapping spans report a co-location warning when at least one hole is mechanical. A hole pair is reported once. The co-location rule has independent severity and runs even when the minimum drill spacing is zero. [KiCad 10 hole-to-hole checks](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/drc/drc_test_provider_hole_to_hole.cpp#L233-L292)
 
-Minimum copper connection width, microvia dimensions, creepage groove width, thermal spoke counts and solder-mask clearances remain outside the supported checks.
+Silkscreen clearance compares same-side solid shapes and supported stroke text, excluding shape pairs belonging to the same footprint or the board itself. Visible native text supplies the height and stroke thickness checks. Display-only reference fallbacks are excluded. Native pad artwork, unsupported dashed artwork, dimensions or unresolved stroke text make the relevant silkscreen report partial. Set a positive minimum to run these threshold checks.
 
-DRC includes the rule area's configured [pour clearance](LAYOUT.md#saved-zone-fills)
-when checking saved pours for overlap.
+`pcb.silk-edge` reports a warning when supported visible silkscreen overlaps or
+is too close to a closed board edge or cutout. An item wholly outside the board
+is outside this check. The silkscreen clearance setting also sets the edge gap.
+At zero gap the rule still checks for clipped ink. Near-threshold curved contours
+can leave this rule partial. A broken outline still allows local checks against
+measurable `Edge.Cuts` strokes. It leaves material containment and copper-to-edge
+coverage incomplete. [KiCad 10.0.1 edge check](https://github.com/KiCad/kicad-source-mirror/blob/10.0.1/pcbnew/drc/drc_test_provider_edge_clearance.cpp)
 
-Zone outlines are not copper. Enabled unfilled zones produce `pcb.unfilled-zone` when a selected check needs saved fills. [Layout](LAYOUT.md#saved-zone-fills) defines which edits refresh saved fills. Worker-calculated gesture fills and their temporary conservative masks are presentation only and provide no DRC or connectivity evidence. DRC inspects stored fills without regeneration or a blanket freshness warning. A completed empty fill is valid and contains no copper. Disabled pours and keepouts do not need fill data. Copper text/dimensions and footprint occupancy of rule areas report unsupported coverage. Missing fills and unsupported coverage make the report incomplete, even when its inspected geometry has no errors. Mask, creepage, impedance, differential pairs, thermal spoke counts, isolated copper and footprint-library comparison are outside the checker.
+Minimum copper connection width, microvia dimensions, creepage groove width,
+thermal spoke counts, solder-mask clearances, impedance, differential pairs,
+isolated copper and footprint-library comparison remain outside the checker.
+
+DRC checks native circular and mixed line-and-arc rule areas on their declared copper layers, including areas owned by rotated footprints. Track, via and pad contact with a simple circle uses its exact radius. Other curved keepout checks use bounded contours and report `pcb.geometry-limit` when the approximation and clipping tolerances leave the result uncertain. Saved pours include the rule area's configured clearance. [Saved zone fills](LAYOUT.md#saved-zone-fills)
+
+Zone outlines are not copper. Enabled unfilled zones produce `pcb.unfilled-zone` when a selected check needs saved fills. [Layout](LAYOUT.md#saved-zone-fills) defines which edits refresh saved fills. Worker-calculated gesture fills and their temporary conservative masks are presentation only and provide no DRC or connectivity evidence. DRC inspects stored fills without regeneration or a blanket freshness warning. A completed empty fill is valid and contains no copper. Disabled pours and keepouts do not need fill data. Copper text/dimensions and footprint occupancy of rule areas report unsupported coverage. Missing fills and unsupported coverage make the report incomplete, even when its inspected geometry has no errors.
+
+For native connection-dependent pads and vias, DRC retains enabled end rings
+and saved zone flashes. Other layers retain a land when eligible same-net
+copper reaches the drilled section on that layer. Contacts between two
+conditionally flashed pads or pads from one footprint do not force a flash.
+The checker uses the resolved lands for geometry and connectivity while
+retaining the drill span. A contact inside the contour error allowance leaves
+coverage partial. [KiCad 10 pad flashing](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pad.cpp#L433-L506)
+[KiCad 10 connectivity](https://github.com/KiCad/kicad-source-mirror/blob/10.0.1/pcbnew/connectivity/connectivity_data.cpp#L400-L455)
+
+Layout can display native PCB data beyond the work bounds of copper analysis.
+Native pad machining and some native via treatments remain outside the checker.
+Native QR artwork leaves selected silkscreen checks partial.
+Copper-to-edge clearance on castellated boards leaves OpenPE's report incomplete.
 
 Explicit refill and automatic refresh apply the same accepted native net-class assignments and conditional-rule precedence as the checker, with their [bounded fill coverage](LAYOUT.md#saved-zone-fills). Refill never weakens a DRC limit or changes a check-only override to suppress a finding.
 
 Copper-to-hole checks use a spatial index to find nearby drill candidates, then calculate exact supported clearances in native record order. DRC and connectivity share contours for exact owned pad geometry and unchanged board-level saved fills. Changed contours are decoded again, footprint-local contours use their current placement, and each board rechecks the aggregate saved-fill vertex limit.
 
-DRC bounds include 15,000 copper objects, 120,000 vertices, two million geometry operations and the shared connectivity analyzer's limits. Excessive or invalid geometry returns an incomplete report with an actionable note in the query result. The issue list is capped at 1,000. The panel shows individual findings and identifies a truncated issue list. A no-issues conclusion requires a complete current report. Refill and verify exported boards in KiCad before manufacturing.
+DRC bounds include 15,000 copper objects, 120,000 vertices, two million geometry operations and the shared connectivity analyzer's limits. Excessive or invalid geometry returns an incomplete report with an actionable note in the query result. The issue list retains up to 1,000 findings. Checks continue within the geometry bounds after the report fills. The panel shows individual findings and identifies a truncated issue list. A no-issues conclusion requires a complete current report.
 
 ## Verification
 

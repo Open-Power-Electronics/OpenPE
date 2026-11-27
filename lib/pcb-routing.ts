@@ -1,5 +1,6 @@
 import type { Point } from './circuit';
-import type { BoardLine, CopperLayer, PCB } from './pcb';
+import { requireSupportedPCBCopper, type BoardLine, type CopperLayer, type PCB } from './pcb';
+import { pcbPadCopperClearance } from './pcb-zone-settings';
 import { isOwnedProjectNode } from './immutable-project';
 import { padCopperLayers } from './pcb-connectivity';
 import {
@@ -350,6 +351,9 @@ export function createPCBRouter(
   session?: PCBRouterSession,
   reuseStation = false,
 ) {
+  requireSupportedPCBCopper(board, 'Checked routing');
+  if (board.tuningPatterns?.length)
+    throw new Error('Checked routing is unavailable on boards with native tuning patterns.');
   const {
     layer,
     netId,
@@ -521,7 +525,12 @@ export function createPCBRouter(
           (netId === null || pad.netId !== netId) &&
           padCopperLayers(board, footprint, pad).includes(layer)
         ) {
-          if (pad.shape === 'circle') addPad([padPosition(footprint, pad)], pad.size.x / 2);
+          const extraClearance = Math.max(
+            0,
+            (pcbPadCopperClearance(footprint, pad) ?? 0) - clearance,
+          );
+          if (pad.shape === 'circle')
+            addPad([padPosition(footprint, pad)], pad.size.x / 2 + extraClearance);
           else {
             const shape = borrowPCBPadOutline(footprint, pad);
             const radius =
@@ -532,7 +541,7 @@ export function createPCBRouter(
                   ? (pad.roundrectRatio ?? 0)
                   : 0);
             // Cover the maximum sagitta of padPolygon's 9-point quarter arcs.
-            addPad(shape.outer, radius * (1 - Math.cos(Math.PI / 32)), shape);
+            addPad(shape.outer, radius * (1 - Math.cos(Math.PI / 32)) + extraClearance, shape);
           }
         }
         // A plated same-net pad is a legal routing anchor, including its center.

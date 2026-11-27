@@ -5644,6 +5644,247 @@ function validatedSimulationResult(value, deck) {
   };
 }
 
+// lib/immutable-project-ownership.mjs
+var ownedNodes = /* @__PURE__ */ new WeakSet();
+function isOwnedProjectNode(value) {
+  return ownedNodes.has(value);
+}
+
+// lib/sexpr.ts
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
+var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
+var val = (n, i = 1) => n ? atom(n[i]) : "";
+
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+
+// lib/pcb-collision.ts
+var squaredDistance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+function pointSegmentDistance(p, a, b) {
+  const length = squaredDistance(a, b);
+  const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length)) : 0;
+  const x = a.x + t * (b.x - a.x), y = a.y + t * (b.y - a.y);
+  return (p.x - x) ** 2 + (p.y - y) ** 2;
+}
+
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+
+// lib/pcb-geometry.ts
+function transformPCBGraphic(g, point2, angle2 = (n) => n) {
+  return {
+    ...g,
+    start: point2(g.start),
+    end: point2(g.end),
+    ...g.mid ? { mid: point2(g.mid) } : {},
+    ...g.points ? { points: g.points.map(point2) } : {},
+    ...g.polygonArcs ? { polygonArcs: g.polygonArcs.map((arc) => ({ ...arc, mid: point2(arc.mid) })) } : {},
+    ...g.text ? { text: { ...g.text, rotation: angle2(g.text.rotation) } } : {},
+    ...g.textBox?.outline ? { textBox: { ...g.textBox, outline: g.textBox.outline.map(point2) } } : {},
+    ...g.dimension?.caption ? {
+      dimension: {
+        ...g.dimension,
+        caption: {
+          ...g.dimension.caption,
+          ...point2(g.dimension.caption),
+          rotation: angle2(g.dimension.caption.rotation)
+        }
+      }
+    } : {}
+  };
+}
+function transformPCBZone(z, point2) {
+  return {
+    ...z,
+    outline: z.outline.map(point2),
+    ...z.nativeOutlineArcs ? { nativeOutlineArcs: z.nativeOutlineArcs.map((arc) => ({ ...arc, mid: point2(arc.mid) })) } : {},
+    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
+    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
+  };
+}
+function pcbArc(g) {
+  const a = g.start, b = g.mid, c = g.end;
+  if (!b) return null;
+  const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - a.x, vy = c.y - a.y;
+  const d = 2 * (ux * vy - uy * vx);
+  if (Math.abs(d) < 1e-12) return null;
+  const u2 = ux * ux + uy * uy, v2 = vx * vx + vy * vy;
+  const center = {
+    x: a.x + (u2 * vy - v2 * uy) / d,
+    y: a.y + (ux * v2 - vx * u2) / d
+  };
+  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
+  const positive3 = (v) => (v + Math.PI * 4) % (Math.PI * 2);
+  const delta = positive3(mid - start) <= positive3(end - start) ? positive3(end - start) : positive3(end - start) - Math.PI * 2;
+  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
+}
+function pcbRoundedRectArcs(g) {
+  const radius = g.roundedRectRadius;
+  const vertices = [g.start, ...g.points, g.end];
+  return vertices.map((vertex, i) => {
+    const offset = (neighbor) => {
+      const dx = neighbor.x - vertex.x, dy = neighbor.y - vertex.y;
+      const length = Math.hypot(dx, dy);
+      return { x: dx * radius / length, y: dy * radius / length };
+    };
+    const before = offset(vertices[(i + 3) % 4]);
+    const after = offset(vertices[(i + 1) % 4]);
+    return {
+      start: { x: vertex.x + before.x, y: vertex.y + before.y },
+      center: { x: vertex.x + before.x + after.x, y: vertex.y + before.y + after.y },
+      clockwise: before.x * after.y - before.y * after.x < 0,
+      end: { x: vertex.x + after.x, y: vertex.y + after.y }
+    };
+  });
+}
+function pcbBezierIsStationary(g) {
+  const { start, end } = g;
+  return [end, ...g.points].every((point2) => point2.x === start.x && point2.y === start.y);
+}
+function pcbBezierVertices(g, tolerance = 5e-3) {
+  if (pcbBezierIsStationary(g)) return [g.start, g.end];
+  const maxDepth = 16;
+  const vertices = [g.start];
+  const half = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const subdivide = (start, first2, second2, end, depth) => {
+    const flat = Math.max(pointSegmentDistance(first2, start, end), pointSegmentDistance(second2, start, end)) <= tolerance ** 2;
+    if (flat && (depth < maxDepth || start.x !== end.x || start.y !== end.y)) {
+      if (vertices.length >= 16384) throw new Error("B\xE9zier subdivision exceeds the vertex limit.");
+      vertices.push(end);
+      return;
+    }
+    if (!depth) throw new Error("B\xE9zier subdivision cannot meet the requested geometry tolerance.");
+    const a = half(start, first2), b = half(first2, second2), c = half(second2, end);
+    const d = half(a, b), e = half(b, c);
+    const middle = half(d, e);
+    subdivide(start, a, d, middle, depth - 1);
+    subdivide(middle, e, c, end, depth - 1);
+  };
+  const [first, second] = g.points;
+  subdivide(g.start, first, second, g.end, maxDepth);
+  return vertices;
+}
+var pcbPadCorners = [
+  { x: -1, y: -1, name: "top_left" },
+  { x: 1, y: -1, name: "top_right" },
+  { x: 1, y: 1, name: "bottom_right" },
+  { x: -1, y: 1, name: "bottom_left" }
+];
+function pcbPadChamferEndpoints({ x, y }, size, cut) {
+  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
+  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+var halfPCBUnit = (value) => Math.trunc(Math.round(value * 1e6) / 2);
+function pcbPadTrapezoid({ size, trapezoidDelta }) {
+  const x = halfPCBUnit(size.x), y = halfPCBUnit(size.y);
+  const dx = halfPCBUnit(trapezoidDelta?.x ?? 0), dy = halfPCBUnit(trapezoidDelta?.y ?? 0);
+  return [
+    { x: -x + dy, y: -y - dx },
+    { x: x - dy, y: -y + dx },
+    { x: x + dy, y: y - dx },
+    { x: -x - dy, y: y + dx }
+  ].map((point2) => ({ x: point2.x / 1e6, y: point2.y / 1e6 }));
+}
+
 // lib/library.ts
 import { createProject, validateProject } from "../../../server/project-format.mjs";
 
@@ -6076,60 +6317,12 @@ for (const [relative, entry] of records) {
   keys.set(file, entry.sha256);
 }
 
-// lib/pcb-geometry.ts
-function transformPCBGraphic(g, point2, angle2 = (n) => n) {
-  return {
-    ...g,
-    start: point2(g.start),
-    end: point2(g.end),
-    ...g.mid ? { mid: point2(g.mid) } : {},
-    ...g.points ? { points: g.points.map(point2) } : {},
-    ...g.text ? { text: { ...g.text, rotation: angle2(g.text.rotation) } } : {},
-    ...g.dimension ? {
-      dimension: {
-        ...g.dimension,
-        caption: {
-          ...g.dimension.caption,
-          ...point2(g.dimension.caption),
-          rotation: angle2(g.dimension.caption.rotation)
-        }
-      }
-    } : {}
-  };
-}
-function transformPCBZone(z, point2) {
-  return {
-    ...z,
-    outline: z.outline.map(point2),
-    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
-    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
-  };
-}
-function pcbArc(g) {
-  const a = g.start, b = g.mid, c = g.end;
-  if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
-  if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
-  const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
-  };
-  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
-  const positive3 = (v) => (v + Math.PI * 4) % (Math.PI * 2);
-  const delta = positive3(mid - start) <= positive3(end - start) ? positive3(end - start) : positive3(end - start) - Math.PI * 2;
-  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
-}
-var pcbPadCorners = [
-  { x: -1, y: -1, name: "top_left" },
-  { x: 1, y: -1, name: "top_right" },
-  { x: 1, y: 1, name: "bottom_right" },
-  { x: -1, y: 1, name: "bottom_left" }
-];
-function pcbPadChamferEndpoints({ x, y }, size, cut) {
-  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
-  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
-  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+// lib/pcb-native-via.ts
+var sides = ["front", "back"];
+function pcbViaHasTreatment(treatment) {
+  return Boolean(
+    treatment?.capping || treatment?.filling || sides.some((side) => treatment?.covering?.[side] || treatment?.plugging?.[side])
+  );
 }
 
 // lib/pcb-custom-pad.ts
@@ -6149,6 +6342,264 @@ var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
 var padRotation = (footprint, pad) => angle(footprint.rotation + pad.rotation);
 function padDrillPosition(footprint, pad) {
   return footprintPoint(footprint, pad.drillOffset ? footprintPoint(pad, pad.drillOffset) : pad);
+}
+
+// lib/pcb-zone-settings.ts
+var pcbFootprintZoneOverrideFields = [
+  ["clearance", "copperClearance"],
+  ["zone_connect", "zoneConnect"]
+];
+var pcbPadZoneOverrideFields = [
+  ...pcbFootprintZoneOverrideFields,
+  ["thermal_gap", "thermalGap"],
+  ["thermal_bridge_width", "thermalBridge"]
+];
+var pcbZoneLayerActive = (board, layer) => !layer.endsWith(".Cu") || board.layers.some((copper) => copper === layer);
+
+// lib/pcb-barcode.ts
+var cached = /* @__PURE__ */ new WeakMap();
+var fields = [
+  "at",
+  "layer",
+  "size",
+  "text",
+  "text_height",
+  "type",
+  "ecc_level",
+  "hide",
+  "knockout",
+  "margins",
+  "locked",
+  "uuid"
+];
+function unsupported() {
+  throw new Error("KiCad PCB: Unsupported barcode. Use bounded QR or Data Matrix artwork.");
+}
+function readBarcode(node) {
+  const previous = cached.get(node);
+  if (previous) return previous;
+  const seen = /* @__PURE__ */ new Set();
+  if (node[0] !== "barcode") return unsupported();
+  for (const field of node.slice(1)) {
+    if (!Array.isArray(field) || typeof field[0] !== "string" || !fields.includes(field[0]) || seen.has(field[0]))
+      return unsupported();
+    seen.add(field[0]);
+    if (field.length !== (field[0] === "at" ? 4 : ["size", "margins"].includes(field[0]) ? 3 : 2))
+      return unsupported();
+  }
+  const position = child(node, "at");
+  const size = child(node, "size");
+  const literal = child(node, "text");
+  const value = val(literal);
+  const id = val(child(node, "uuid"));
+  const layer = val(child(node, "layer"));
+  const ecc = val(child(node, "ecc_level"));
+  const kind = val(child(node, "type"));
+  const knockout = val(child(node, "knockout"));
+  const margins = child(node, "margins");
+  const numeric = (record, index = 1) => {
+    const value2 = val(record, index);
+    return value2 ? Number(value2) : NaN;
+  };
+  const x = numeric(position);
+  const y = numeric(position, 2);
+  const rotation = numeric(position, 3);
+  const width = numeric(size);
+  const height = numeric(size, 2);
+  const textHeight = numeric(child(node, "text_height"));
+  const marginX = margins ? numeric(margins) : 0;
+  const marginY = margins ? numeric(margins, 2) : 0;
+  const hide = val(child(node, "hide"));
+  const locked = val(child(node, "locked"));
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || layer !== "F.SilkS" && layer !== "B.SilkS" && layer !== "Edge.Cuts" && layer !== "F.Cu" && layer !== "B.Cu" || seen.has("knockout") && knockout !== "no" && knockout !== "yes" || seen.has("hide") && hide !== "yes" && hide !== "no" || seen.has("locked") && locked !== "yes" && locked !== "no" || ![x, y, rotation, width, height, textHeight, marginX, marginY].every(
+    (n) => Number.isFinite(n) && Math.abs(n) <= 1e5
+  ) || width < 0.01 || height < 0.01 || textHeight < 0.01 || marginX < 0 || marginY < 0 || typeof literal?.[1] !== "string" || !literal[1].startsWith('"') || !/^[\x20-\x7e]{1,128}$/.test(value) || /\$\{|[~^_]\{/.test(value))
+    return unsupported();
+  const placement = {
+    id,
+    layer,
+    x,
+    y,
+    rotation,
+    width,
+    height,
+    value,
+    textHeight,
+    showText: hide !== "yes",
+    knockout: knockout === "yes",
+    marginX,
+    marginY
+  };
+  let barcode;
+  if (kind === "qr" && (ecc === "L" || ecc === "M" || ecc === "Q" || ecc === "H"))
+    barcode = { ...placement, kind, ecc };
+  else if (kind === "datamatrix" && !seen.has("ecc_level")) barcode = { ...placement, kind };
+  else return unsupported();
+  if (isOwnedProjectNode(node)) cached.set(node, Object.freeze(barcode));
+  return barcode;
+}
+function pcbBarcodes(records2) {
+  if (!records2) return [];
+  if (records2.length > 32) return unsupported();
+  return records2.map(readBarcode);
+}
+function hasPCBPhysicalBarcode(records2) {
+  return pcbBarcodes(records2).some(({ layer }) => layer.endsWith(".Cu") || layer === "Edge.Cuts");
+}
+
+// lib/pcb.ts
+function requireSupportedPCBCopper(board, operation2, mode) {
+  const inspection = mode === "inspection";
+  if (!inspection && hasUnassignedSavedCopperZones(board))
+    throw new Error(`${operation2} is unavailable on boards with unassigned native copper fills.`);
+  if (!inspection && hasPCBTrackMask(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with native solder-mask track openings.`
+    );
+  if (!inspection && board.arcTracks?.length)
+    throw new Error(`${operation2} is unavailable on boards with imported arc tracks.`);
+  if (!inspection && board.tracks.some((track) => !track.netId))
+    throw new Error(`${operation2} is unavailable on boards with unassigned native tracks.`);
+  if (!inspection && hasNativeCustomPads(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with imported native custom pad primitives.`
+    );
+  if (!inspection && hasNativePCBPadPruning(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with connection-dependent pad copper layers.`
+    );
+  if (hasNativePCBPadMachining(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with native pad machining or press-fit settings.`
+    );
+  if (!inspection && hasNativePCBPadstacks(board))
+    throw new Error(`${operation2} is unavailable on boards with native layer-specific padstacks.`);
+  if (!inspection && hasNativeCopperText(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with native copper text boxes, named fonts, or knockout text.`
+    );
+  const footprintConnections = inspection ? board.footprints.some((footprint) => footprint.jumperPadGroups?.length) && "jumper groups" : nativePCBFootprintConnections(board);
+  if (footprintConnections)
+    throw new Error(
+      `${operation2} is unavailable on boards with native footprint ${footprintConnections}.`
+    );
+  if (!inspection && hasNativePCBGraphicCopper(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with native net or mask copper graphics.`
+    );
+  if (!inspection && hasNativePCBCurvedCopper(board))
+    throw new Error(
+      `${operation2} is unavailable with native curved polygons or B\xE9zier graphics on copper or Edge.Cuts.`
+    );
+  if (!inspection && hasNativePCBCurvedRuleAreas(board))
+    throw new Error(`${operation2} is unavailable with native curved rule areas.`);
+  if (hasNativePCBTableOutput(board))
+    throw new Error(`${operation2} is unavailable with native tables on a fabrication layer.`);
+  if (hasPCBPhysicalBarcode(board.barcodes))
+    throw new Error(`${operation2} is unavailable with native barcodes on copper or Edge.Cuts.`);
+  if (!inspection && board.vias.some((via) => via.removeUnusedLayers))
+    throw new Error(
+      `${operation2} is unavailable on boards with connection-dependent via copper layers.`
+    );
+  if (inspection ? board.vias.some((via) => via.span?.kind === "micro" || pcbViaHasTreatment(via.treatment)) : hasNativePCBViaAuthority(board))
+    throw new Error(
+      `${operation2} is unavailable on boards with native non-through, treated, or unassigned vias.`
+    );
+  if (!inspection && (board.zones.some(
+    (zone) => zone.fillEnabled !== false && (zone.cornerSmoothing?.radius ?? 0) > 0
+  ) || board.footprints.some(
+    (footprint) => footprint.zones?.some(
+      (zone) => zone.fillEnabled !== false && (zone.cornerSmoothing?.radius ?? 0) > 0
+    )
+  )))
+    throw new Error(
+      `${operation2} is unavailable on boards with enabled native zone corner smoothing.`
+    );
+}
+function hasNativePCBTableOutput(board) {
+  return (board.nativeTables ?? []).some((table) => {
+    const layer = val(child(table, "layer"));
+    return layer === "Edge.Cuts" || /\.(?:Cu|SilkS|Mask|Paste)$/.test(layer);
+  });
+}
+function hasNativePCBGraphicCopper(board) {
+  return board.graphics.some((graphic) => graphic.netId !== void 0) || hasPCBGraphicMask(board);
+}
+function hasPCBTrackMask(board) {
+  return board.tracks.some((track) => track.maskLayer) || Boolean(board.arcTracks?.some((track) => track.maskLayer));
+}
+function isUnassignedSavedCopperZone(zone) {
+  return zone.nativeUnassignedFill === true;
+}
+function hasUnassignedSavedCopperZones(board) {
+  return board.zones.some(isUnassignedSavedCopperZone) || board.footprints.some((footprint) => footprint.zones?.some(isUnassignedSavedCopperZone));
+}
+function hasNativePCBCurvedCopper(board) {
+  const affectsCopper = (graphic) => (graphic.polygonArcs || graphic.kind === "curve") && (graphic.layer === "Edge.Cuts" || graphic.layer.endsWith(".Cu"));
+  return board.graphics.some(affectsCopper) || board.footprints.some((footprint) => footprint.graphics.some(affectsCopper));
+}
+function hasNativePCBCurvedRuleAreas(board) {
+  const curved = (zone) => zone.nativeCircularOutline || zone.nativeOutlineArcs;
+  return board.zones.some(curved) || board.footprints.some((footprint) => footprint.zones?.some(curved));
+}
+function hasNativePCBViaGeometry(board) {
+  return board.vias.some(
+    (via) => via.span !== void 0 || via.backdrills || via.startEndOnly || pcbViaHasTreatment(via.treatment)
+  );
+}
+function hasNativePCBViaAuthority(board) {
+  return hasNativePCBViaGeometry(board) || board.vias.some((via) => !via.netId || via.removeUnusedLayers);
+}
+function hasNativePCBPadstacks(board) {
+  return board.vias.some((via) => via.padstack) || board.footprints.some((footprint) => footprint.pads.some((pad) => pad.padstack));
+}
+function hasNativePCBPadMachining(board) {
+  return board.footprints.some(
+    (footprint) => footprint.pads.some(
+      (pad) => pad.postMachining || pad.fabricationProperty === "pad_prop_pressfit"
+    )
+  );
+}
+function hasPCBGraphicMask(board) {
+  return board.graphics.some((graphic) => graphic.maskLayer) || board.footprints.some((footprint) => footprint.graphics.some((graphic) => graphic.maskLayer));
+}
+var ownedNativeConnectionBoards = /* @__PURE__ */ new WeakMap();
+function nativePCBFootprintConnections(board) {
+  const owned = isOwnedProjectNode(board.footprints);
+  const cached2 = owned ? ownedNativeConnectionBoards.get(board.footprints) : void 0;
+  if (cached2 !== void 0) return cached2;
+  const present = board.footprints.some((footprint) => footprint.netTiePadGroups?.length) ? "net ties" : board.footprints.some((footprint) => footprint.jumperPadGroups?.length) ? "jumper groups" : null;
+  if (owned) ownedNativeConnectionBoards.set(board.footprints, present);
+  return present;
+}
+var ownedNativeCustomPadBoards = /* @__PURE__ */ new WeakMap();
+function hasNativeCustomPads(board) {
+  const owned = isOwnedProjectNode(board.footprints);
+  const cached2 = owned ? ownedNativeCustomPadBoards.get(board.footprints) : void 0;
+  if (cached2 !== void 0) return cached2;
+  const hasNative = board.footprints.some(
+    (footprint) => footprint.pads.some((pad) => pad.nativeCustomPad)
+  );
+  if (owned) ownedNativeCustomPadBoards.set(board.footprints, hasNative);
+  return hasNative;
+}
+var ownedNativePadPruningBoards = /* @__PURE__ */ new WeakMap();
+function hasNativePCBPadPruning(board) {
+  const owned = isOwnedProjectNode(board.footprints);
+  const cached2 = owned ? ownedNativePadPruningBoards.get(board.footprints) : void 0;
+  if (cached2 !== void 0) return cached2;
+  const present = board.footprints.some(
+    (footprint) => footprint.pads.some((pad) => pad.removeUnusedLayers)
+  );
+  if (owned) ownedNativePadPruningBoards.set(board.footprints, present);
+  return present;
+}
+function hasNativeCopperText(board) {
+  const matches = (graphic) => {
+    const text2 = graphic.text ?? graphic.dimension?.caption;
+    return graphic.layer.endsWith(".Cu") && !text2?.hidden && Boolean(graphic.textBox || text2?.fontFace || text2?.knockout);
+  };
+  return board.graphics.some(matches) || board.footprints.some((footprint) => footprint.graphics.some(matches));
 }
 
 // lib/pcb-polygons.ts
@@ -6202,8 +6653,13 @@ var pcbDesignRuleScopes = {
   ],
   clearance: ["pcb.short", "pcb.clearance"],
   edge: ["pcb.outline", "pcb.copper-edge"],
-  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
-  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing", "pcb.holes-co-located"],
+  silkscreen: [
+    "pcb.silk-clearance",
+    "pcb.silk-edge",
+    "pcb.silk-text-height",
+    "pcb.silk-text-thickness"
+  ],
   courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
   keepouts: ["pcb.keepout"],
   connectivity: ["pcb.unrouted"]
@@ -6249,6 +6705,7 @@ var workbenchPCBDesignRules = {
 // lib/pcb-polygons.ts
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
+var maxContourVertices = 2e4;
 var integer = (points) => points.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 var decimal = (points) => points.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
 function oriented(points, positive3 = true) {
@@ -6272,8 +6729,16 @@ var intersectPolygons = (a, b) => operation(a, b, import_clipper_lib2.default.Cl
 function circleSideCount(radius) {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
-function circlePolygon(at, radius) {
-  const count = circleSideCount(radius);
+function boundedArcSegments(sweep, radius, tolerance) {
+  if (!(radius > 0)) throw new Error("A circular contour has a degenerate radius.");
+  const segmentAngle = 4 * Math.asin(Math.sqrt(Math.min(0.5, tolerance / (2 * radius))));
+  const count = Math.ceil(Math.abs(sweep) / segmentAngle);
+  if (!Number.isSafeInteger(count) || count >= maxContourVertices)
+    throw new Error("Arc subdivision exceeds the contour vertex limit.");
+  return Math.max(1, count);
+}
+function circlePolygon(at, radius, tolerance) {
+  const count = tolerance === void 0 ? circleSideCount(radius) : Math.max(3, boundedArcSegments(2 * Math.PI, radius, tolerance));
   return Array.from({ length: count }, (_, i) => ({
     x: at.x + radius * Math.cos(i * Math.PI * 2 / count),
     y: at.y + radius * Math.sin(i * Math.PI * 2 / count)
@@ -6296,48 +6761,96 @@ function strokedPath(points, width, closed, arcTolerance = 0.01) {
 function strokePolygon(points, width) {
   return strokedPath(points, width, false);
 }
-function graphicVertices(g) {
+function graphicVertices(g, curveTolerance) {
+  if (g.roundedRectRadius !== void 0) {
+    const radius = g.roundedRectRadius;
+    const count = curveTolerance === void 0 ? Math.min(512, Math.max(8, Math.ceil(Math.PI / 2 * Math.sqrt(radius / 0.01)))) : boundedArcSegments(Math.PI / 2, radius, curveTolerance);
+    if (count * 4 + 4 > maxContourVertices)
+      throw new Error("Rounded rectangle subdivision exceeds the contour vertex limit.");
+    return pcbRoundedRectArcs(g).flatMap((arc) => {
+      const angle2 = Math.atan2(arc.start.y - arc.center.y, arc.start.x - arc.center.x);
+      const step = (arc.clockwise ? 1 : -1) * Math.PI / (2 * count);
+      return [
+        arc.start,
+        ...Array.from({ length: count - 1 }, (_, index) => ({
+          x: arc.center.x + radius * Math.cos(angle2 + step * (index + 1)),
+          y: arc.center.y + radius * Math.sin(angle2 + step * (index + 1))
+        })),
+        arc.end
+      ];
+    });
+  }
   if (g.kind === "circle")
-    return circlePolygon(g.start, Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y));
-  if (g.kind === "arc") {
-    const arc = pcbArc(g);
-    if (!arc) throw new Error("The board outline contains a degenerate arc.");
-    const count = Math.min(
-      512,
-      Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01)))
+    return circlePolygon(
+      g.start,
+      Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y),
+      curveTolerance
     );
-    return Array.from({ length: count + 1 }, (_, i) => ({
-      x: arc.center.x + arc.radius * Math.cos(arc.start + arc.delta * i / count),
-      y: arc.center.y + arc.radius * Math.sin(arc.start + arc.delta * i / count)
-    }));
+  const arcVertices = (segment) => {
+    const arc = pcbArc(segment);
+    if (!arc) throw new Error("The board outline contains a degenerate arc.");
+    const count = curveTolerance === void 0 ? Math.min(512, Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01)))) : boundedArcSegments(arc.delta, arc.radius, curveTolerance);
+    return [
+      segment.start,
+      ...Array.from({ length: count - 1 }, (_, i) => ({
+        x: arc.center.x + arc.radius * Math.cos(arc.start + arc.delta * (i + 1) / count),
+        y: arc.center.y + arc.radius * Math.sin(arc.start + arc.delta * (i + 1) / count)
+      })),
+      segment.end
+    ];
+  };
+  if (g.kind === "arc") return arcVertices(g);
+  if (g.kind === "curve") return pcbBezierVertices(g, curveTolerance);
+  if (g.polygonArcs) {
+    const vertices = [g.start, ...g.points ?? [], g.end];
+    const arcs = new Map(g.polygonArcs.map(({ vertex, mid }) => [vertex, mid]));
+    const points = [];
+    for (let vertex = 0; vertex < vertices.length; vertex++) {
+      const start = vertices[vertex];
+      const mid = arcs.get(vertex);
+      points.push(
+        ...mid ? arcVertices({ start, mid, end: vertices[vertex + 1] }).slice(0, -1) : [start]
+      );
+      if (curveTolerance !== void 0 && points.length > maxContourVertices)
+        throw new Error("Arc subdivision exceeds the contour vertex limit.");
+    }
+    return points;
   }
   return [g.start, ...g.points ?? [], g.end];
 }
 function boardPolygons(board) {
   return prepareBoardOutline(board).polygons;
 }
-function prepareBoardOutline(board) {
-  const edges = [
-    ...board.graphics.filter((g) => g.layer === "Edge.Cuts"),
+function pcbOutlineGraphics(board) {
+  return [
+    ...board.graphics.filter((graphic) => graphic.layer === "Edge.Cuts"),
     ...board.footprints.flatMap(
-      (f) => f.graphics.filter((g) => g.layer === "Edge.Cuts").map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p)))
+      (footprint) => footprint.graphics.filter((graphic) => graphic.layer === "Edge.Cuts").map(
+        (graphic) => transformPCBGraphic(graphic, (point2) => footprintPoint(footprint, point2))
+      )
     )
   ];
-  if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
-  const polygons = polygonsFromContours(closedGraphicContours(edges, "board outline"));
-  if (!polygons.length) throw new Error("The board outline does not enclose a positive area.");
-  return { edges, polygons };
 }
-function closedGraphicContours(edges, context) {
+function prepareBoardOutline(board, curveTolerance) {
+  const edges = pcbOutlineGraphics(board);
+  if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
+  const contours = closedGraphicContours(edges, "board outline", curveTolerance);
+  const polygons = polygonsFromContours(contours);
+  if (!polygons.length) throw new Error("The board outline does not enclose a positive area.");
+  return { edges, polygons, contours };
+}
+function closedGraphicContours(edges, context, curveTolerance) {
   if (edges.length > 5e3) throw new Error(`The ${context} exceeds the graphic limit.`);
   const loops = [], segments = [];
   let vertexCount = 0;
   for (const g of edges) {
     if (g.kind === "text" || g.kind === "dimension")
       throw new Error(`Unsupported ${context} geometry.`);
-    const pts = graphicVertices(g);
+    const pts = graphicVertices(g, curveTolerance);
+    if (g.kind === "curve" && pts.length === 2 && squaredDistance(pts[0], pts[1]) === 0) continue;
     vertexCount += pts.length;
-    if (vertexCount > 2e4) throw new Error(`The ${context} exceeds the geometry limit.`);
+    if (vertexCount > maxContourVertices)
+      throw new Error(`The ${context} exceeds the geometry limit.`);
     if (g.kind === "circle" || g.kind === "polygon") loops.push(pts);
     else segments.push(pts);
   }
@@ -6382,6 +6895,7 @@ function padPolygon(f, p) {
   const w = p.size.x, h = p.size.y;
   let local;
   if (p.outline) local = p.outline;
+  else if (p.shape === "trapezoid") local = pcbPadTrapezoid(p);
   else if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
@@ -6411,11 +6925,13 @@ function padPolygon(f, p) {
     holes: []
   };
 }
+var nativePadChordTolerance = 5e-4;
+var nativeCustomPadCopperTolerance = 2 * (nativePadChordTolerance + polygonResolution);
 function worldZones(board) {
   return [
-    ...board.zones,
+    ...board.zones.filter((zone) => zone.outline.length),
     ...board.footprints.flatMap(
-      (f) => (f.zones ?? []).map((z) => transformPCBZone(z, (p) => footprintPoint(f, p)))
+      (f) => (f.zones ?? []).filter((zone) => zone.outline.length && pcbZoneLayerActive(board, zone.layer)).map((z) => transformPCBZone(z, (p) => footprintPoint(f, p)))
     )
   ];
 }
@@ -6480,6 +6996,7 @@ function graphicCopper(graphic) {
   return polygons;
 }
 function prepareThermalGeometry(board, config) {
+  requireSupportedPCBCopper(board, "PCB thermal analysis");
   if (!["F.Cu,B.Cu", "F.Cu,In1.Cu,In2.Cu,B.Cu"].includes(board.layers.join(",")) || !positive(board.thickness) || board.thickness > 1e3)
     throw new Error(
       "Thermal analysis requires a supported two- or four-layer PCB and a finite positive board thickness."

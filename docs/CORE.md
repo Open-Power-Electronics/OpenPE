@@ -31,9 +31,9 @@ Caches are private derivations, never alternate document stores:
 - Validator generation rejects unfamiliar/context-dependent transformations and performs no runtime compilation under renderer CSP.
 - Optional preparation failures remain retryable and cannot reject a valid unchanged import. Clean baseline preparation retains original bytes.
 
-Workspace admission hands at most 12 detached validated entries to first Core mount through exact Source-bound identities; registration/removal releases them. Missing/mismatched entries use ordinary import. Recovery still stores Source. Private parsing can certify primitive-source arrays within the same 300,000-node/80-level bounds; certification does not replace schema/semantic validation. Public parsing remains mutable and independent.
+Workspace admission hands at most 12 detached validated entries to first Core mount through exact Source-bound identities. Registration and removal release them. Missing or mismatched entries use ordinary import. Recovery stores Source. Private parsing can certify primitive-source arrays within the applicable structural bounds. Public parsing remains mutable and independent.
 
-The private snapshot limit is 8 MB using exact UTF-8 bytes, including surrogate replacement. File-set validation retains its 96 MB aggregate limit even when exact owned file-local checks are reused.
+Private snapshots are limited to 8 MB and 300,000 nodes. Snapshots that carry a native PCB and its projection support up to 48 MB and three million nodes. Both use exact UTF-8 bytes, including surrogate replacement, and a depth limit of 80. File-set validation retains its 96 MB aggregate limit even when exact owned file-local checks are reused.
 
 Catalog package resolution is asynchronous host work. Only a still-current result may materialize packages and prepared native library sidecars into its originating edit without another undo step. STEP preparation stages immutable bytes; Core owns the portable native references, and Save publishes the bytes through host grants. Pending Source, close barriers and newer identities reject stale results. A clean baseline advances only after accepted adoption; loaded PCB authority follows the primary-schematic fingerprint.
 

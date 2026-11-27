@@ -25,7 +25,7 @@ Keep one owning explanation for each mechanism. Update affected contracts and th
 
 ## Product and current contracts
 
-- Support bounded KiCad 10, manual Layout, Model CAD and documented simulation. Never claim general import/model support, complete KiCad ERC/DRC parity, autorouting or production qualification. PE Layout Skill is fixed bundled guidance.
+- Support bounded native KiCad 10 projects, manual Layout, Model CAD and documented simulation. [Format](docs/FORMAT.md) owns PCB admission and Save. Never claim general import/model support, complete KiCad ERC/DRC parity, autorouting or production qualification. PE Layout Skill is fixed bundled guidance.
 - Current contracts only: remove retired implementation/tests/docs together. Add no compatibility branches, aliases, migrations, inferred fields or fallback readers. Reject unsupported data and preserve its files without import/rewrite. Stable current protocols and documented KiCad/vendor interoperability remain supported.
 - Use OpenPE / `openpe` for product copy and application-owned identities (`window.openpe`, `openpe:` IPC, `X-OpenPE-Token`, `OPENPE_*`, appearance keys, `ai.openpe.desktop`, native properties and resource IDs). Establish data under `OpenPE` or explicit `OPENPE_DATA_DIR` before setting the native name; no former-brand aliases/directory fallback.
 - Designs are native `.kicad_pro`, `.kicad_sch`, `.kicad_pcb` and supporting files. Never publish private snapshots as designs, create `.openpe.json` or disguise JSON as KiCad. Use plain circuit filenames with separate provenance/licenses.

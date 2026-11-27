@@ -1,3 +1,5 @@
+import { isPCBCopperStack, type CopperLayer } from './pcb-layer-stack';
+
 export const maxAnnotations = 4;
 export const maxAnnotationElements = 64;
 const maxAnnotationImageLength = 1_000_000;
@@ -49,7 +51,7 @@ export type LayoutAnnotationContext = {
   circuitId: string;
   basis: string;
   thickness: number;
-  layers: ['F.Cu', 'B.Cu'] | ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'];
+  layers: CopperLayer[];
   counts: Record<'nets' | 'footprints' | 'pads' | 'tracks' | 'vias' | 'graphics' | 'zones', number>;
 };
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -90,10 +92,7 @@ export function validateLayoutAnnotationContext(
     !coordinate(context.thickness) ||
     context.thickness < 0.0001 ||
     context.thickness > 1000 ||
-    !Array.isArray(context.layers) ||
-    !['["F.Cu","B.Cu"]', '["F.Cu","In1.Cu","In2.Cu","B.Cu"]'].includes(
-      JSON.stringify(context.layers),
-    )
+    !isPCBCopperStack(context.layers)
   )
     throw new Error('Invalid layout annotation context.');
   // Match the canonical board's bounded collections, including nested footprint data.

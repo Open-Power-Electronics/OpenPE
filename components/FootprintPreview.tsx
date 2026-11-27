@@ -2,7 +2,12 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { child, children, num, val, type SExpr } from '@/lib/sexpr';
 import { readPadDrill } from '@/lib/pcb-drill';
-import { pcbPadPath } from '@/lib/pcb-geometry';
+import {
+  pcbPadPath,
+  readPCBPadRoundRectRatio,
+  readPCBPadTrapezoidDelta,
+  validatePCBPadTrapezoid,
+} from '@/lib/pcb-geometry';
 import { padExtent, readCustomPad, validateCustomPad } from '@/lib/pcb-custom-pad';
 import type { Pad } from '@/lib/pcb';
 import { arcPath } from './SymbolGraphic';
@@ -18,15 +23,26 @@ function rejectPad(message: string): never {
 export function canPreviewFootprint(footprint: SExpr) {
   try {
     return children(footprint, 'pad').every((pad) => {
-      const drill = readPadDrill(child(pad, 'drill'));
+      const drill = readPadDrill(
+        child(pad, 'drill'),
+        rejectPad,
+        ['smd', 'connect'].includes(val(pad, 2)),
+      );
       const shape = val(pad, 3) as Pad['shape'];
-      if (!['rect', 'roundrect', 'circle', 'oval', 'custom'].includes(shape)) return false;
-      const size = child(pad, 'size');
+      readPCBPadRoundRectRatio(pad, rejectPad);
+      if (!['rect', 'roundrect', 'circle', 'oval', 'trapezoid', 'custom'].includes(shape))
+        return false;
+      const dimensions = child(pad, 'size');
+      const size = { x: num(dimensions), y: num(dimensions, 2) };
+      validatePCBPadTrapezoid(
+        { shape, size, trapezoidDelta: readPCBPadTrapezoidDelta(pad, rejectPad) },
+        rejectPad,
+      );
       validateCustomPad(
         {
           shape,
           type: val(pad, 2) as Pad['type'],
-          size: { x: num(size), y: num(size, 2) },
+          size,
           ...readCustomPad(pad, rejectPad),
           drillOffset: drill.drillOffset,
         },
@@ -125,7 +141,11 @@ export default function FootprintPreview({ footprint }: { footprint: SExpr }) {
               );
             if (n[0] === 'pad') {
               const at = child(n, 'at'),
-                drill = readPadDrill(child(n, 'drill')),
+                drill = readPadDrill(
+                  child(n, 'drill'),
+                  rejectPad,
+                  ['smd', 'connect'].includes(val(n, 2)),
+                ),
                 copperX = -(drill.drillOffset?.x ?? 0),
                 copperY = -(drill.drillOffset?.y ?? 0),
                 size = child(n, 'size'),
@@ -133,7 +153,14 @@ export default function FootprintPreview({ footprint }: { footprint: SExpr }) {
                 height = num(size, 2);
               const chamfer = child(n, 'chamfer')?.slice(1) as Pad['chamfer'];
               const { outline } = readCustomPad(n, rejectPad);
-              const extent = padExtent({ size: { x: width, y: height }, outline });
+              const shape = val(n, 3) as Pad['shape'];
+              const padGeometry = {
+                size: { x: width, y: height },
+                outline,
+                shape,
+                trapezoidDelta: readPCBPadTrapezoidDelta(n, rejectPad),
+              };
+              const extent = padExtent(padGeometry);
               return (
                 <g
                   key={i}
@@ -142,15 +169,14 @@ export default function FootprintPreview({ footprint }: { footprint: SExpr }) {
                 >
                   {n[3] === 'circle' ? (
                     <circle cx={copperX} cy={copperY} r={width / 2} />
-                  ) : n[3] === 'roundrect' || outline ? (
+                  ) : shape === 'roundrect' || shape === 'trapezoid' || outline ? (
                     <path
                       transform={`translate(${copperX} ${copperY})`}
                       d={pcbPadPath({
-                        size: { x: width, y: height },
-                        roundrectRatio: num(child(n, 'roundrect_rratio')),
+                        ...padGeometry,
+                        roundrectRatio: readPCBPadRoundRectRatio(n, rejectPad),
                         chamferRatio: num(child(n, 'chamfer_ratio')),
                         chamfer,
-                        outline,
                       })}
                     />
                   ) : (

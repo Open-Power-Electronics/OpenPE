@@ -1,12 +1,8 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/brand/openpe-lockup-dark.png">
-    <img src="public/brand/openpe-lockup.png" alt="OpenPE" width="420">
+    <img src="public/brand/openpe-lockup.png" alt="OpenPE" width="350">
   </picture>
-</p>
-
-<p align="center">
-  <strong>AI-native workbench for the power electronics engineer.</strong>
 </p>
 
 <p align="center">
@@ -27,11 +23,11 @@
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-OpenPE · Electrical Engineering Studio is an open-source desktop app for power-electronics design. The Agent conversation sits on the left. Schematic, PCB layout, Model and native KiCad source sit on the right, in one local project.
+OpenPE · Electrical Engineering Studio is an open-source desktop app for power-electronics design built on [native KiCad 10 project files](docs/FORMAT.md). The Agent conversation sits on the left. Schematic, PCB layout, Model and native Source sit on the right, in one local project.
 
 ![OpenPE with the EMC Flyback layout open and transformer T1 selected](assets/readme/workspace.webp)
 
-OpenPE works on native KiCad 10 files and bundles OpenCASCADE, ngspice, Gmsh and Elmer. Manual editing and supported simulation work without an Agent. Coverage is bounded: OpenPE does not claim general KiCad import, complete ERC/DRC parity, autorouting or production qualification. See [Coverage and limits](docs/README.md#coverage-and-limits).
+OpenPE bundles OpenCASCADE, ngspice, Gmsh and Elmer. Manual editing and supported simulation work without an Agent. General KiCad import, complete ERC/DRC parity, autorouting and production qualification are outside the [supported scope](docs/README.md#coverage-and-limits).
 
 ## Highlights
 
@@ -54,8 +50,8 @@ OpenPE works on native KiCad 10 files and bundles OpenCASCADE, ngspice, Gmsh and
 
 ## Features
 
-- **Native KiCad projects.** Edit `.kicad_sch` and `.kicad_pcb` directly, work in Source, and save a portable project with its supporting assets.
-- **Bounded checks.** Run read-only ERC and DRC within the documented [design rules](docs/DESIGN-RULES.md).
+- **Native KiCad 10 files.** Edit `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` in Source and save a portable project with its supporting assets. Save retains the bytes of unchanged native files.
+- **Local checks and fabrication files.** Run read-only ERC and DRC and export supported Gerber X2, Excellon and board-outline DXF files without installing KiCad. See the [design rules](docs/DESIGN-RULES.md) and [export coverage](docs/FORMAT.md#manufacturing-export).
 - **One project, three views.** Schematic, Layout and Model share one native project and one undo history.
 - **Local Agents.** Discuss the open project and request edits from an Agent you already run.
 - **Built-in analysis.** Simulation, board temperature, parasitics and EMC review run as plugins on the same project.

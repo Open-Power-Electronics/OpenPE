@@ -2046,7 +2046,9 @@ export default function Workbench({
       setSelected(null);
       setTool('select');
       notify(
-        file ? 'File restored. Save to write it to disk.' : 'Version restored. Save to write it to disk.',
+        file
+          ? 'File restored. Save to write it to disk.'
+          : 'Version restored. Save to write it to disk.',
       );
     } finally {
       signal.removeEventListener('abort', abort);
@@ -2141,8 +2143,7 @@ export default function Workbench({
       if (!applied) throw new Error('Fix the source errors before saving.');
       const snapshot = await completeLayout(applied);
       signal?.throwIfAborted();
-      // Carry the current native bytes through the private host adapter too.
-      // Defaults and native record order must agree with the visible Source.
+      // Carry the complete native Save packet through the private host adapter.
       const saveProject = {
         ...snapshot,
         nativeFiles: projectNativeFiles(snapshot, projectFilename(filename)),
@@ -3360,7 +3361,12 @@ export default function Workbench({
             },
           ]
         : []),
-      { label: 'Settings', keyShortcuts: `${modifier}+,`, separatorBefore: true, run: showSettings },
+      {
+        label: 'Settings',
+        keyShortcuts: `${modifier}+,`,
+        separatorBefore: true,
+        run: showSettings,
+      },
     ];
   }
   const titlebarMenus: TitlebarMenu[] = [

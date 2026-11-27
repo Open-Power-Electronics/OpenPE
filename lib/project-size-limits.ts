@@ -1,0 +1,7 @@
+export const MAX_PROJECT_BYTES = 8_000_000;
+export const MAX_NATIVE_PCB_BYTES = 20_000_000;
+export const MAX_NATIVE_PCB_SNAPSHOT_BYTES = 48_000_000;
+export const MAX_PROJECT_NODES = 300_000;
+export const MAX_NATIVE_PCB_NODES = 3_000_000;
+export const MAX_SAVED_PCB_FILL_VERTICES = 400_000;
+export const MAX_BOARD_ZONES = 4_096;

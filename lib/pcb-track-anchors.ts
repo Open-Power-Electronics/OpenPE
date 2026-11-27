@@ -5,6 +5,7 @@ import { padPosition } from './pcb-layout';
 import { circlePolygon, type Polygon } from './pcb-polygons';
 import { borrowPCBPadCopperContour, copyPCBPadCopperContour } from './pcb-pad-contour';
 import { isOwnedPCB, isOwnedProjectNode } from './immutable-project';
+import { pcbViaCopperLayers } from './pcb-native-via';
 
 export type PCBTrackAnchor = { id: string; netId: string; layers: string[]; polygon: Polygon };
 export type CenteredPCBTrackAnchor = PCBTrackAnchor & { center: Point };
@@ -64,17 +65,20 @@ function fixedTrackAnchors(
         ...(options.centers && { center: padPosition(footprint, pad) }),
       });
     }
-  for (const via of board.vias)
-    if (options.netId === undefined || via.netId === options.netId)
+  for (const via of board.vias) {
+    if (!via.netId || (options.netId !== undefined && via.netId !== options.netId)) continue;
+    const layers = pcbViaCopperLayers(board.layers, via);
+    if (options.layer === undefined || layers.includes(options.layer))
       add({
         id: via.id,
         netId: via.netId,
-        layers: [...board.layers],
+        layers: [...layers],
         polygon: {
           outer: circlePolygon(via, via.diameter / 2),
           holes: [circlePolygon(via, via.drill / 2)],
         },
         ...(options.centers && { center: { x: via.x, y: via.y } }),
       });
+  }
   return anchors;
 }

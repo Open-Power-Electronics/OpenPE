@@ -49,8 +49,13 @@ export const pcbDesignRuleScopes = {
   ],
   clearance: ['pcb.short', 'pcb.clearance'],
   edge: ['pcb.outline', 'pcb.copper-edge'],
-  holes: ['pcb.copper-hole', 'pcb.hole-spacing'],
-  silkscreen: ['pcb.silk-clearance', 'pcb.silk-text-height', 'pcb.silk-text-thickness'],
+  holes: ['pcb.copper-hole', 'pcb.hole-spacing', 'pcb.holes-co-located'],
+  silkscreen: [
+    'pcb.silk-clearance',
+    'pcb.silk-edge',
+    'pcb.silk-text-height',
+    'pcb.silk-text-thickness',
+  ],
   courtyards: ['pcb.courtyard-malformed', 'pcb.courtyard-overlap'],
   keepouts: ['pcb.keepout'],
   connectivity: ['pcb.unrouted'],
@@ -97,9 +102,9 @@ export const pcbDesignRuleLimitKeys = Object.keys(pcbDesignRuleLimits) as PCBDes
 export const pcbDesignRuleScopeKeys = Object.keys(pcbDesignRuleScopes) as PCBDesignRuleScope[];
 
 export function pcbDesignRuleLimitChecks(key: PCBDesignRuleLimit): readonly PCBDesignRuleId[] {
-  return key === 'minThroughHole'
-    ? ['pcb.via-drill', 'pcb.pad-drill']
-    : [pcbDesignRuleLimits[key][4]];
+  if (key === 'minThroughHole') return ['pcb.via-drill', 'pcb.pad-drill'];
+  if (key === 'minSilkClearance') return ['pcb.silk-clearance', 'pcb.silk-edge'];
+  return [pcbDesignRuleLimits[key][4]];
 }
 
 /** Session defaults in millimetres, covering the curated boards' geometry. */

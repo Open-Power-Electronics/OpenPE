@@ -8,8 +8,15 @@ const {
 
 const maxFiles = 128;
 const maxFileBytes = 8_000_000;
+const maxPCBBytes = 20_000_000;
 const maxProjectBytes = 96_000_000;
 const maxDepth = 8;
+const sourceSizeLimit = (name) => (/\.kicad_pcb$/i.test(name) ? maxPCBBytes : maxFileBytes);
+const checkSourceSize = (name, size) => {
+  const limit = sourceSizeLimit(name);
+  if (size > limit)
+    throw new Error(`The KiCad source file ${name} exceeds ${limit / 1_000_000} MB.`);
+};
 const privateDirectory = (name) =>
   [
     '.git',
@@ -76,7 +83,7 @@ function validateNativeFiles(bundle) {
       throw new Error('Invalid or duplicate KiCad project filename.');
     seen.add(file.name.toLowerCase());
     const size = Buffer.byteLength(file.source, file.encoding ?? 'utf8');
-    if (size > maxFileBytes) throw new Error('A KiCad project file exceeds 8 MB.');
+    checkSourceSize(file.name, size);
     bytes += size;
     if (bytes > maxProjectBytes) throw new Error('The KiCad project exceeds 96 MB.');
   }
@@ -134,7 +141,7 @@ async function readNativeProject(file) {
     const info = await fs.lstat(location);
     if (!info.isFile() || info.isSymbolicLink())
       throw new Error(`The KiCad source file ${name} must be a regular file.`);
-    if (info.size > maxFileBytes) throw new Error(`The KiCad source file ${name} exceeds 8 MB.`);
+    checkSourceSize(name, info.size);
     bytes += info.size;
     if (bytes > maxProjectBytes) throw new Error('The KiCad project exceeds 96 MB.');
     const content = await fs.readFile(location);
@@ -225,7 +232,7 @@ async function nativeTargetInfo(target, name) {
     if (error.code === 'ENOENT') return null;
     throw error;
   });
-  if (info && (!info.isFile() || info.isSymbolicLink() || info.size > maxFileBytes))
+  if (info && (!info.isFile() || info.isSymbolicLink() || info.size > sourceSizeLimit(name)))
     throw new Error(`The KiCad destination ${name} is not a regular bounded file.`);
   return info;
 }

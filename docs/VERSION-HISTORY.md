@@ -66,14 +66,14 @@ Panel styling belongs in
 
 ## Shared history capabilities
 
-| Capability                        | Contract                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination |
-| `versions.create`                 | Snapshot current validated Core Source through the native bridge                     |
+| Capability                        | Contract                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination       |
+| `versions.create`                 | Snapshot current validated Core Source through the native bridge                           |
 | `versions.restore`                | Read a reachable version and restore one native file or the whole project in one undo edit |
-| `project.replace`                 | Replace complete canonical Source in one Core transaction                            |
-| `history.undo` / `history.redo`   | Shared in-memory history                                                             |
-| `project.save`                    | Native Save/Save as                                                                  |
+| `project.replace`                 | Replace complete canonical Source in one Core transaction                                  |
+| `history.undo` / `history.redo`   | Shared in-memory history                                                                   |
+| `project.save`                    | Native Save/Save as                                                                        |
 
 The Git window and Agent use the same version operations. Restore reads the
 selected ID again from the live destination and rechecks origin and revision
@@ -147,7 +147,7 @@ application-authored seeds. There is no remote, branch/merge or deletion UI.
 
 Git uses argument arrays, bounded stdin/output, isolated configuration, disabled
 hooks/signing/credential prompts and no inherited Git overrides. The bridge
-accepts an opaque grant, up to 8 MB of JSON, a one-line name up to 240 characters,
+accepts an opaque grant, a private JSON snapshot within the [Core size limits](CORE.md#immutable-data-and-bounded-caches), a one-line name up to 240 characters,
 a full commit ID or bounded offset. Operations time out after 15 seconds and
 reject same-repository concurrency. Compare-and-swap advances main only after a
 complete snapshot write; reads must be reachable from main and validate now.

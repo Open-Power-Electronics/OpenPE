@@ -1,10 +1,12 @@
 import type { BoardLine } from './pcb';
 
 type Dimension = NonNullable<BoardLine['dimension']>;
+export type FormattedPCBDimension = Dimension & Required<Pick<Dimension, 'format' | 'caption'>>;
 
 /** Native dimensions append unit text before their user-supplied suffix. */
 export function pcbDimensionUnitSuffix(dimension: Dimension): string | null {
   const format = dimension.format;
+  if (!format || !dimension.caption) return null;
   if (format.unitsFormat === 0) return '';
   if (format.unitsFormat !== 1 && format.unitsFormat !== 2) return null;
   const fixedUnit = ['in', 'mils', 'mm'][format.units];
@@ -24,6 +26,7 @@ export function pcbDimensionUnitSuffix(dimension: Dimension): string | null {
 /** The editable value excludes the separately retained prefix, units and suffix. */
 export function pcbDimensionOverrideValue(dimension: Dimension): string {
   const format = dimension.format;
+  if (!format || !dimension.caption) return '';
   if (format.overrideValue !== undefined) return format.overrideValue;
   let value = dimension.caption.value;
   if (format.prefix && value.startsWith(format.prefix)) value = value.slice(format.prefix.length);
@@ -34,9 +37,12 @@ export function pcbDimensionOverrideValue(dimension: Dimension): string {
 }
 
 /** Keep the rendered caption and KiCad's authoritative override in one edit. */
-export function setPCBDimensionOverrideValue(dimension: Dimension, value: string): Dimension {
+export function setPCBDimensionOverrideValue(
+  dimension: Dimension,
+  value: string,
+): FormattedPCBDimension {
   const units = pcbDimensionUnitSuffix(dimension);
-  if (units === null)
+  if (units === null || !dimension.format || !dimension.caption)
     throw new Error('The stored dimension caption does not identify its automatic units.');
   return {
     ...dimension,

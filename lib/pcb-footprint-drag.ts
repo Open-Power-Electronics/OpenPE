@@ -1,5 +1,6 @@
 import { uid, type Point } from './circuit';
 import type { PCB } from './pcb';
+import { pcbPadCopperClearance } from './pcb-zone-settings';
 import { ownProjectData } from './immutable-project';
 import { insidePolygon, squaredDistance, trackTouchesPolygon } from './pcb-collision';
 import {
@@ -27,6 +28,7 @@ import { preparePCBTrackAnchors, type PCBTrackAnchor } from './pcb-track-anchors
 import type { PCBTrackDragPreview } from './pcb-track-drag';
 
 type Track = PCB['tracks'][number];
+type DragRoutingOptions = Omit<RoutingOptions, 'clearance'> & { clearance?: number };
 const limitMessage =
   'Footprint drag exceeds the geometry limit. Select fewer footprints or simplify the board.';
 export const footprintDragContactError =
@@ -132,16 +134,17 @@ export function createPCBFootprintDrag(
       stationaryAnchors,
       spend,
     );
-    const routerKey = (options: Omit<RoutingOptions, 'clearance'>) =>
+    const routerKey = (options: DragRoutingOptions) =>
       JSON.stringify([
         options.layer,
         options.netId,
         options.width,
         options.obstacleType ?? 'track',
         options.allowInheritedWidth ?? false,
+        options.clearance ?? clearance,
       ]);
     const routerFor = (
-      options: Omit<RoutingOptions, 'clearance'>,
+      options: DragRoutingOptions,
       footprints: PCB['footprints'],
       tracks: readonly Track[],
       trackCount: number,
@@ -152,7 +155,7 @@ export function createPCBFootprintDrag(
         tracks: stationaryTracks,
       });
       const key = routerKey(options);
-      const full = { ...options, clearance };
+      const full = { ...options, clearance: options.clearance ?? clearance };
       if (!baseRouters.has(key))
         baseRouters.set(key, createPCBRouter(stationaryArtwork, full, routerSession));
       spend(objectCount + trackCount - board.tracks.length);
@@ -217,7 +220,7 @@ export function createPCBFootprintDrag(
             trackCount: number,
           ) => {
             const routers = new Map<string, ReturnType<typeof createPCBRouter>>();
-            return (options: Omit<RoutingOptions, 'clearance'>) => {
+            return (options: DragRoutingOptions) => {
               const key = routerKey(options);
               const saved = routers.get(key);
               if (saved) return saved;
@@ -277,7 +280,12 @@ export function createPCBFootprintDrag(
             const validateTrackWith = routersFor(poses, changed, tracks.length);
             for (const track of changed) {
               const { layer, netId, width } = track;
-              const validator = validateTrackWith({ layer, netId, width, allowInheritedWidth: true });
+              const validator = validateTrackWith({
+                layer,
+                netId,
+                width,
+                allowInheritedWidth: true,
+              });
               const issue = validator.validate([track.start, track.end], spend);
               if (issue) throw new Error(issue);
             }
@@ -295,6 +303,7 @@ export function createPCBFootprintDrag(
                       netId: pad.netId,
                       width: 0,
                       obstacleType: 'pad',
+                      clearance: Math.max(clearance, pcbPadCopperClearance(footprint, pad) ?? 0),
                     }).validateRegion(borrowPCBPadOutline(footprint, pad).outer, spend);
                     if (issue) throw new Error(issue);
                   }

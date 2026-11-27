@@ -766,15 +766,24 @@ export default function ComponentDrawingEditor({
             {pad.outline ? (
               <div>Custom polygon</div>
             ) : (
-              select('Pad shape', pad.shape, ['rect', 'circle', 'oval', 'roundrect'], (shape) =>
-                updateSelected({
-                  shape,
-                  ...(shape === 'roundrect'
-                    ? { roundrectRatio: pad.roundrectRatio ?? 0.25 }
-                    : { roundrectRatio: undefined, chamferRatio: undefined, chamfer: undefined }),
-                }),
+              select(
+                'Pad shape',
+                pad.shape,
+                ['rect', 'circle', 'oval', 'roundrect', 'trapezoid'],
+                (shape) =>
+                  updateSelected({
+                    shape,
+                    ...(shape === 'trapezoid' ? {} : { trapezoidDelta: undefined }),
+                    ...(shape === 'roundrect'
+                      ? { roundrectRatio: pad.roundrectRatio ?? 0.25 }
+                      : { roundrectRatio: undefined, chamferRatio: undefined, chamfer: undefined }),
+                  }),
               )
             )}
+            {pad.shape === 'trapezoid' &&
+              xy('Delta', pad.trapezoidDelta ?? { x: 0, y: 0 }, (trapezoidDelta) =>
+                updateSelected({ trapezoidDelta }),
+              )}
             {pad.type !== 'smd' &&
               number(pad.drillSlot ? 'Slot width' : 'Drill', pad.drill ?? 0.8, (drill) =>
                 updateSelected({ drill }),
@@ -1536,7 +1545,9 @@ export default function ComponentDrawingEditor({
                         >
                           {pad.shape === 'circle' ? (
                             <circle r={pad.size.x / 2} />
-                          ) : pad.shape === 'roundrect' || pad.outline ? (
+                          ) : pad.shape === 'roundrect' ||
+                            pad.shape === 'trapezoid' ||
+                            pad.outline ? (
                             <path d={pcbPadPath(pad)} />
                           ) : (
                             <rect

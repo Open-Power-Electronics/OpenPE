@@ -3,17 +3,27 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ComparisonViewActions, useComparisonView } from './ComparisonView';
 import { parseProject, type Project } from '@/lib/project';
-import { defaultPCBDisplay, pcbDisplayLayers, pcbLayerPaintOrder } from '@/lib/pcb-display';
+import {
+  defaultPCBDisplay,
+  pcbDisplayLayers,
+  pcbLayerColor,
+  pcbLayerPaintOrder,
+} from '@/lib/pcb-display';
+import { pcbViaCopperLayers } from '@/lib/pcb-native-via';
 import {
   boardPolygons,
   filledCopperPolygons,
   polygonPath,
   worldZones,
+  pcbSavedZoneDisplayPath,
+  pcbZoneOutlineDisplayPath,
   type Polygon,
 } from '@/lib/pcb-polygons';
 import {
   LayoutGraphicDrawing,
+  LayoutArcTrackDrawing,
   LayoutTrackDrawing,
+  LayoutTrackMaskDrawing,
   LayoutViaDrawing,
   LayoutViaDrillDrawing,
   LayoutZoneFillDrawing,
@@ -85,7 +95,7 @@ const Drawing = memo(function Drawing({
           {order.map((layer) => (
             <g key={layer} data-pcb-layer={layer}>
               {zones
-                .filter((zone) => zone.layer === layer)
+                .filter((zone) => zone.layer === layer && layer.endsWith('.Cu'))
                 .map((zone) => (
                   <LayoutZoneFillDrawing
                     key={zone.id}
@@ -98,6 +108,21 @@ const Drawing = memo(function Drawing({
                     highlightNets={highlightNets}
                   />
                 ))}
+              {zones
+                .filter(
+                  (zone) =>
+                    zone.layer === layer &&
+                    (layer === 'Edge.Cuts' || layer.endsWith('.Mask')) &&
+                    zone.filledPolygons?.length,
+                )
+                .map((zone) => (
+                  <path
+                    key={zone.id}
+                    d={pcbSavedZoneDisplayPath(zone)}
+                    fill={pcbLayerColor(layer)}
+                    fillRule="evenodd"
+                  />
+                ))}
               {board.zones
                 .filter((zone) => zone.layer === layer)
                 .map((zone) => (
@@ -105,7 +130,7 @@ const Drawing = memo(function Drawing({
                     key={zone.id}
                     zoneId={zone.id}
                     layer={layer}
-                    path={polygonPath([{ outer: zone.outline, holes: zone.holes ?? [] }])}
+                    path={pcbZoneOutlineDisplayPath(zone)}
                     selection={selection}
                   />
                 ))}
@@ -120,6 +145,20 @@ const Drawing = memo(function Drawing({
                     highlightNets={highlightNets}
                   />
                 ))}
+              {board.arcTracks
+                ?.filter((track) => track.layer === layer)
+                .map((track) => (
+                  <LayoutArcTrackDrawing
+                    key={track.id}
+                    track={track}
+                    netName={netNames.get(track.netId)}
+                    highlightNets={highlightNets}
+                  />
+                ))}
+              {(layer === 'F.Mask' || layer === 'B.Mask') &&
+                [...board.tracks, ...(board.arcTracks ?? [])]
+                  .filter((track) => track.maskLayer === layer)
+                  .map((track) => <LayoutTrackMaskDrawing key={track.id} track={track} />)}
               {board.graphics
                 .filter((graphic) => graphic.layer === layer)
                 .map((graphic) => (
@@ -153,6 +192,8 @@ const Drawing = memo(function Drawing({
               key={via.id}
               via={via}
               netName={netNames.get(via.netId)}
+              copperLayers={pcbViaCopperLayers(board.layers, via)}
+              paintLayer={via.span?.start}
               selection={selection}
               highlightNets={highlightNets}
               deferDrills
@@ -163,6 +204,7 @@ const Drawing = memo(function Drawing({
               key={footprint.id}
               {...caption(footprint)}
               copperLayers={board.layers}
+              layer="F.Cu"
               inspectedPadId=""
               highlightNets={highlightNets}
             />

@@ -376,7 +376,7 @@ test('PCB source features reject invalid linked data before serialization', () =
   change((p) => {
     const pad = p.pcb!.footprints[0].pads[0];
     pad.type = 'smd';
-    delete pad.drill;
+    pad.drill = 0.5;
     pad.drillOffset = { x: 0.1, y: 0.2 };
   });
   change((p) => {

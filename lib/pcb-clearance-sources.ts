@@ -11,6 +11,7 @@ type ClearanceSource = {
 export type PCBRuleOperand = {
   netClass: string;
   type: string;
+  localClearance?: number;
   intersectsCourtyard: (reference: string) => boolean;
 };
 type Condition = (a: PCBRuleOperand, b: PCBRuleOperand) => boolean;
@@ -81,12 +82,20 @@ function compileCondition(source: string): Condition {
   return matches;
 }
 
+function nativeRuleTexts(files: Project['nativeFiles']): PCBFillRuleContext {
+  const settings = files?.files.find(({ name }) => /\.kicad_pro$/i.test(name));
+  const ruleName = (settings?.name ?? files?.entry)
+    ?.replace(/\.kicad_(?:pro|pcb|sch)$/i, '.kicad_dru')
+    .toLowerCase();
+  return {
+    projectSource: settings?.source,
+    rulesSource: files?.files.find(({ name }) => name.toLowerCase() === ruleName)?.source,
+  };
+}
+
 export function readPCBDesignRuleSources(project: Pick<Project, 'pcb' | 'nativeFiles'>) {
-  const { pcb, nativeFiles } = project;
-  const projectSource = nativeFiles?.files.find(({ name }) => name === nativeFiles.entry)?.source;
-  const rulesFile = nativeFiles?.entry.replace(/\.kicad_pro$/i, '.kicad_dru');
-  const rulesSource = nativeFiles?.files.find(({ name }) => name === rulesFile)?.source;
-  return readPCBDesignRuleSourceTexts(pcb, projectSource, rulesSource);
+  const { projectSource, rulesSource } = nativeRuleTexts(project.nativeFiles);
+  return readPCBDesignRuleSourceTexts(project.pcb, projectSource, rulesSource);
 }
 
 export function readPCBDesignRuleSourceTexts(
@@ -237,23 +246,24 @@ export type PCBDesignRuleSources = ReturnType<typeof readPCBDesignRuleSources>;
 export type PCBFillRuleContext = { projectSource?: string; rulesSource?: string };
 
 export function pcbFillRuleContext(project: Pick<Project, 'nativeFiles'>): PCBFillRuleContext {
-  const files = project.nativeFiles;
-  const source = files?.files.find(({ name }) => name === files.entry)?.source;
-  const rulesName = files?.entry.replace(/\.kicad_pro$/i, '.kicad_dru');
-  const rulesSource = files?.files.find(({ name }) => name === rulesName)?.source;
+  const { projectSource: source, rulesSource } = nativeRuleTexts(project.nativeFiles);
   if (source === undefined) return { rulesSource };
   const settings = JSON.parse(source);
   const rules = settings.board?.design_settings?.rules;
   const net = settings.net_settings;
+  const limits = Object.fromEntries(
+    ['min_clearance', 'min_copper_edge_clearance', 'min_hole_clearance']
+      .filter((key) => rules && Object.hasOwn(rules, key))
+      .map((key) => [key, rules[key]]),
+  );
+  // Saving a standalone PCB introduces a project settings file. Empty native
+  // settings and no settings both use the same effective fill rules.
+  if (net === undefined && !Object.keys(limits).length) return { rulesSource };
   // CAD, solver bindings and other project metadata cannot invalidate copper.
   const projectSource = JSON.stringify({
     board: {
       design_settings: {
-        rules: Object.fromEntries(
-          ['min_clearance', 'min_copper_edge_clearance', 'min_hole_clearance']
-            .filter((key) => rules && Object.hasOwn(rules, key))
-            .map((key) => [key, rules[key]]),
-        ),
+        rules: limits,
       },
     },
     net_settings:

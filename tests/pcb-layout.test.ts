@@ -119,7 +119,6 @@ test('catalog pads keep explicit copper, mask and mechanical layer membership th
 
 test('reject unsupported or changed physical geometry instead of manufacturing an approximation', () => {
   const mutations = [
-    source.replace('thru_hole rect', 'thru_hole roundrect'),
     source.replace('thru_hole rect', 'np_thru_hole circle'),
     source.replace('(drill 0.8)', '(drill oval 0.8 1.6)'),
     source.replace('(drill 0.8)', '(drill oval 0.8 0.8)'),
@@ -172,6 +171,11 @@ test('reject unsupported or changed physical geometry instead of manufacturing a
     () => createPCBFootprint({ ...detail, id: 'Test:Wrong' }, circuit, symbol.id, { x: 0, y: 0 }),
     /library identity/,
   );
+});
+
+test('library placement uses the native default for an omitted rounded pad ratio', () => {
+  const { footprint } = fixture(source.replace('thru_hole rect', 'thru_hole roundrect'));
+  assert.equal(footprint.pads[0].roundrectRatio, 0.25);
 });
 
 test('bundled 0805 placement preserves six-decimal artwork and rounded pad corners through native save and reopen', () => {

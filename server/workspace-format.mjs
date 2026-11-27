@@ -3,6 +3,94 @@
 // lib/workspace-state.ts
 import { importDocument, projectFilename, projectSchematics } from "./project-format.mjs";
 
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+
 // lib/agent-annotations.ts
 var maxAnnotations = 4;
 var maxAnnotationElements = 64;

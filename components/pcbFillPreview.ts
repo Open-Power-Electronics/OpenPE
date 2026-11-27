@@ -1,5 +1,14 @@
-import type { BoardLayer, BoardZone, Footprint, Pad, PCB } from '../lib/pcb';
+import {
+  assertImportedPCBCopperUnchanged,
+  type BoardLayer,
+  type BoardZone,
+  type Footprint,
+  type Pad,
+  type PCB,
+} from '../lib/pcb';
+import { pcbPadCopperClearance, pcbPadZoneConnection } from '../lib/pcb-zone-settings';
 import { padDrillPosition } from '../lib/pcb-layout';
+import { pcbZoneOutlineBoundsPoints } from '../lib/pcb-geometry';
 import {
   defaultCopperFillClearance,
   preparePCBFillRules,
@@ -7,6 +16,7 @@ import {
   padDrillPolygon,
   polygonPath,
   worldZones,
+  pcbZoneOutlineDisplayPath,
 } from '../lib/pcb-polygons';
 import type { PCBFillRuleContext } from '../lib/pcb-clearance-sources';
 import type { Point } from '../lib/circuit';
@@ -38,7 +48,11 @@ const sameVia = (a: PCB['vias'][number] | undefined, b: PCB['vias'][number]) =>
   (a === b ||
     (samePoint(a, b) && a.netId === b.netId && a.diameter === b.diameter && a.drill === b.drill));
 const samePose = (a: Footprint, b: Footprint) =>
-  samePoint(a, b) && a.rotation === b.rotation && a.side === b.side;
+  samePoint(a, b) &&
+  a.rotation === b.rotation &&
+  a.side === b.side &&
+  a.copperClearance === b.copperClearance &&
+  a.zoneConnect === b.zoneConnect;
 function padGeometry(pad: Pad) {
   return [
     pad.x,
@@ -48,6 +62,7 @@ function padGeometry(pad: Pad) {
     pad.shape,
     pad.size,
     pad.outline,
+    pad.trapezoidDelta,
     pad.drill,
     pad.drillOffset,
     pad.drillSlot,
@@ -57,6 +72,10 @@ function padGeometry(pad: Pad) {
     pad.chamferRatio,
     pad.chamfer,
     pad.zoneConnect,
+    pad.thermalBridgeAngle,
+    pad.copperClearance,
+    pad.thermalGap,
+    pad.thermalBridge,
   ];
 }
 const samePad = (a: Pad | undefined, b: Pad) =>
@@ -69,7 +88,7 @@ const outlineBounds = new WeakMap<BoardZone, Bounds>();
 function outlinePath(zone: BoardZone) {
   let path = outlinePaths.get(zone);
   if (path === undefined) {
-    path = polygonPath([{ outer: zone.outline, holes: zone.holes ?? [] }]);
+    path = pcbZoneOutlineDisplayPath(zone);
     outlinePaths.set(zone, path);
   }
   return path;
@@ -77,7 +96,7 @@ function outlinePath(zone: BoardZone) {
 function zoneBounds(zone: BoardZone) {
   let bounds = outlineBounds.get(zone);
   if (!bounds) {
-    bounds = boundsOf(zone.outline);
+    bounds = boundsOf(pcbZoneOutlineBoundsPoints(zone));
     outlineBounds.set(zone, bounds);
   }
   return bounds;
@@ -110,6 +129,9 @@ const sameRing = (a: Point[], b: Point[]) =>
   a === b || (a.length === b.length && a.every((point, index) => samePoint(point, b[index])));
 const sameOutline = (a: BoardZone | undefined, b: BoardZone) =>
   a !== undefined &&
+  a.nativeCircularOutline === b.nativeCircularOutline &&
+  (a.nativeOutlineArcs === b.nativeOutlineArcs ||
+    JSON.stringify(a.nativeOutlineArcs) === JSON.stringify(b.nativeOutlineArcs)) &&
   sameRing(a.outline, b.outline) &&
   (a.holes ?? []).length === (b.holes ?? []).length &&
   (a.holes ?? []).every((ring, index) => sameRing(ring, b.holes![index]));
@@ -178,6 +200,7 @@ export function preparePCBFillPreview(
       .map((zone) => zone.id),
   );
   if (!saved.size) return { changed: false, zones: [] };
+  assertImportedPCBCopperUnchanged(basis, candidate);
   const ruleLimits = preparePCBFillRules(candidate, rules);
   const oldTracks = new Map(basis.tracks.map((track) => [track.id, track]));
   const tracks = candidate.tracks.filter((track) => !sameTrack(oldTracks.get(track.id), track));
@@ -279,7 +302,7 @@ export function preparePCBFillPreview(
           const gap =
             pad.netId !== zone.netId || pad.type === 'np_thru_hole'
               ? ruleLimits.gap(zoneOperand, ruleLimits.pad(footprint, pad), clearance)
-              : clearance;
+              : Math.max(clearance, pcbPadCopperClearance(footprint, pad) ?? 0);
           const present =
             pad.type !== 'smd' ||
             (pad.layers
@@ -291,8 +314,7 @@ export function preparePCBFillPreview(
             (pad.type === 'np_thru_hole' ||
               !pad.netId ||
               pad.netId !== zone.netId ||
-              pad.zoneConnect === 0 ||
-              (pad.zoneConnect === undefined && zone.padConnection === 'no'))
+              pcbPadZoneConnection(footprint, pad, zone) === 'none')
           )
             blockers.push({
               path: polygonPath([shape]),

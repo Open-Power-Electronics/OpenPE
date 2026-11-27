@@ -286,7 +286,11 @@ test('an explicit blank reference remains attached to its unlinked footprint UUI
   assert.equal(reopened.pcb!.footprints[0].reference, '');
   footprint.splice(footprint.indexOf(reference), 1);
   file.source = writeSExpr(tree) + '\n';
-  assert.throws(() => projectFromNativeFiles(bundle), /requires a native Reference property/);
+  const missing = projectFromNativeFiles(bundle).pcb!.footprints[0];
+  assert.equal(missing.id, board.footprints[0].id);
+  assert.equal(missing.reference, '');
+  assert.equal(missing.nativeMissingReference, true);
+  assert.equal(reopened.pcb!.footprints[0].nativeMissingReference, undefined);
 });
 
 test('renaming a project persists through native files, Source, Save as and undo', () => {

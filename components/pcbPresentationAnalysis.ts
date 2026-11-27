@@ -2,7 +2,12 @@ import type { PCB, BoardZone } from '@/lib/pcb';
 import { invalidatePCBFill } from '@/lib/pcb';
 import { isOwnedPCB, isOwnedProjectNode, ownProjectData } from '@/lib/immutable-project';
 import { analyzePCBConnectivity, type Airwire } from '@/lib/pcb-connectivity';
-import { filledCopperPolygons, polygonPath, type Polygon } from '@/lib/pcb-polygons';
+import {
+  filledCopperPolygons,
+  pcbZoneOutlineDisplayPath,
+  polygonPath,
+  type Polygon,
+} from '@/lib/pcb-polygons';
 import type { PCBTrackDragPreview } from '@/lib/pcb-track-drag';
 import type { Point } from '@/lib/circuit';
 
@@ -13,7 +18,10 @@ type SavedConnectivity = {
   warnings: readonly string[];
 };
 
-type ZoneOutlinePath = Pick<BoardZone, 'outline' | 'holes'> & { path: string };
+type ZoneOutlinePath = Pick<
+  BoardZone,
+  'outline' | 'holes' | 'nativeCircularOutline' | 'nativeOutlineArcs'
+> & { path: string };
 type ZoneOutlineDrawing = { path: string; target?: string };
 type OutlineEdge = { start: Point; end: Point; visible?: [Point, Point] | null };
 type OutlineLine = { axis: 'x' | 'y'; slope: number; edges: OutlineEdge[] };
@@ -36,7 +44,7 @@ function trimCoincidentZoneEdges(
   const ringsByZone = new Map<string, OutlineEdge[][]>();
   const buckets = new Map<string, OutlineLine[]>();
   for (const zone of zones) {
-    if (zone.keepout || !zone.layer.endsWith('.Cu')) continue;
+    if (zone.keepout || !zone.outline.length || !zone.layer.endsWith('.Cu')) continue;
     const rings = [zone.outline, ...(zone.holes ?? [])].map((ring) =>
       ring.map((start, index): OutlineEdge => ({ start, end: ring[(index + 1) % ring.length] })),
     );
@@ -110,14 +118,25 @@ export function preparePCBZoneOutlinePaths(
   for (const zone of zones) {
     const owned =
       isOwnedProjectNode(zone.outline) &&
-      (zone.holes === undefined || isOwnedProjectNode(zone.holes));
+      (zone.holes === undefined || isOwnedProjectNode(zone.holes)) &&
+      (zone.nativeOutlineArcs === undefined || isOwnedProjectNode(zone.nativeOutlineArcs));
     const saved = owned ? previous.get(zone.id) : undefined;
     const path =
-      saved?.outline === zone.outline && saved.holes === zone.holes
+      saved?.outline === zone.outline &&
+      saved.holes === zone.holes &&
+      saved.nativeCircularOutline === zone.nativeCircularOutline &&
+      saved.nativeOutlineArcs === zone.nativeOutlineArcs
         ? saved.path
-        : render([{ outer: zone.outline, holes: zone.holes ?? [] }]);
+        : pcbZoneOutlineDisplayPath(zone, render);
     paths.set(zone.id, { path });
-    if (owned) cache.set(zone.id, { outline: zone.outline, holes: zone.holes, path });
+    if (owned)
+      cache.set(zone.id, {
+        outline: zone.outline,
+        holes: zone.holes,
+        nativeCircularOutline: zone.nativeCircularOutline,
+        nativeOutlineArcs: zone.nativeOutlineArcs,
+        path,
+      });
   }
   trimCoincidentZoneEdges(zones, paths);
   return { paths, cache };

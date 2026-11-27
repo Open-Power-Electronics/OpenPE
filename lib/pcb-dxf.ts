@@ -1,9 +1,11 @@
 import type { Point } from './circuit';
 import type { PCB } from './pcb';
-import { pcbArc } from './pcb-geometry';
-import { prepareBoardOutline } from './pcb-polygons';
+import { pcbArc, pcbRoundedRectArcs } from './pcb-geometry';
+import { prepareFabricationOutline } from './pcb-polygons';
+import { pcbBarcodes } from './pcb-barcode';
 
 type DxfValue = string | number;
+type DxfPolylineVertex = { at: Point; bulge?: number };
 const outlineLayer = 'Edge.Cuts';
 const modelSpace = {
   block: '*Model_Space',
@@ -128,9 +130,11 @@ function dxfAngle(nativeRadians: number): number {
 
 /** PCB outline centerlines in metric, upward-Y CAD coordinates. */
 export function exportBoardOutlineDxf(board: PCB): string {
+  if (pcbBarcodes(board.barcodes).some(({ layer }) => layer === 'Edge.Cuts'))
+    throw new Error('DXF export of native barcodes on Edge.Cuts requires KiCad.');
   // Reuse the outline owner's closure, area and geometry limits. Plot the
   // original primitives so the validation tessellation cannot enter the DXF.
-  const { edges } = prepareBoardOutline(board);
+  const edges = prepareFabricationOutline(board, 'DXF');
   const pairs: DxfValue[] = [];
   pairs.push(0, 'SECTION', 2, 'HEADER');
   pairs.push(9, '$ACADVER', 1, 'AC1015', 9, '$INSUNITS', 70, 4, 9, '$MEASUREMENT', 70, 1);
@@ -147,20 +151,34 @@ export function exportBoardOutlineDxf(board: PCB): string {
   const point = ({ x, y }: Point, offset = 0) => {
     pairs.push(10 + offset, x, 20 + offset, -y, 30 + offset, 0);
   };
-  const endpointCounts = new Map<string, number>();
+  const closedPolyline = (vertices: DxfPolylineVertex[]) => {
+    const retained = vertices.filter(({ at, bulge }, index) => {
+      const next = vertices[(index + 1) % vertices.length].at;
+      return bulge !== undefined || at.x !== next.x || at.y !== next.y;
+    });
+    if (retained.length + retained.filter(({ bulge }) => bulge !== undefined).length < 3)
+      throw new Error('The board outline contains a degenerate polygon.');
+    entity('LWPOLYLINE', 'AcDbPolyline');
+    pairs.push(90, retained.length, 70, 1);
+    for (const { at, bulge } of retained) {
+      pairs.push(10, at.x, 20, -at.y);
+      if (bulge !== undefined) pairs.push(42, bulge);
+    }
+  };
   for (const edge of edges) {
     if (edge.stroke && edge.stroke !== 'solid' && edge.stroke !== 'default')
       throw new Error('DXF export requires solid board outline graphics.');
     const { start, end } = edge;
-    // Native outline validation allows tiny endpoint discrepancies. The DXF
-    // centerlines must close without relying on a CAD reader's snap tolerance.
-    if (!edge.kind || edge.kind === 'arc') {
-      for (const { x, y } of [start, end]) {
-        const key = `${x},${y}`;
-        endpointCounts.set(key, (endpointCounts.get(key) ?? 0) + 1);
-      }
-    }
     switch (edge.kind) {
+      case 'curve': {
+        entity('SPLINE', 'AcDbSpline');
+        const planar = 8,
+          closed = start.x === end.x && start.y === end.y ? 1 : 0;
+        pairs.push(210, 0, 220, 0, 230, 1, 70, planar | closed, 71, 3, 72, 8, 73, 4, 74, 0);
+        for (const knot of [0, 0, 0, 0, 1, 1, 1, 1]) pairs.push(40, knot);
+        for (const control of [start, ...edge.points!, end]) point(control);
+        break;
+      }
       case 'arc': {
         const arc = pcbArc(edge);
         if (!arc) throw new Error('The board outline contains a degenerate arc.');
@@ -182,18 +200,30 @@ export function exportBoardOutlineDxf(board: PCB): string {
         break;
       }
       case 'polygon': {
+        if (edge.roundedRectRadius !== undefined) {
+          closedPolyline(
+            pcbRoundedRectArcs(edge).flatMap(({ start, end, clockwise }) => [
+              { at: start, bulge: Math.tan(((clockwise ? -1 : 1) * Math.PI) / 8) },
+              { at: end },
+            ]),
+          );
+          break;
+        }
         const vertices = [start, ...(edge.points ?? []), end];
-        if (start.x === end.x && start.y === end.y) vertices.pop();
-        if (vertices.length < 3)
-          throw new Error('The board outline contains a degenerate polygon.');
-        entity('LWPOLYLINE', 'AcDbPolyline');
-        pairs.push(90, vertices.length, 70, 1);
-        for (const { x, y } of vertices) pairs.push(10, x, 20, -y);
+        const mids = new Map(edge.polygonArcs?.map(({ vertex, mid }) => [vertex, mid]));
+        closedPolyline(
+          vertices.map((at, index) => {
+            const mid = mids.get(index);
+            if (!mid) return { at };
+            const arc = pcbArc({ start: at, mid, end: vertices[index + 1] });
+            if (!arc) throw new Error('The board outline contains a degenerate arc.');
+            // Bulge is tan(sweep/4) from this vertex. Negating Y flips the sign.
+            return { at, bulge: Math.tan(-arc.delta / 4) };
+          }),
+        );
         break;
       }
       case undefined:
-        if (start.x === end.x && start.y === end.y)
-          throw new Error('The board outline contains a zero-length line.');
         entity('LINE', 'AcDbLine');
         point(start);
         point(end, 1);
@@ -202,8 +232,6 @@ export function exportBoardOutlineDxf(board: PCB): string {
         throw new Error('Unsupported board outline geometry.');
     }
   }
-  if ([...endpointCounts.values()].some((count) => count !== 2))
-    throw new Error('DXF export requires exact joins between board outline lines and arcs.');
   pairs.push(0, 'ENDSEC');
   writeDxfObjects(pairs);
   return pairs.join('\r\n');

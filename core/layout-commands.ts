@@ -1,5 +1,6 @@
 import { uid, type Point } from '../lib/circuit';
 import { type BoardZone, type CopperLayer, type PCB } from '../lib/pcb';
+import { pcbCopperLayers, pcbCopperStacks } from '../lib/pcb-layer-stack';
 import {
   deletePCBSelection,
   findPCBGraphic,
@@ -65,7 +66,7 @@ const object = (properties: Record<string, unknown> = {}, required: string[] = [
   additionalProperties: false,
 });
 const point = object({ x: coordinate, y: coordinate }, ['x', 'y']);
-const layer = { enum: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] };
+const layer = { enum: [...pcbCopperLayers] };
 const board = { boardId: identity };
 const selection = {
   type: 'array',
@@ -287,7 +288,19 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
     'Create or update a typed board zone with shared Properties preparation. Omitted fields are retained; null clears optional overrides (padConnection null restores thermal relief). netId null means unassigned. Refresh already-filled enabled zones in the same transaction.',
     {
       zoneId: identity,
-      ...propertyShape(propertySchemas.zone, ['id', 'locked', 'filledPolygons']),
+      ...propertyShape(propertySchemas.zone, [
+        'id',
+        'locked',
+        'filledPolygons',
+        'nativeUnassignedFill',
+        'nativeCircularOutline',
+        'nativeOutlineArcs',
+        'nativePlacement',
+        'teardrop',
+        'hatchPosition',
+        'hatchFill',
+      ]),
+      outline: { ...propertySchemas.zone.properties.outline, minItems: 3 },
     },
   ),
   operationCommand(
@@ -307,10 +320,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
     {
       thickness: positive,
       layers: {
-        enum: [
-          ['F.Cu', 'B.Cu'],
-          ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'],
-        ],
+        enum: pcbCopperStacks.slice(0, 2),
       },
     },
   ),
@@ -342,7 +352,11 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
           'layers',
           'unconnected',
           'outline',
+          'nativeCustomPad',
+          'nativeConnect',
+          'fabricationProperty',
           'locked',
+          'teardrops',
         ]),
       ),
     },
@@ -351,7 +365,26 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   objectCommand(
     'layout.via.properties',
     'Edit an existing via position, net, diameter or drill using Properties validation.',
-    { viaId: identity, changes: object(propertyShape(propertySchemas.via, ['id', 'locked'])) },
+    {
+      viaId: identity,
+      changes: object({
+        ...propertyShape(propertySchemas.via, [
+          'id',
+          'locked',
+          'teardrops',
+          'span',
+          'backdrills',
+          'treatment',
+          'free',
+          'padstack',
+          'removeUnusedLayers',
+          'keepEndLayers',
+          'startEndOnly',
+          'zoneLayerConnections',
+        ]),
+        netId: identity,
+      }),
+    },
     ['viaId', 'changes'],
   ),
   objectCommand(
@@ -364,6 +397,8 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
           'id',
           'symbolId',
           'libraryId',
+          'nativeMissingReference',
+          'nativeMissingValue',
           'pads',
           'graphics',
           'zones',
@@ -446,7 +481,7 @@ export function queryLayout(board: PCB | null | undefined, id: string, args: Rec
     const items = {
       footprint: board.footprints,
       pad: board.footprints.flatMap((item) => item.pads),
-      track: board.tracks,
+      track: [...board.tracks, ...(board.arcTracks ?? [])],
       via: board.vias,
       graphic: board.graphics,
       zone: board.zones,
@@ -465,7 +500,7 @@ export function queryLayout(board: PCB | null | undefined, id: string, args: Rec
       thickness: board.thickness,
       counts: {
         packages: board.footprints.length,
-        tracks: board.tracks.length,
+        tracks: board.tracks.length + (board.arcTracks?.length ?? 0),
         vias: board.vias.length,
         zones: board.zones.length,
         graphics: board.graphics.length,

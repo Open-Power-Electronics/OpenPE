@@ -5427,8 +5427,116 @@ var require_clipper = __commonJS({
   }
 });
 
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+
 // lib/pcb-custom-pad.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-zone-settings.ts
+var pcbFootprintZoneOverrideFields = [
+  ["clearance", "copperClearance"],
+  ["zone_connect", "zoneConnect"]
+];
+var pcbPadZoneOverrideFields = [
+  ...pcbFootprintZoneOverrideFields,
+  ["thermal_gap", "thermalGap"],
+  ["thermal_bridge_width", "thermalBridge"]
+];
 
 // lib/project-validator.mjs
 var __getOwnPropNames2 = Object.getOwnPropertyNames;
@@ -5507,9 +5615,15 @@ var require_equal = __commonJS2({
 });
 var func3 = require_ucs2length().default;
 var pattern0 = new RegExp("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "u");
-var pattern25 = new RegExp("^[0-9a-f]{64}$", "u");
+var pattern38 = new RegExp("^[0-9a-f]{64}$", "u");
 var func0 = require_equal().default;
-var pattern17 = new RegExp("^[^\\u0000-\\u001f]+$", "u");
+var pattern15 = new RegExp("^[^\\x00-\\x1f]+$", "u");
+var pattern16 = new RegExp("^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$", "u");
+var pattern22 = new RegExp("^[^\\u0000-\\u001f]+$", "u");
+
+// lib/kicad-pcb.ts
+var footprintZoneOverrideNames = pcbFootprintZoneOverrideFields.map(([native]) => native);
+var padZoneOverrideNames = pcbPadZoneOverrideFields.map(([native]) => native);
 
 // lib/project-document-validator.mjs
 var __getOwnPropNames3 = Object.getOwnPropertyNames;
@@ -5588,13 +5702,15 @@ var require_equal2 = __commonJS3({
 });
 var func32 = require_ucs2length2().default;
 var pattern02 = new RegExp("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "u");
-var pattern252 = new RegExp("^[0-9a-f]{64}$", "u");
-var pattern42 = new RegExp("^https?://[^\\s\\u0000-\\u001f]+$", "u");
-var pattern44 = new RegExp("^schematic:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "u");
-var pattern29 = new RegExp("^(?:\\s*[a-zA-Z][\\w.]*\\s*=\\s*)?\\$\\{VALUE\\}\\s*$", "u");
-var pattern30 = new RegExp("^Sim[.]", "u");
+var pattern382 = new RegExp("^[0-9a-f]{64}$", "u");
+var pattern60 = new RegExp("^https?://[^\\s\\u0000-\\u001f]+$", "u");
+var pattern62 = new RegExp("^schematic:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "u");
+var pattern42 = new RegExp("^(?:\\s*[a-zA-Z][\\w.]*\\s*=\\s*)?\\$\\{VALUE\\}\\s*$", "u");
+var pattern43 = new RegExp("^Sim[.]", "u");
 var func02 = require_equal2().default;
-var pattern172 = new RegExp("^[^\\u0000-\\u001f]+$", "u");
+var pattern152 = new RegExp("^[^\\x00-\\x1f]+$", "u");
+var pattern162 = new RegExp("^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$", "u");
+var pattern222 = new RegExp("^[^\\u0000-\\u001f]+$", "u");
 
 // lib/simulation-fields.ts
 var simulationFieldNames = {
@@ -5893,8 +6009,13 @@ var pcbDesignRuleScopes = {
   ],
   clearance: ["pcb.short", "pcb.clearance"],
   edge: ["pcb.outline", "pcb.copper-edge"],
-  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
-  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing", "pcb.holes-co-located"],
+  silkscreen: [
+    "pcb.silk-clearance",
+    "pcb.silk-edge",
+    "pcb.silk-text-height",
+    "pcb.silk-text-thickness"
+  ],
   courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
   keepouts: ["pcb.keepout"],
   connectivity: ["pcb.unrouted"]

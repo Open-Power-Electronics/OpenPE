@@ -1,12 +1,8 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/brand/openpe-lockup-dark.png">
-    <img src="public/brand/openpe-lockup.png" alt="OpenPE" width="420">
+    <img src="public/brand/openpe-lockup.png" alt="OpenPE" width="350">
   </picture>
-</p>
-
-<p align="center">
-  <strong>面向电力电子工程师的 AI 原生工作台。</strong>
 </p>
 
 <p align="center">
@@ -29,11 +25,11 @@
 
 > 本文是 [README.md](README.md) 的简体中文翻译，两者内容保持一致。链接指向的项目文档为英文。
 
-OpenPE · Electrical Engineering Studio 是一款开源的电力电子设计桌面软件。左侧是 Agent 对话，右侧是原理图、PCB 布局、Model 和原生 KiCad 源文件，全部在同一个本地工程中。
+OpenPE · Electrical Engineering Studio 是一款基于 [KiCad 10 原生工程文件](docs/FORMAT.md)的开源电力电子设计桌面软件。左侧是 Agent 对话，右侧是原理图、PCB 布局、Model 和原生 Source，全部在同一个本地工程中。
 
 ![OpenPE 打开 EMC Flyback 布局并选中变压器 T1](assets/readme/workspace.webp)
 
-OpenPE 直接处理原生 KiCad 10 文件，并内置 OpenCASCADE、ngspice、Gmsh 和 Elmer。不连接 Agent 也可以手动编辑和运行受支持的仿真。支持范围是有界的：OpenPE 不声称支持通用 KiCad 导入、与 KiCad 完全一致的 ERC/DRC、自动布线或生产级认证。详见 [Coverage and limits](docs/README.md#coverage-and-limits)。
+OpenPE 内置 OpenCASCADE、ngspice、Gmsh 和 Elmer。不连接 Agent 也可以手动编辑和运行受支持的仿真。通用 KiCad 导入、与 KiCad 完全一致的 ERC/DRC、自动布线及生产级认证均不在[支持范围](docs/README.md#coverage-and-limits)内。
 
 ## 亮点
 
@@ -56,8 +52,8 @@ OpenPE 直接处理原生 KiCad 10 文件，并内置 OpenCASCADE、ngspice、Gm
 
 ## 功能
 
-- **原生 KiCad 工程。**直接编辑 `.kicad_sch` 和 `.kicad_pcb`，可在 Source 中修改源文件，并保存为带配套资源、可移植的工程。
-- **有界检查。**在文档规定的[设计规则](docs/DESIGN-RULES.md)范围内运行只读的 ERC 和 DRC。
+- **KiCad 10 原生文件。**在 Source 中编辑 `.kicad_pro`、`.kicad_sch` 和 `.kicad_pcb`，保存包含配套资源的可移植工程。保存会逐字节保留未修改的原生文件。
+- **本地检查和制造文件。**无需安装 KiCad，即可运行只读 ERC 和 DRC，或导出受支持的 Gerber X2、Excellon 和板框 DXF。详见[设计规则](docs/DESIGN-RULES.md)和[导出范围](docs/FORMAT.md#manufacturing-export)。
 - **一个工程，三个视图。**原理图、Layout 和 Model 共用同一个原生工程和同一条撤销历史。
 - **本地 Agent。**与你已在使用的 Agent 讨论当前工程，并请求它修改设计。
 - **内置分析。**仿真、板温、寄生参数和 EMC 评审以插件形式运行在同一个工程上。

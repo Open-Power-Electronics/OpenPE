@@ -246,7 +246,9 @@ app.whenReady().then(async () => {
     if (typeof value !== 'boolean') throw new Error('Invalid Raw KiCad mode.');
     if (value === rawMode) return;
     if (nativeRequests || rawPicker || (value && closePending))
-      throw new Error('Wait for the current native file operation to finish before switching modes.');
+      throw new Error(
+        'Wait for the current native file operation to finish before switching modes.',
+      );
     service.setRawKiCadMode(value);
     rawMode = value;
     ++rawEpoch;
@@ -276,7 +278,13 @@ app.whenReady().then(async () => {
     if (site === 'easyeda') return shell.openExternal('https://easyeda.com/');
     throw new Error('Unknown library homepage.');
   });
-  registerPluginInstaller({ ipcMain: workbenchIpc, dialog, authorize: trusted, getWindow: () => win, service });
+  registerPluginInstaller({
+    ipcMain: workbenchIpc,
+    dialog,
+    authorize: trusted,
+    getWindow: () => win,
+    service,
+  });
   registerCursorCredential({ ipcMain: workbenchIpc, authorize: trusted, store: cursorCredentials });
   registerWorkspaceRecovery({
     ipcMain: workbenchIpc,
@@ -346,8 +354,8 @@ app.whenReady().then(async () => {
       buttonLabel: 'Open',
       filters: [
         {
-          name: 'KiCad Project',
-          extensions: ['kicad_pro'],
+          name: 'KiCad Projects and PCB Layouts',
+          extensions: ['kicad_pro', 'kicad_pcb'],
         },
       ],
       properties: ['openFile'],

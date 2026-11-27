@@ -21,8 +21,9 @@ await writeFile(
 
 const charcoal = '#292929';
 const green = '#87ea5c';
+const websiteInk = '#1f2622';
 const darkHeading = '#f0f0f0';
-const darkMuted = '#b5b5b5';
+const tagline = 'AI-Native Power Electronics Workbench';
 const mono = master
   .replace(
     /(<path data-role="body"[^>]*?) stroke="[^"]*" stroke-width="[^"]*" stroke-linejoin="[^"]*" paint-order="[^"]*"/,
@@ -32,25 +33,28 @@ const mono = master
   .replace('</title>', ', monochrome</title>');
 await writeFile(at('public/brand/openpe-mark-mono.svg'), mono);
 
-function lockup(markPaths, foreground, secondary) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="104" viewBox="0 0 360 104">
-  <title>OpenPE — Electrical Engineering Studio</title>
-  <g transform="translate(8 8) scale(1.375)">${markPaths}</g>
-  <text x="112" y="61" font-family="Segoe UI,Arial,sans-serif" font-weight="600" font-size="51" letter-spacing="-2.2" fill="${foreground}">OpenPE</text>
-  <text x="115" y="82" font-family="Segoe UI,Arial,sans-serif" font-size="11" letter-spacing="1.5" fill="${secondary}">ELECTRICAL ENGINEERING STUDIO</text>
+const wordmark = paths(await readFile(at('assets/openpe-wordmark.svg'), 'utf8'));
+if (!wordmark) throw new Error('The OpenPE wordmark must contain SVG paths.');
+
+function lockup(markPaths, foreground) {
+  // Match the website navigation: a 28 px mark, a 10 px gap and a 19 px wordmark.
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="121" height="38" viewBox="0 0 121 38">
+  <title>OpenPE</title>
+  <g transform="translate(5 5) scale(0.4375)">${markPaths}</g>
+  <g transform="translate(43 5)" fill="${foreground}">${wordmark}</g>
 </svg>
 `;
 }
-await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, charcoal, '#666666'));
-await writeFile(at('public/brand/openpe-lockup-dark.svg'), lockup(geometry, darkHeading, darkMuted));
+await writeFile(at('public/brand/openpe-lockup.svg'), lockup(geometry, websiteInk));
+await writeFile(at('public/brand/openpe-lockup-dark.svg'), lockup(geometry, darkHeading));
 await mkdir(at('build'), { recursive: true });
 await sharp(Buffer.from(master)).resize(512, 512).png().toFile(at('public/brand/openpe-icon.png'));
 await sharp(at('public/brand/openpe-lockup.svg'))
-  .resize(1080, 312)
+  .resize(1089, 342)
   .png()
   .toFile(at('public/brand/openpe-lockup.png'));
 await sharp(at('public/brand/openpe-lockup-dark.svg'))
-  .resize(1080, 312)
+  .resize(1089, 342)
   .png()
   .toFile(at('public/brand/openpe-lockup-dark.png'));
 
@@ -186,8 +190,8 @@ const preview = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="80
   <g transform="translate(244 174) scale(3)">${geometry}</g>
   <g transform="translate(840 174) scale(3)">${geometry}</g>
   <text x="340" y="431" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-weight="600" font-size="64" letter-spacing="-2.7" fill="${charcoal}">OpenPE</text>
-  <text x="340" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#777777">Electrical Engineering Studio</text>
-  <text x="936" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#b6b9b6">Electrical Engineering Studio</text>
+  <text x="340" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#777777">${tagline}</text>
+  <text x="936" y="464" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="13" letter-spacing=".4" fill="#b6b9b6">${tagline}</text>
   <text x="84" y="548" font-family="Segoe UI,Arial,sans-serif" font-size="10" letter-spacing="1.3" fill="#8a8a86">LIGHT SURFACE</text>
   <text x="676" y="548" font-family="Segoe UI,Arial,sans-serif" font-size="10" letter-spacing="1.3" fill="#979c98">DARK SURFACE</text>
   <path d="M56 614h1168" stroke="#dcdcd8"/>

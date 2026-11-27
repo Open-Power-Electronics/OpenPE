@@ -5677,6 +5677,12 @@ function recordOwnedProjectNode(value) {
   ownedNodes.add(value);
 }
 
+// lib/project-size-limits.ts
+var MAX_PROJECT_BYTES = 8e6;
+var MAX_NATIVE_PCB_BYTES = 2e7;
+var MAX_PROJECT_NODES = 3e5;
+var MAX_NATIVE_PCB_NODES = 3e6;
+
 // lib/sexpr.ts
 function decodeKiCadString(value) {
   const decoded = JSON.parse(
@@ -5691,32 +5697,34 @@ var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
 var val = (n, i = 1) => n ? atom(n[i]) : "";
 var num = (n, i = 1) => Number(val(n, i) || 0);
-function parseSExpr(source, maxLength = 8e6) {
-  return parseSExprValue(source, maxLength, false);
+function parseSExpr(source, maxLength = MAX_PROJECT_BYTES, maxNodes) {
+  return parseSExprValue(source, maxLength, false, maxNodes);
 }
-function parseOwnedSExpr(source, maxLength = 8e6) {
+function parseOwnedSExpr(source, maxLength = MAX_PROJECT_BYTES, maxNodes = MAX_PROJECT_NODES) {
   if (typeof source !== "string") throw new Error("Expected primitive S-expression text.");
-  return parseSExprValue(source, maxLength, true);
+  return parseSExprValue(source, maxLength, true, maxNodes);
 }
-function parseSExprValue(source, maxLength, owned) {
+function parseSExprValue(source, maxLength, owned, maxNodes) {
   if (source.length > maxLength)
-    throw new Error("Files over 8 MB are not supported in this preview.");
+    throw new Error(
+      maxLength === MAX_NATIVE_PCB_BYTES ? "Native PCB files over 20 MB are not supported." : "Files over 8 MB are not supported in this preview."
+    );
   const tokens = source.match(/"(?:\\.|[^"\\])*"|[()]|[^\s()]+/g) || [];
   let i = 0, nodes = 0;
   const bounded = (depth) => {
-    if (depth > 80 || ++nodes > 3e5)
+    if (owned && depth > 80 || maxNodes !== void 0 && ++nodes > maxNodes)
       throw new Error(
         "Invalid OpenPE project: document nesting or object count exceeds the supported limit."
       );
   };
   function read(depth) {
-    if (owned) bounded(depth);
+    bounded(depth);
     if (depth > 100 || tokens[i++] !== "(") throw new Error("Invalid S-expression structure.");
     const list2 = [];
     while (i < tokens.length && tokens[i] !== ")") {
       if (tokens[i] === "(") list2.push(read(depth + 1));
       else {
-        if (owned) bounded(depth + 1);
+        bounded(depth + 1);
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
@@ -5743,8 +5751,8 @@ var ownedSExprText = /* @__PURE__ */ new WeakMap();
 function writeSExpr(n, depth = 0) {
   if (!n.some(Array.isArray)) return `(${n.join(" ")})`;
   const owned = isOwnedProjectNode(n);
-  const cached = owned ? ownedSExprText.get(n)?.get(depth) : void 0;
-  if (cached !== void 0) return cached;
+  const cached2 = owned ? ownedSExprText.get(n)?.get(depth) : void 0;
+  if (cached2 !== void 0) return cached2;
   let s = "(";
   n.forEach((v, i) => {
     s += Array.isArray(v) ? `
@@ -5763,8 +5771,8 @@ var ownedSExprJsonPayload = /* @__PURE__ */ new WeakMap();
 var jsonTextPayload = (source) => JSON.stringify(source).slice(1, -1);
 function writeSExprJsonPayload(node, depth = 0) {
   if (isOwnedProjectNode(node)) {
-    const cached = ownedSExprJsonPayload.get(node)?.get(depth);
-    if (cached !== void 0) return cached;
+    const cached2 = ownedSExprJsonPayload.get(node)?.get(depth);
+    if (cached2 !== void 0) return cached2;
     const payload2 = jsonTextPayload(writeSExpr(node, depth));
     const variants = ownedSExprJsonPayload.get(node) ?? /* @__PURE__ */ new Map();
     variants.set(depth, payload2);
@@ -5802,10 +5810,10 @@ function isOwnedCircuit(circuit) {
 function isOwnedPCB(board) {
   return isOwnedProjectNode(board);
 }
-function ownProjectData(value, previous) {
+function ownProjectData(value, previous, maxNodes = MAX_PROJECT_NODES) {
   let nodes = 0;
   function copy(value2, old, depth) {
-    if (depth > 80 || ++nodes > 3e5)
+    if (depth > 80 || ++nodes > maxNodes)
       throw new Error(
         "Invalid OpenPE project: document nesting or object count exceeds the supported limit."
       );
@@ -6296,8 +6304,8 @@ var ownedUnitGraphics = /* @__PURE__ */ new WeakMap();
 function unitGraphics(library, unit = 1) {
   const owned = isOwnedProjectNode(library);
   const variants = owned ? ownedUnitGraphics.get(library) : void 0;
-  const cached = variants?.get(unit);
-  if (cached) return [...cached];
+  const cached2 = variants?.get(unit);
+  if (cached2) return [...cached2];
   const graphics = children(library, "symbol").filter((s) => {
     const match = val(s).match(/_(\d+)_(\d+)$/);
     return !match || (Number(match[1]) === 0 || Number(match[1]) === unit) && Number(match[2]) <= 1;
@@ -6314,19 +6322,19 @@ function unitGraphics(library, unit = 1) {
 var ownedPartFields = /* @__PURE__ */ new WeakMap();
 function partFields(part) {
   const owned = isOwnedProjectNode(part);
-  const cached = owned ? ownedPartFields.get(part) : void 0;
-  if (cached) return { ...cached };
-  const fields = {
+  const cached2 = owned ? ownedPartFields.get(part) : void 0;
+  if (cached2) return { ...cached2 };
+  const fields4 = {
     ...Object.fromEntries(
       children(part.raw || [], "property").filter((p) => !["Reference", "Value"].includes(val(p))).map((p) => [val(p), val(p, 2)])
     ),
     ...part.fields
   };
   if (owned) {
-    ownedPartFields.set(part, fields);
-    return { ...fields };
+    ownedPartFields.set(part, fields4);
+    return { ...fields4 };
   }
-  return fields;
+  return fields4;
 }
 function partFootprint(part) {
   return (partFields(part).Footprint ?? "").trim();
@@ -6366,11 +6374,11 @@ function symbolAnnotation(part, library, field) {
             for (const dy of [-radius, radius]) add(num(c) + dx, num(c, 2) + dy);
         } else {
           for (const name of ["start", "mid", "end"]) {
-            const point2 = child(primitive, name);
-            if (point2) add(num(point2), num(point2, 2));
+            const point3 = child(primitive, name);
+            if (point3) add(num(point3), num(point3, 2));
           }
-          for (const point2 of children(child(primitive, "pts") || [], "xy"))
-            add(num(point2), num(point2, 2));
+          for (const point3 of children(child(primitive, "pts") || [], "xy"))
+            add(num(point3), num(point3, 2));
         }
       }
     }
@@ -6479,22 +6487,17 @@ function schematicPolylines(original) {
   });
 }
 
-// lib/schematic-image.ts
-var cachedImages = /* @__PURE__ */ new WeakMap();
-var invalidImage = () => {
-  throw new Error(
-    "Unsupported schematic image. Use bounded embedded PNG artwork. The original file was not modified."
-  );
-};
-function pngGeometry(data) {
+// lib/kicad-embedded-png.ts
+function pngGeometry(data, reject) {
   if (!data || data.length > 1e6 || data.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data))
-    return invalidImage();
+    return reject();
   const bytes = atob(data);
-  if (bytes.length < 45 || !bytes.startsWith("\x89PNG\r\n\n")) return invalidImage();
+  if (bytes.length < 45 || !bytes.startsWith("\x89PNG\r\n\n")) return reject();
   const uint32 = (i) => bytes.charCodeAt(i) * 16777216 + bytes.charCodeAt(i + 1) * 65536 + bytes.charCodeAt(i + 2) * 256 + bytes.charCodeAt(i + 3);
-  if (uint32(8) !== 13 || bytes.slice(12, 16) !== "IHDR") return invalidImage();
-  const width = uint32(16), height = uint32(20);
-  if (!width || !height || width > 4096 || height > 4096) return invalidImage();
+  if (uint32(8) !== 13 || bytes.slice(12, 16) !== "IHDR") return reject();
+  const width = uint32(16);
+  const height = uint32(20);
+  if (!width || !height || width > 4096 || height > 4096) return reject();
   let widthPPI = 300;
   let imageData = false;
   let density = false;
@@ -6502,40 +6505,39 @@ function pngGeometry(data) {
     const length = uint32(offset2);
     const kind = bytes.slice(offset2 + 4, offset2 + 8);
     const end = offset2 + length + 12;
-    if (end > bytes.length) return invalidImage();
+    if (end > bytes.length) return reject();
     if (kind === "IEND" && !length && end === bytes.length && imageData)
       return { width, height, widthPPI };
     if (kind === "IDAT") imageData ||= length > 0;
     if (kind === "pHYs") {
       if (density || imageData || length !== 9 || bytes.charCodeAt(offset2 + 16) > 1)
-        return invalidImage();
+        return reject();
       density = true;
       const ppi = Math.round(uint32(offset2 + 8) * 0.0254);
       if (bytes.charCodeAt(offset2 + 16) === 1 && ppi > 1) widthPPI = ppi;
     }
     offset2 = end;
   }
-  return invalidImage();
+  return reject();
 }
-function readImage(node) {
-  const cached = cachedImages.get(node);
-  if (cached) return cached;
-  const at = child(node, "at"), scaleRecord = child(node, "scale");
-  const uuid = child(node, "uuid"), data = child(node, "data");
-  if (node.length !== (scaleRecord ? 5 : 4) || at?.length !== 3 || !val(at) || !val(at, 2) || uuid?.length !== 2 || !data || scaleRecord && (scaleRecord.length !== 2 || !val(scaleRecord)) || !data.slice(1).every((value) => typeof value === "string"))
-    return invalidImage();
-  const id = val(uuid);
-  const x = num(at), y = num(at, 2), scale2 = scaleRecord ? num(scaleRecord) : 1;
-  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || ![x, y, scale2].every(Number.isFinite) || scale2 <= 0)
-    return invalidImage();
+function readKiCadEmbeddedPng(node, reject) {
+  const at = child(node, "at");
+  const scaleRecord = child(node, "scale");
+  const data = child(node, "data");
+  if (at?.length !== 3 || !val(at) || !val(at, 2) || scaleRecord && (scaleRecord.length !== 2 || !val(scaleRecord)) || !data || !data.slice(1).every((value) => typeof value === "string"))
+    return reject();
+  const x = num(at);
+  const y = num(at, 2);
+  const scale2 = scaleRecord ? num(scaleRecord) : 1;
+  if (![x, y, scale2].every(Number.isFinite) || scale2 <= 0) return reject();
   const encoded = data.slice(1).map((_, i) => val(data, i + 1)).join("");
-  const png = pngGeometry(encoded);
+  const png = pngGeometry(encoded, reject);
   const mmPerPixel = scale2 * 25.4 / png.widthPPI;
-  const width = png.width * mmPerPixel, height = png.height * mmPerPixel;
+  const width = png.width * mmPerPixel;
+  const height = png.height * mmPerPixel;
   if (width < 1e-6 || height < 1e-6 || Math.abs(x) + width / 2 > 1e5 || Math.abs(y) + height / 2 > 1e5)
-    return invalidImage();
-  const image = {
-    id,
+    return reject();
+  return {
     x: x - width / 2,
     y: y - height / 2,
     width,
@@ -6543,6 +6545,24 @@ function readImage(node) {
     pixels: png.width * png.height,
     href: `data:image/png;base64,${encoded}`
   };
+}
+
+// lib/schematic-image.ts
+var cachedImages = /* @__PURE__ */ new WeakMap();
+var invalidImage = () => {
+  throw new Error(
+    "Unsupported schematic image. Use bounded embedded PNG artwork. The original file was not modified."
+  );
+};
+function readImage(node) {
+  const cached2 = cachedImages.get(node);
+  if (cached2) return cached2;
+  const scale2 = child(node, "scale");
+  const uuid = child(node, "uuid");
+  if (node.length !== (scale2 ? 5 : 4) || uuid?.length !== 2) return invalidImage();
+  const id = val(uuid);
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return invalidImage();
+  const image = { id, ...readKiCadEmbeddedPng(node, invalidImage) };
   if (isOwnedProjectNode(node)) cachedImages.set(node, Object.freeze(image));
   return image;
 }
@@ -6573,8 +6593,8 @@ function emptyCircuit() {
 var ownedPartPins = /* @__PURE__ */ new WeakMap();
 function pinPositions(part, library) {
   const owned = isOwnedProjectNode(part) && isOwnedProjectNode(library);
-  const cached = owned ? ownedPartPins.get(part) : void 0;
-  if (cached && cached.library === library) return cached.points.map((point2) => ({ ...point2 }));
+  const cached2 = owned ? ownedPartPins.get(part) : void 0;
+  if (cached2 && cached2.library === library) return cached2.points.map((point3) => ({ ...point3 }));
   const a = -part.rotation * Math.PI / 180;
   const cosine = Math.cos(a), sine = Math.sin(a);
   const points2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin")).map((p) => {
@@ -6585,8 +6605,8 @@ function pinPositions(part, library) {
       y: Number((part.y + (part.mirror === "x" ? -1 : 1) * (x * sine + y * cosine)).toFixed(4))
     };
   });
-  if (owned && points2.every((point2) => Number.isFinite(point2.x) && Number.isFinite(point2.y)))
-    ownedPartPins.set(part, { library, points: points2.map((point2) => ({ ...point2 })) });
+  if (owned && points2.every((point3) => Number.isFinite(point3.x) && Number.isFinite(point3.y)))
+    ownedPartPins.set(part, { library, points: points2.map((point3) => ({ ...point3 })) });
   return points2;
 }
 var ownedCircuitTrees = /* @__PURE__ */ new WeakMap();
@@ -6598,8 +6618,8 @@ function rememberMaterializedObject(value, node) {
   return owned;
 }
 function materializedCircuitTree(d) {
-  const cached = ownedCircuitTrees.get(d);
-  if (cached) return cached;
+  const cached2 = ownedCircuitTrees.get(d);
+  if (cached2) return cached2;
   let root = serializeCircuitContent(d);
   if (isOwnedCircuit(d)) {
     root = ownProjectData(root);
@@ -6641,9 +6661,9 @@ function serializeCircuitContent(d) {
     }
   };
   for (const w of d.wires) {
-    const cached = isOwnedProjectNode(w) ? ownedRawObjects.get(w) : void 0;
-    if (cached) {
-      root.push(cached);
+    const cached2 = isOwnedProjectNode(w) ? ownedRawObjects.get(w) : void 0;
+    if (cached2) {
+      root.push(cached2);
       continue;
     }
     const n = w.raw ? structuredClone(w.raw) : ["wire", ["stroke", ["width", "0"], ["type", "default"]], ["uuid", quote(w.id)]];
@@ -6651,9 +6671,9 @@ function serializeCircuitContent(d) {
     root.push(rememberMaterializedObject(w, n));
   }
   for (const j of d.junctions) {
-    const cached = isOwnedProjectNode(j) ? ownedRawObjects.get(j) : void 0;
-    if (cached) {
-      root.push(cached);
+    const cached2 = isOwnedProjectNode(j) ? ownedRawObjects.get(j) : void 0;
+    if (cached2) {
+      root.push(cached2);
       continue;
     }
     const n = j.raw ? structuredClone(j.raw) : [
@@ -6666,9 +6686,9 @@ function serializeCircuitContent(d) {
     root.push(rememberMaterializedObject(j, n));
   }
   for (const j of d.noConnects || []) {
-    const cached = isOwnedProjectNode(j) ? ownedRawObjects.get(j) : void 0;
-    if (cached) {
-      root.push(cached);
+    const cached2 = isOwnedProjectNode(j) ? ownedRawObjects.get(j) : void 0;
+    if (cached2) {
+      root.push(cached2);
       continue;
     }
     const n = j.raw ? structuredClone(j.raw) : ["no_connect", ["uuid", quote(j.id)]];
@@ -6676,9 +6696,9 @@ function serializeCircuitContent(d) {
     root.push(rememberMaterializedObject(j, n));
   }
   for (const l of d.labels) {
-    const cached = isOwnedProjectNode(l) ? ownedRawObjects.get(l) : void 0;
-    if (cached) {
-      root.push(cached);
+    const cached2 = isOwnedProjectNode(l) ? ownedRawObjects.get(l) : void 0;
+    if (cached2) {
+      root.push(cached2);
       continue;
     }
     const n = l.raw ? structuredClone(l.raw) : [
@@ -6695,9 +6715,9 @@ function serializeCircuitContent(d) {
   }
   for (const p of d.parts) {
     if (p.raw) {
-      const cached = isOwnedProjectNode(p) ? ownedRawObjects.get(p) : void 0;
-      if (cached) {
-        root.push(cached);
+      const cached2 = isOwnedProjectNode(p) ? ownedRawObjects.get(p) : void 0;
+      if (cached2) {
+        root.push(cached2);
         continue;
       }
       const s2 = structuredClone(p.raw), old = child(s2, "at"), dx = p.x - num(old), dy = p.y - num(old, 2);
@@ -6843,10 +6863,10 @@ function parseCircuitTree(root) {
     "polyline",
     "rectangle"
   ];
-  const unsupported = root.filter(Array.isArray).map((x) => String(x[0])).filter((k) => !allowed.includes(k));
-  if (unsupported.length)
+  const unsupported2 = root.filter(Array.isArray).map((x) => String(x[0])).filter((k) => !allowed.includes(k));
+  if (unsupported2.length)
     throw new Error(
-      `Unsupported KiCad objects: ${[...new Set(unsupported)].join(", ")}. The original file was not modified.`
+      `Unsupported KiCad objects: ${[...new Set(unsupported2)].join(", ")}. The original file was not modified.`
     );
   const d = emptyCircuit();
   d.original = root.filter((node) => !Array.isArray(node) || node[0] !== "paper");
@@ -7001,6 +7021,544 @@ function nativeIdentity(value) {
   const h = words.map((word) => (word >>> 0).toString(16).padStart(8, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20)}`;
 }
+function normalizeNativePCBIdentifiers(root) {
+  const normalizeAtom = (atom2, value) => /^0-0-0-0-[0-9a-f]{12}$/i.test(value) ? quote(nativeIdentity(`KiCad PCB compact UUID: ${value.toLowerCase()}`)) : atom2;
+  const visit = (node, parent) => {
+    const key2 = node[0];
+    const ids = key2 === "uuid" || key2 === "members" && (parent === "group" || parent === "generated");
+    let next;
+    for (let index = 1; index < node.length; index++) {
+      const entry = node[index];
+      const normalized = Array.isArray(entry) ? visit(entry, key2) : ids ? normalizeAtom(entry, val(node, index)) : entry;
+      if (entry !== normalized) {
+        next ??= [...node];
+        next[index] = normalized;
+      }
+    }
+    return next ?? node;
+  };
+  const board = visit(root);
+  return separateNativeScopedIdentities(separateNativeZoneIdentities(board));
+}
+function separateNativeScopedIdentities(board) {
+  const records2 = /* @__PURE__ */ new Map();
+  const uses = /* @__PURE__ */ new Map();
+  const references = /* @__PURE__ */ new Set();
+  const collect = (container, owner) => {
+    for (const record2 of container) {
+      if (!Array.isArray(record2)) continue;
+      const kind = record2[0];
+      if (kind === "group" || kind === "generated") {
+        const members = child(record2, "members");
+        for (let i = 1; members && i < members.length; i++)
+          references.add(val(members, i).toLowerCase());
+      }
+      const id = val(child(record2, "uuid")).toLowerCase();
+      if (!id) continue;
+      uses.set(id, (uses.get(id) ?? 0) + 1);
+      if (!owner || kind !== "zone" && (kind !== "property" || container === board)) continue;
+      const occurrence = { container, record: record2, owner, kind };
+      const group = records2.get(id);
+      if (group) group.push(occurrence);
+      else records2.set(id, [occurrence]);
+    }
+  };
+  collect(board, "board");
+  for (const footprint of children(board, "footprint"))
+    collect(footprint, val(child(footprint, "uuid")).toLowerCase());
+  const copies = /* @__PURE__ */ new Map();
+  for (const [id, occurrences] of records2) {
+    if (occurrences.length < 2 || uses.get(id) !== occurrences.length || references.has(id) || new Set(occurrences.map(({ owner }) => owner)).size !== occurrences.length || occurrences.some(({ kind }) => kind !== occurrences[0].kind))
+      continue;
+    for (const { container, record: record2, owner, kind } of occurrences.slice(1)) {
+      const updated = copies.get(container) ?? [...container];
+      const uuid = child(record2, "uuid");
+      updated[container.indexOf(record2)] = record2.map(
+        (field) => field === uuid ? ["uuid", quote(nativeIdentity(`KiCad PCB footprint ${kind} UUID: ${owner}: ${id}`))] : field
+      );
+      copies.set(container, updated);
+    }
+  }
+  return copies.size ? board.map((record2) => Array.isArray(record2) ? copies.get(record2) ?? record2 : record2) : board;
+}
+function separateNativeZoneIdentities(board) {
+  const zonesById = /* @__PURE__ */ new Map();
+  const references = /* @__PURE__ */ new Set();
+  for (const record2 of board) {
+    if (!Array.isArray(record2)) continue;
+    const id = val(child(record2, "uuid")).toLowerCase();
+    if (record2[0] === "zone" && id) {
+      const zones = zonesById.get(id);
+      if (zones) zones.push(record2);
+      else zonesById.set(id, [record2]);
+    } else if (id) references.add(id);
+    if (record2[0] === "group") {
+      const members = child(record2, "members") ?? [];
+      for (let i = 1; i < members.length; i++) references.add(val(members, i).toLowerCase());
+    }
+  }
+  const changed = /* @__PURE__ */ new Map();
+  for (const [id, zones] of zonesById) {
+    if (zones.length < 2 || references.has(id)) continue;
+    const names = zones.map((zone) => val(child(zone, "name")));
+    if (names.some((name) => !name) || new Set(names).size !== zones.length) continue;
+    for (let i = 1; i < zones.length; i++) {
+      const zone = zones[i];
+      if (children(zone, "uuid").length !== 1) continue;
+      const uuid = child(zone, "uuid");
+      changed.set(
+        zone,
+        zone.map(
+          (field) => field === uuid ? ["uuid", quote(nativeIdentity(`KiCad PCB named zone UUID: ${id}: ${names[i]}`))] : field
+        )
+      );
+    }
+  }
+  return changed.size ? board.map((record2) => Array.isArray(record2) ? changed.get(record2) ?? record2 : record2) : board;
+}
+
+// lib/pcb-zone-settings.ts
+var pcbFootprintZoneOverrideFields = [
+  ["clearance", "copperClearance"],
+  ["zone_connect", "zoneConnect"]
+];
+var pcbPadZoneOverrideFields = [
+  ...pcbFootprintZoneOverrideFields,
+  ["thermal_gap", "thermalGap"],
+  ["thermal_bridge_width", "thermalBridge"]
+];
+var maxPCBZonePriority = 2147483647;
+var pcbPlacementSourceKinds = ["sheetname", "component_class", "group"];
+var pcbZoneLayerActive = (board, layer) => !layer.endsWith(".Cu") || board.layers.some((copper) => copper === layer);
+var pcbZoneHatchNumericFields = [
+  ["hatch_thickness", "thickness"],
+  ["hatch_gap", "gap"],
+  ["hatch_orientation", "orientation"],
+  ["hatch_min_hole_area", "minHoleArea"],
+  ["hatch_smoothing_level", "smoothingLevel"],
+  ["hatch_smoothing_value", "smoothingValue"]
+];
+var pcbZoneHatchBorderAlgorithms = ["hatch_thickness", "min_thickness"];
+
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+function isPCBCopperStack(value) {
+  if (!Array.isArray(value) || value.length % 2 !== 0) return false;
+  const expected = pcbCopperStacks[value.length / 2 - 1];
+  return expected !== void 0 && expected.every((layer, index) => value[index] === layer);
+}
+function pcbNativeCopperLayerId(layer) {
+  if (layer === "F.Cu") return 0;
+  if (layer === "B.Cu") return 2;
+  return 2 + 2 * pcbCopperLayers.indexOf(layer);
+}
+
+// lib/kicad-pcb-metadata.ts
+var groupMemberKinds = /* @__PURE__ */ new Set([
+  "footprint",
+  "gr_line",
+  "gr_rect",
+  "gr_arc",
+  "gr_curve",
+  "gr_circle",
+  "gr_poly",
+  "gr_text",
+  "gr_text_box",
+  "dimension",
+  "point",
+  "segment",
+  "arc",
+  "generated",
+  "via",
+  "zone"
+]);
+var footprintMemberKinds = /* @__PURE__ */ new Set([
+  "property",
+  "fp_line",
+  "fp_rect",
+  "fp_arc",
+  "fp_curve",
+  "fp_circle",
+  "fp_poly",
+  "fp_text",
+  "fp_text_box",
+  "point",
+  "pad",
+  "zone"
+]);
+var uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+var fail = (message) => {
+  throw new Error(`KiCad PCB: ${message}`);
+};
+function quoted(atom2) {
+  return typeof atom2 === "string" && atom2.startsWith('"');
+}
+function validatePCBAssemblyVariants(board) {
+  const lists = children(board, "variants");
+  if (lists.length > 1 || lists[0] && lists[0].length > 257)
+    fail("Invalid native board assembly variants.");
+  const failVariant = () => fail("Invalid native assembly variant.");
+  const validateName = (node, names) => {
+    const name = val(node);
+    if (node.length !== 2 || !quoted(node[1]) || !name || names.has(name)) failVariant();
+    names.add(name);
+  };
+  const validateVariants = (records2, footprint) => {
+    const names = /* @__PURE__ */ new Set();
+    for (const record2 of records2) {
+      if (!Array.isArray(record2) || record2[0] !== "variant") return failVariant();
+      const name = child(record2, "name") ?? failVariant();
+      validateName(name, names);
+      const seen = /* @__PURE__ */ new Set(["name"]);
+      const fields4 = /* @__PURE__ */ new Set();
+      for (const item of record2.slice(1)) {
+        if (item === name) continue;
+        if (!Array.isArray(item) || typeof item[0] !== "string") return failVariant();
+        const key2 = item[0];
+        if (footprint && key2 === "field") {
+          const fieldName = child(item, "name") ?? failVariant();
+          const value = child(item, "value");
+          validateName(fieldName, fields4);
+          if (item.length !== 3 || value?.length !== 2 || !quoted(value[1])) failVariant();
+          continue;
+        }
+        if (seen.has(key2) || item.length !== 2) return failVariant();
+        if (footprint ? !["dnp", "exclude_from_bom", "exclude_from_pos_files"].includes(key2) || item[1] !== "yes" && item[1] !== "no" : key2 !== "description" || !quoted(item[1]))
+          return failVariant();
+        seen.add(key2);
+      }
+    }
+  };
+  if (lists[0]) validateVariants(lists[0].slice(1), false);
+  for (const footprint of children(board, "footprint")) {
+    const variants = children(footprint, "variant");
+    if (variants.length > 256) failVariant();
+    validateVariants(variants, true);
+  }
+}
+function nativeId(record2) {
+  const id = val(child(record2, "uuid"));
+  return uuidPattern.test(id) ? id.toLowerCase() : "";
+}
+var tuningText = /* @__PURE__ */ new Set(["name", "last_netname", "last_tuning"]);
+var tuningFlags = /* @__PURE__ */ new Set(["is_time_domain", "override_custom_rules", "rounded", "single_sided"]);
+var tuningMeasures = /* @__PURE__ */ new Set([
+  "corner_radius_percent",
+  "last_diff_pair_gap",
+  "last_track_width",
+  "last_tuning_length",
+  "max_amplitude",
+  "min_amplitude",
+  "min_spacing",
+  "target_delay",
+  "target_delay_min",
+  "target_delay_max",
+  "target_length",
+  "target_length_min",
+  "target_length_max",
+  "target_skew",
+  "target_skew_min",
+  "target_skew_max"
+]);
+var tuningOption = {
+  initial_side: ["left", "right"],
+  last_status: ["tuned", "too_long", "too_short", "unknown"],
+  tuning_mode: ["single", "diff_pair", "diff_pair_skew"]
+};
+function tuningNumber(atom2, limit) {
+  return typeof atom2 === "string" && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(atom2) && Math.abs(Number(atom2)) <= limit;
+}
+function tuningPoint(node) {
+  return Array.isArray(node) && node.length === 3 && node[0] === "xy" && tuningNumber(node[1], 1e5) && tuningNumber(node[2], 1e5);
+}
+function validateNativePCBTuningPatterns(patterns, tracks, layers, groups = []) {
+  if (!patterns.length) return [];
+  if (patterns.length > 256) return fail("Too many native PCB tuning patterns.");
+  const byTrack = new Map(tracks.map((track) => [track.id.toLowerCase(), track.layer]));
+  const claimed = new Set(
+    groups.flatMap((group) => {
+      const members = child(group, "members") ?? [];
+      return members.slice(1).map((_, index) => val(members, index + 1).toLowerCase());
+    })
+  );
+  return patterns.map((pattern) => {
+    if (pattern[0] !== "generated") return fail("Invalid native PCB tuning pattern.");
+    const seen = /* @__PURE__ */ new Set();
+    const layer = val(child(pattern, "layer"));
+    const rawId = val(child(pattern, "uuid"));
+    if (!uuidPattern.test(rawId) || !layers.some((name) => name === layer))
+      return fail("Invalid PCB tuning pattern identity or layer.");
+    for (const field of pattern.slice(1)) {
+      if (!Array.isArray(field) || typeof field[0] !== "string" || seen.has(field[0]))
+        return fail("Invalid or repeated PCB tuning pattern field.");
+      const [key2, value] = field;
+      seen.add(key2);
+      let valid;
+      if (key2 === "members") {
+        valid = field.length >= 2 && field.slice(1).every((_, index) => {
+          const member = val(field, index + 1).toLowerCase();
+          if (!uuidPattern.test(member) || claimed.has(member) || byTrack.get(member) !== layer)
+            return false;
+          claimed.add(member);
+          return true;
+        });
+      } else if (field.length !== 2) valid = false;
+      else if (key2 === "type") valid = value === "tuning_pattern";
+      else if (key2 === "uuid" || key2 === "layer") valid = quoted(value);
+      else if (key2 === "origin" || key2 === "end") valid = tuningPoint(value);
+      else if (key2 === "base_line" || key2 === "base_line_coupled")
+        valid = Array.isArray(value) && value[0] === "pts" && value.length >= (key2 === "base_line_coupled" ? 2 : 3) && value.slice(1).every(tuningPoint);
+      else if (tuningText.has(key2)) valid = quoted(value) && val(field).length <= 4096;
+      else if (tuningFlags.has(key2)) valid = value === "yes" || value === "no";
+      else if (tuningMeasures.has(key2)) valid = tuningNumber(value, 1e9);
+      else
+        valid = Object.hasOwn(tuningOption, key2) && quoted(value) && tuningOption[key2].includes(val(field));
+      if (!valid) return fail(`Unsupported or invalid PCB tuning pattern field ${key2}.`);
+    }
+    if (!["uuid", "type", "name", "layer", "origin", "end", "members"].every((key2) => seen.has(key2)))
+      return fail("Incomplete PCB tuning pattern.");
+    return rawId;
+  });
+}
+function boardMemberIds(board) {
+  const ids = /* @__PURE__ */ new Set();
+  const kinds2 = board[0] === "footprint" ? footprintMemberKinds : groupMemberKinds;
+  for (const item of board) {
+    if (!Array.isArray(item) || !kinds2.has(String(item[0]))) continue;
+    const id = nativeId(item);
+    if (!id) continue;
+    if (ids.has(id)) fail("Board group member identities are ambiguous.");
+    ids.add(id);
+  }
+  return ids;
+}
+function readBoardGroups(board) {
+  const records2 = children(board, "group");
+  if (!records2.length)
+    return { groups: [], memberFirst: [], parentByMember: /* @__PURE__ */ new Map() };
+  if (records2.length > 4096) return fail("PCB groups exceed the scope object limit.");
+  const items = boardMemberIds(board);
+  const byId = /* @__PURE__ */ new Map();
+  const parentByMember = /* @__PURE__ */ new Map();
+  for (const node of records2) {
+    const id = nativeId(node);
+    const members = child(node, "members");
+    const lock = child(node, "locked");
+    if (!quoted(node[1]) || val(node).length > 4096 || !id || items.has(id) || byId.has(id) || !members || lock && (lock.length !== 2 || lock[1] !== "yes" && lock[1] !== "no") || children(node, "uuid").length !== 1 || child(node, "uuid")?.length !== 2 || children(node, "members").length !== 1 || children(node, "locked").length > 1 || node.slice(2).some(
+      (item) => !Array.isArray(item) || !["uuid", "members", "locked"].includes(String(item[0]))
+    ))
+      return fail("Invalid or unsupported PCB group metadata.");
+    const memberIds = members.slice(1).map((_, index) => val(members, index + 1).toLowerCase());
+    if (memberIds.some((member) => !uuidPattern.test(member)))
+      return fail("Invalid PCB group membership.");
+    byId.set(id, {
+      node,
+      id,
+      members,
+      memberIds,
+      ownedMembers: /* @__PURE__ */ new Set(),
+      locked: lock?.[1] === "yes"
+    });
+  }
+  const groups = [...byId.values()];
+  for (const group of groups) {
+    for (const member of new Set(group.memberIds)) {
+      if (byId.has(member)) {
+        for (let ancestor = group; ancestor; ancestor = parentByMember.get(ancestor.id))
+          if (ancestor.id === member) return fail("PCB groups contain a membership cycle.");
+      } else if (!items.has(member)) {
+        return fail("PCB group references a missing or unsupported board item.");
+      }
+      parentByMember.get(member)?.ownedMembers.delete(member);
+      parentByMember.set(member, group);
+      group.ownedMembers.add(member);
+    }
+  }
+  const remaining = /* @__PURE__ */ new Map();
+  const ready = [];
+  for (const group of groups) {
+    let childGroups = 0;
+    for (const member of group.ownedMembers) if (byId.has(member)) childGroups++;
+    remaining.set(group.id, childGroups);
+    if (childGroups === 0) ready.push(group);
+  }
+  const memberFirst = [];
+  while (ready.length) {
+    const group = ready.pop();
+    memberFirst.push(group);
+    const parent = parentByMember.get(group.id);
+    if (parent === void 0) continue;
+    const unresolved = remaining.get(parent.id) - 1;
+    remaining.set(parent.id, unresolved);
+    if (unresolved === 0) ready.push(parent);
+  }
+  if (memberFirst.length !== groups.length) return fail("PCB groups contain a membership cycle.");
+  return { groups, memberFirst, parentByMember };
+}
+function validateNativeBoardMetadata(board) {
+  const scopes = [board, ...children(board, "footprint")];
+  const groupIds = /* @__PURE__ */ new Set();
+  for (const scope of scopes)
+    for (const group of readBoardGroups(scope).groups) {
+      if (groupIds.has(group.id)) fail("PCB group identities must be unique across the board.");
+      groupIds.add(group.id);
+    }
+  if (groupIds.size) {
+    for (const scope of scopes)
+      for (const item of scope)
+        if (Array.isArray(item) && item[0] !== "group" && groupIds.has(nativeId(item)))
+          fail("A PCB group identity conflicts with another board object.");
+  }
+  const variables = /* @__PURE__ */ new Map();
+  for (const property of children(board, "property")) {
+    const name = val(property);
+    if (property.length !== 3 || !quoted(property[1]) || !quoted(property[2]) || !name || variables.has(name))
+      fail("Invalid or repeated PCB board property.");
+    variables.set(name, val(property, 2));
+  }
+  return variables;
+}
+function validateNativePCBEmbeddedFiles(scope) {
+  const listings = children(scope, "embedded_files");
+  const listing = listings[0];
+  if (!listing) return;
+  if (listings.length !== 1 || listing.length > 129)
+    return fail("Invalid native PCB embedded file listing.");
+  const names = /* @__PURE__ */ new Set();
+  for (const entry of listing.slice(1)) {
+    if (!Array.isArray(entry) || entry[0] !== "file" || entry.length < 4 || entry.length > 5)
+      return fail("Invalid native PCB embedded file entry.");
+    const name = child(entry, "name");
+    const type = child(entry, "type");
+    const checksum = child(entry, "checksum");
+    const data = child(entry, "data");
+    const filename = val(name);
+    if (new Set(entry.slice(1).map((field) => Array.isArray(field) ? field[0] : field)).size !== entry.length - 1 || name?.length !== 2 || !quoted(name[1]) || !filename || filename.length > 256 || /[\\/\u0000-\u001f]/.test(filename) || filename === "." || filename === ".." || names.has(filename) || type?.length !== 2 || !["worksheet", "model", "font", "other"].includes(val(type)) || checksum?.length !== 2 || !quoted(checksum[1]) || !/^[A-F0-9]{32}$/i.test(val(checksum)) || entry.length === 5 && (!data || data.length < 2 || data.slice(1).some((atom2) => typeof atom2 !== "string" || !/^[A-Za-z0-9+/=|]+$/.test(atom2))))
+      return fail("Invalid native PCB embedded file metadata.");
+    names.add(filename);
+  }
+}
+function nativePCBGroupLocks(board) {
+  const result = /* @__PURE__ */ new Set();
+  const add = (scope) => {
+    const { memberFirst } = readBoardGroups(scope);
+    const locked = /* @__PURE__ */ new Set();
+    for (const group of memberFirst.toReversed())
+      if (group.locked || locked.has(group.id))
+        for (const member of group.ownedMembers) locked.add(member);
+    if (locked.size && scope[0] === "footprint") {
+      const footprintId = nativeId(scope);
+      if (!footprintId) return fail("A footprint with locked groups requires a native UUID.");
+      result.add(footprintId);
+    }
+    for (const member of locked) result.add(member);
+  };
+  add(board);
+  for (const footprint of children(board, "footprint")) add(footprint);
+  return result;
+}
+function retainNativeBoardGroups(before, after) {
+  const { groups, memberFirst, parentByMember } = readBoardGroups(before);
+  if (!groups.length) return;
+  const known = boardMemberIds(after);
+  for (const group of memberFirst)
+    if (!group.ownedMembers.size || [...group.ownedMembers].some((member) => known.has(member)))
+      known.add(group.id);
+  for (const group of groups) {
+    if (!known.has(group.id)) continue;
+    const members = group.members.slice(1).filter((_, index) => {
+      const member = group.memberIds[index];
+      return known.has(member) && known.has(parentByMember.get(member).id);
+    });
+    const record2 = members.length === group.memberIds.length ? group.node : group.node.map((item) => item === group.members ? ["members", ...members] : item);
+    after.push(record2);
+  }
+}
 
 // lib/pcb-models.ts
 function footprintModels(root) {
@@ -7042,7 +7600,361 @@ function footprintModels(root) {
   });
 }
 
+// lib/pcb-collision.ts
+var overlapsBounds = (a, b, margin) => a.minX <= b.maxX + margin && b.minX <= a.maxX + margin && a.minY <= b.maxY + margin && b.minY <= a.maxY + margin;
+var edgeBounds = ([a, b]) => ({
+  minX: Math.min(a.x, b.x),
+  minY: Math.min(a.y, b.y),
+  maxX: Math.max(a.x, b.x),
+  maxY: Math.max(a.y, b.y)
+});
+function makeBoundsIndex(items) {
+  const bounds = items.reduce(
+    (value, item) => ({
+      minX: Math.min(value.minX, item.minX),
+      maxX: Math.max(value.maxX, item.maxX),
+      minY: Math.min(value.minY, item.minY),
+      maxY: Math.max(value.maxY, item.maxY)
+    }),
+    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+  );
+  if (items.length <= 8) return { ...bounds, items };
+  const horizontal = bounds.maxX - bounds.minX >= bounds.maxY - bounds.minY;
+  items.sort(
+    (a, b) => horizontal ? a.minX + a.maxX - b.minX - b.maxX : a.minY + a.maxY - b.minY - b.maxY
+  );
+  const middle = Math.floor(items.length / 2);
+  return {
+    ...bounds,
+    left: makeBoundsIndex(items.slice(0, middle)),
+    right: makeBoundsIndex(items.slice(middle))
+  };
+}
+function queryBoundsIndex(node, bounds, margin, visit, spend) {
+  spend();
+  if (!overlapsBounds(node, bounds, margin)) return;
+  if (node.items) {
+    for (const item of node.items) {
+      spend();
+      if (overlapsBounds(item, bounds, margin)) visit(item);
+    }
+  } else {
+    queryBoundsIndex(node.left, bounds, margin, visit, spend);
+    queryBoundsIndex(node.right, bounds, margin, visit, spend);
+  }
+}
+var squaredDistance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+function pointSegmentDistance(p, a, b) {
+  const length = squaredDistance(a, b);
+  const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length)) : 0;
+  const x = a.x + t * (b.x - a.x), y = a.y + t * (b.y - a.y);
+  return (p.x - x) ** 2 + (p.y - y) ** 2;
+}
+function segmentDistance(a, b, c, d) {
+  const cross2 = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  if (cross2(a, b, c) * cross2(a, b, d) < 0 && cross2(c, d, a) * cross2(c, d, b) < 0) return 0;
+  return Math.min(
+    pointSegmentDistance(a, c, d),
+    pointSegmentDistance(b, c, d),
+    pointSegmentDistance(c, a, b),
+    pointSegmentDistance(d, a, b)
+  );
+}
+function insideRing(p, ring, spend = () => {
+}) {
+  let result = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    spend();
+    const a = ring[i], b = ring[j];
+    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
+      result = !result;
+  }
+  return result;
+}
+var insidePolygon = (p, polygon, spend) => insideRing(p, polygon.outer, spend) && !polygon.holes.some((hole) => insideRing(p, hole, spend));
+var polygonEdges = (polygon) => [polygon.outer, ...polygon.holes].flatMap(
+  (ring) => ring.map((p, i) => [p, ring[(i + 1) % ring.length]])
+);
+
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygons = 4096;
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+var nativeFootprintCaptionDefaultSize = 1.27;
+function isExplicitlyHiddenFootprintCaption(record2) {
+  const [hide, duplicate] = children(record2, "hide");
+  return record2[0] === "property" && ["Reference", "Value"].includes(val(record2)) && hide?.length === 2 && hide[1] === "yes" && !duplicate && !record2.includes("hide");
+}
+function readPCBTextLineSpacing(font, fail8) {
+  const [record2, duplicate] = children(font, "line_spacing");
+  if (!record2) return {};
+  const raw = record2[1];
+  const value = Number(raw);
+  if (duplicate || record2.length !== 2 || typeof raw !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw) || !(value >= 0 && value <= 1e3))
+    return fail8("Invalid native PCB text line spacing.");
+  return { lineSpacing: value || 0 };
+}
+function pcbTextLineAdvance(text2) {
+  return text2.size.y * 1.25 * (text2.lineSpacing ?? 1);
+}
+function readPCBTextFont(text2, font, fail8) {
+  const faces = children(font, "face");
+  const caches = children(text2, "render_cache");
+  const face = faces[0];
+  const cache = caches[0];
+  if (faces.length > 1 || caches.length > 1)
+    return fail8("Duplicate PCB text font or render cache.");
+  if (!face) {
+    if (cache) return fail8("PCB text render cache requires a font face.");
+    return {};
+  }
+  const name = val(face);
+  if (face.length !== 2 || typeof face[1] !== "string" || !face[1].startsWith('"') || !name.trim() || name.length > 256 || /[\x00-\x1f]/.test(name))
+    return fail8("Invalid PCB text font face.");
+  if (!cache) return { fontFace: name };
+  const value = val(cache);
+  const rotation = Number(cache[2]) + 0;
+  if (cache.length < 3 || cache.length > maxPCBTextCachePolygons + 3 || typeof cache[1] !== "string" || !cache[1].startsWith('"') || value.length > 4096 || typeof cache[2] !== "string" || !cacheCoordinate.test(cache[2]) || Math.abs(rotation) > 360)
+    return fail8("Invalid PCB text render cache.");
+  const polygons = [];
+  for (const record2 of cache.slice(3)) {
+    const pts = Array.isArray(record2) ? child(record2, "pts") : void 0;
+    if (!Array.isArray(record2) || record2[0] !== "polygon" || record2.length !== 2 || !pts || pts.length < 4 || pts.length > maxPCBTextCachePolygonVertices + 1)
+      return fail8("Unsupported PCB text render cache polygon.");
+    polygons.push(
+      pts.slice(1).map((point3) => {
+        if (!Array.isArray(point3) || point3[0] !== "xy" || point3.length !== 3 || typeof point3[1] !== "string" || !cacheCoordinate.test(point3[1]) || typeof point3[2] !== "string" || !cacheCoordinate.test(point3[2]))
+          return fail8("Unsupported PCB text render cache point.");
+        return `${point3[1]},${point3[2]}`;
+      }).join(" ")
+    );
+  }
+  return { fontFace: name, renderCache: { value, rotation, polygons } };
+}
+function writePCBTextRenderCache(cache) {
+  if (!cache) return "";
+  const polygons = cache.polygons.map(
+    (polygon) => ` (polygon (pts ${polygon.split(" ").map((p) => `(xy ${p.replace(",", " ")})`).join(" ")}))`
+  );
+  return ` (render_cache ${quote(cache.value)} ${cache.rotation}${polygons.join("")})`;
+}
+function pcbTextDisplayValue(text2) {
+  return text2.nativeExpansion?.source === text2.value ? text2.nativeExpansion.value : text2.value;
+}
+function footprintTextPlacement(node, fail8) {
+  const at = child(node, "at");
+  const inPosition = at?.at(-1) === "unlocked";
+  const flags = children(node, "unlocked");
+  const bare = node.filter((item) => item === "unlocked").length;
+  const [flag2] = flags;
+  if (flags.length + bare + Number(inPosition) > 1 || flag2 && (flag2.length !== 2 || !["yes", "no"].includes(val(flag2))))
+    fail8("Invalid footprint text orientation flag.");
+  return {
+    at: inPosition ? at.slice(0, -1) : at,
+    unlocked: inPosition || bare === 1 || val(flag2) === "yes",
+    flag: flag2,
+    bare: bare === 1,
+    inPosition
+  };
+}
+
+// lib/pcb-geometry.ts
+var nativePCBPadRoundRectRatio = 0.25;
+function readPCBPadRoundRectRatio(node, fail8) {
+  const [record2, duplicate] = children(node, "roundrect_rratio");
+  if (!record2) return val(node, 3) === "roundrect" ? nativePCBPadRoundRectRatio : void 0;
+  if (val(node, 3) !== "roundrect") fail8("Only rounded rectangular pads accept a corner ratio.");
+  const raw = record2[1];
+  const ratio = Number(raw);
+  if (duplicate || record2.length !== 2 || typeof raw !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw) || !(ratio >= 0 && ratio <= 0.5))
+    fail8("Pad corner ratio must be between 0 and 0.5.");
+  return ratio || 0;
+}
+function transformPCBGraphic(g, point3, angle3 = (n) => n) {
+  return {
+    ...g,
+    start: point3(g.start),
+    end: point3(g.end),
+    ...g.mid ? { mid: point3(g.mid) } : {},
+    ...g.points ? { points: g.points.map(point3) } : {},
+    ...g.polygonArcs ? { polygonArcs: g.polygonArcs.map((arc) => ({ ...arc, mid: point3(arc.mid) })) } : {},
+    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
+    ...g.textBox?.outline ? { textBox: { ...g.textBox, outline: g.textBox.outline.map(point3) } } : {},
+    ...g.dimension?.caption ? {
+      dimension: {
+        ...g.dimension,
+        caption: {
+          ...g.dimension.caption,
+          ...point3(g.dimension.caption),
+          rotation: angle3(g.dimension.caption.rotation)
+        }
+      }
+    } : {}
+  };
+}
+function transformPCBZone(z, point3) {
+  return {
+    ...z,
+    outline: z.outline.map(point3),
+    ...z.nativeOutlineArcs ? { nativeOutlineArcs: z.nativeOutlineArcs.map((arc) => ({ ...arc, mid: point3(arc.mid) })) } : {},
+    ...z.holes ? { holes: z.holes.map((h) => h.map(point3)) } : {},
+    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point3) })) } : {}
+  };
+}
+function pcbArc(g) {
+  const a = g.start, b = g.mid, c = g.end;
+  if (!b) return null;
+  const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - a.x, vy = c.y - a.y;
+  const d = 2 * (ux * vy - uy * vx);
+  if (Math.abs(d) < 1e-12) return null;
+  const u2 = ux * ux + uy * uy, v2 = vx * vx + vy * vy;
+  const center = {
+    x: a.x + (u2 * vy - v2 * uy) / d,
+    y: a.y + (ux * v2 - vx * u2) / d
+  };
+  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
+  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
+  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
+  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
+}
+function pcbRoundedRectArcs(g) {
+  const radius = g.roundedRectRadius;
+  const vertices = [g.start, ...g.points, g.end];
+  return vertices.map((vertex, i) => {
+    const offset2 = (neighbor) => {
+      const dx = neighbor.x - vertex.x, dy = neighbor.y - vertex.y;
+      const length = Math.hypot(dx, dy);
+      return { x: dx * radius / length, y: dy * radius / length };
+    };
+    const before = offset2(vertices[(i + 3) % 4]);
+    const after = offset2(vertices[(i + 1) % 4]);
+    return {
+      start: { x: vertex.x + before.x, y: vertex.y + before.y },
+      center: { x: vertex.x + before.x + after.x, y: vertex.y + before.y + after.y },
+      clockwise: before.x * after.y - before.y * after.x < 0,
+      end: { x: vertex.x + after.x, y: vertex.y + after.y }
+    };
+  });
+}
+function pcbBezierIsStationary(g) {
+  const { start, end } = g;
+  return [end, ...g.points].every((point3) => point3.x === start.x && point3.y === start.y);
+}
+function pcbBezierVertices(g, tolerance = 5e-3) {
+  if (pcbBezierIsStationary(g)) return [g.start, g.end];
+  const maxDepth = 16;
+  const vertices = [g.start];
+  const half = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const subdivide = (start, first2, second2, end, depth) => {
+    const flat = Math.max(pointSegmentDistance(first2, start, end), pointSegmentDistance(second2, start, end)) <= tolerance ** 2;
+    if (flat && (depth < maxDepth || start.x !== end.x || start.y !== end.y)) {
+      if (vertices.length >= 16384) throw new Error("B\xE9zier subdivision exceeds the vertex limit.");
+      vertices.push(end);
+      return;
+    }
+    if (!depth) throw new Error("B\xE9zier subdivision cannot meet the requested geometry tolerance.");
+    const a = half(start, first2), b = half(first2, second2), c = half(second2, end);
+    const d = half(a, b), e = half(b, c);
+    const middle = half(d, e);
+    subdivide(start, a, d, middle, depth - 1);
+    subdivide(middle, e, c, end, depth - 1);
+  };
+  const [first, second] = g.points;
+  subdivide(g.start, first, second, g.end, maxDepth);
+  return vertices;
+}
+var pcbPadCorners = [
+  { x: -1, y: -1, name: "top_left" },
+  { x: 1, y: -1, name: "top_right" },
+  { x: 1, y: 1, name: "bottom_right" },
+  { x: -1, y: 1, name: "bottom_left" }
+];
+function pcbPadChamferEndpoints({ x, y }, size, cut) {
+  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
+  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+var halfPCBUnit = (value) => Math.trunc(Math.round(value * 1e6) / 2);
+var isNativePadDelta = (value) => Number.isFinite(value) && Math.abs(value) <= 1e5 && Math.abs(value - Number(value.toFixed(6))) <= 1e-9;
+function pcbPadTrapezoid({ size, trapezoidDelta }) {
+  const x = halfPCBUnit(size.x), y = halfPCBUnit(size.y);
+  const dx = halfPCBUnit(trapezoidDelta?.x ?? 0), dy = halfPCBUnit(trapezoidDelta?.y ?? 0);
+  return [
+    { x: -x + dy, y: -y - dx },
+    { x: x - dy, y: -y + dx },
+    { x: x + dy, y: y - dx },
+    { x: -x - dy, y: y + dx }
+  ].map((point3) => ({ x: point3.x / 1e6, y: point3.y / 1e6 }));
+}
+function validatePCBPadTrapezoid(pad, fail8) {
+  if (pad.shape !== "trapezoid") {
+    if (pad.trapezoidDelta) fail8("A rect_delta requires a trapezoid pad.");
+    return;
+  }
+  if (pad.trapezoidDelta && ![pad.trapezoidDelta.x, pad.trapezoidDelta.y].every(isNativePadDelta))
+    fail8("The trapezoid pad delta must use native coordinate precision.");
+  const x = halfPCBUnit(pad.size.x), y = halfPCBUnit(pad.size.y);
+  const dx = halfPCBUnit(pad.trapezoidDelta?.x ?? 0), dy = halfPCBUnit(pad.trapezoidDelta?.y ?? 0);
+  if (!(x > 0 && y > 0 && Math.abs(dx) / y + Math.abs(dy) / x < 1))
+    fail8("The trapezoid pad delta must retain a convex four-corner shape.");
+}
+function readPCBPadTrapezoidDelta(record2, fail8) {
+  const records2 = children(record2, "rect_delta");
+  if (!records2.length) return;
+  const delta = records2[0].slice(1);
+  if (records2.length !== 1 || delta.length !== 2 || !delta.every(
+    (item) => typeof item === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(item)
+  ))
+    fail8("Invalid native pad rect_delta.");
+  const [x, y] = delta.map(Number);
+  if (![x, y].every(isNativePadDelta))
+    fail8("The native pad rect_delta must use native coordinate precision.");
+  return { x, y };
+}
+
 // lib/pcb-drill.ts
+function readPCBPadPostMachining(pad, fail8) {
+  const machining = {};
+  for (const side of ["front", "back"]) {
+    const fields4 = children(pad, `${side}_post_machining`);
+    const [node] = fields4;
+    if (!node) continue;
+    const mode = node[1];
+    if (fields4.length !== 1 || mode !== "counterbore" && mode !== "countersink")
+      return fail8("Invalid native pad post-machining mode.");
+    const result = { mode };
+    for (const field of node.slice(2)) {
+      if (!Array.isArray(field) || field.length !== 2)
+        return fail8("Invalid native pad post-machining parameter.");
+      const [key2, raw] = field;
+      if (key2 !== "size" && key2 !== "depth" && key2 !== "angle" || Object.hasOwn(result, key2) || typeof raw !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw))
+        return fail8("Invalid native pad post-machining parameter.");
+      const value = Number(raw);
+      if (!(value > 0 && value <= (key2 === "angle" ? 180 : 1e3)) || Math.abs(value - Number(value.toFixed(key2 === "angle" ? 1 : 6))) > 1e-9)
+        return fail8("Native pad post-machining needs positive values at native precision.");
+      result[key2] = value;
+    }
+    machining[side] = result;
+  }
+  return machining.front || machining.back ? machining : void 0;
+}
+function writePCBPadPostMachining(machining) {
+  const records2 = [];
+  for (const side of ["front", "back"]) {
+    const operation2 = machining[side];
+    if (!operation2) continue;
+    const values = ["size", "depth", "angle"].flatMap(
+      (key2) => operation2[key2] === void 0 ? [] : [` (${key2} ${operation2[key2]})`]
+    );
+    records2.push(`(${side}_post_machining ${operation2.mode}${values.join("")})`);
+  }
+  return records2;
+}
 function padDrillSize({ drill = 0, drillSlot }) {
   return {
     x: drillSlot?.axis === "x" ? drillSlot.length : drill,
@@ -7059,32 +7971,35 @@ function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
     { x: center.x + dx, y: center.y + dy }
   ];
 }
-function readPadDrill(node, fail6 = (message) => {
+function readPadDrill(node, fail8 = (message) => {
   throw new Error(message);
-}) {
+}, surfaceMount = false) {
   if (!node) return {};
   const oval = val(node) === "oval";
   const offset2 = child(node, "offset");
-  const dimensions = oval ? 4 : 2;
+  const dimensions = node.slice(1, offset2 ? -1 : void 0);
+  const validDimensions = surfaceMount ? dimensions.length === 0 && offset2 : oval ? dimensions.length === 3 : dimensions.length === 1 || dimensions.length === 2;
   const offsetValue = (n, i) => {
     const raw = val(n, i), value = Number(raw);
     if (!raw || !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9)
-      fail6("Pad drill needs finite dimensions at 0.000001 mm precision.");
+      fail8("Pad drill needs finite dimensions at 0.000001 mm precision.");
     return value;
   };
-  if (node.length !== dimensions + Number(!!offset2) || node.slice(1, dimensions).some(Array.isArray) || offset2 && (node[dimensions] !== offset2 || offset2.length !== 3 || offset2.slice(1).some(Array.isArray)))
-    fail6("Use a round or oval drill with at most one XY offset.");
-  const x = offsetValue(node, oval ? 2 : 1);
-  const y = oval ? offsetValue(node, 3) : x;
-  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
-    fail6("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
+  if (!validDimensions || dimensions.some(Array.isArray) || offset2 && (node.at(-1) !== offset2 || offset2.length !== 3 || offset2.slice(1).some(Array.isArray)))
+    fail8("Use a round or oval drill with at most one XY offset.");
   const drillOffset = offset2 && {
     x: -offsetValue(offset2, 1) || 0,
     y: -offsetValue(offset2, 2) || 0
   };
+  if (surfaceMount) return { drillOffset };
+  const x = offsetValue(node, oval ? 2 : 1);
+  const y = dimensions.length > 1 ? offsetValue(node, dimensions.length) : x;
+  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
+    fail8("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
   return {
-    drill: Math.min(x, y),
+    drill: oval ? Math.min(x, y) : x,
     ...oval ? { drillSlot: { length: Math.max(x, y), axis: x > y ? "x" : "y" } } : {},
+    ...!oval && dimensions.length === 2 ? { nativeRoundDrillY: y } : {},
     ...drillOffset ? { drillOffset } : {}
   };
 }
@@ -7094,6 +8009,148 @@ var import_clipper_lib = __toESM(require_clipper(), 1);
 
 // lib/pcb-custom-pad-limits.ts
 var customPadVertexLimit = 128;
+
+// lib/pcb-native-custom-pad.ts
+var maxPrimitives = 64;
+var maxPolygonVertices = 512;
+function nativeCustomPadPoint(node, reject) {
+  if (node?.length !== 3) return reject("Invalid native custom pad point.");
+  return { x: nativeCoordinate(node[1], reject), y: nativeCoordinate(node[2], reject) };
+}
+function nativeCoordinate(value, reject) {
+  if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value))
+    return reject("Invalid native custom pad coordinate or width.");
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.abs(n) > 1e5 || Math.abs(n * 1e6 - Math.round(n * 1e6)) > 1e-4)
+    return reject("Native custom pad geometry must use bounded nanometre coordinates.");
+  return n;
+}
+function nativeNumberBox(primitive, reject) {
+  if (primitive.length !== 4 || children(primitive, "start").length !== 1 || children(primitive, "end").length !== 1 || child(primitive, "fill")?.length !== 2 || val(child(primitive, "fill")) !== "no")
+    return reject("Invalid native pad label box.");
+  const start = nativeCustomPadPoint(child(primitive, "start"), reject);
+  const end = nativeCustomPadPoint(child(primitive, "end"), reject);
+  const size = { x: Math.abs(end.x - start.x), y: Math.abs(end.y - start.y) };
+  if (!size.x || !size.y) return reject("Degenerate native pad label box.");
+  return { size, center: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } };
+}
+function nativeCustomPadShapes(record2, reject) {
+  if (!["outline", "convexhull"].includes(record2.clearance) || record2.primitives.length > maxPrimitives)
+    return reject("Unsupported native custom pad clearance or primitive count.");
+  const number6 = (value) => nativeCoordinate(value, reject);
+  const point3 = (node) => nativeCustomPadPoint(node, reject);
+  const copper = record2.primitives.filter((primitive) => {
+    if (primitive[0] !== "gr_bbox") return true;
+    nativeNumberBox(primitive, reject);
+    return false;
+  });
+  return copper.map((primitive) => {
+    const kind = primitive[0];
+    const keys3 = kind === "gr_line" || kind === "gr_rect" ? ["start", "end"] : kind === "gr_arc" ? ["start", "mid", "end"] : kind === "gr_circle" ? ["center", "end"] : kind === "gr_poly" ? ["pts"] : reject(`Unsupported native custom pad primitive ${kind}.`);
+    const fillable = kind === "gr_poly" || kind === "gr_circle" || kind === "gr_rect";
+    const allowed = /* @__PURE__ */ new Set([...keys3, "width", ...fillable ? ["fill"] : []]);
+    const seen = /* @__PURE__ */ new Set();
+    for (const field of primitive.slice(1)) {
+      if (!Array.isArray(field) || typeof field[0] !== "string" || !allowed.has(field[0]) || seen.has(field[0]))
+        return reject("Invalid or repeated native custom pad primitive field.");
+      seen.add(field[0]);
+    }
+    const widthNode = child(primitive, "width");
+    const fillNode = child(primitive, "fill");
+    if (widthNode?.length !== 2 || fillNode && (fillNode.length !== 2 || !["yes", "no"].includes(val(fillNode))))
+      return reject("Invalid native custom pad stroke or fill.");
+    const width = number6(widthNode[1]);
+    const fill = val(fillNode) === "yes";
+    if (width < 0 || width > 1e3 || !width && !fill)
+      return reject("Native custom pad strokes need positive width or a solid fill.");
+    if (kind === "gr_poly") {
+      const field = child(primitive, "pts");
+      const coords = field ? children(field, "xy") : [];
+      if (coords.length < 3 || coords.length > maxPolygonVertices || coords.length !== field.length - 1)
+        return reject("Native custom pad polygon exceeds the supported vertex range.");
+      const points2 = coords.map(point3);
+      if (new Set(points2.map(({ x, y }) => `${x},${y}`)).size < 3)
+        return reject("Degenerate native custom pad polygon.");
+      return {
+        kind: "polygon",
+        width,
+        fill,
+        start: points2[0],
+        end: points2.at(-1),
+        points: points2.slice(1, -1)
+      };
+    }
+    const start = point3(child(primitive, kind === "gr_circle" ? "center" : "start"));
+    const end = point3(child(primitive, "end"));
+    if (kind === "gr_rect") {
+      if (start.x === end.x || start.y === end.y)
+        return reject("Degenerate native custom pad rectangle.");
+      return {
+        kind: "polygon",
+        width,
+        fill,
+        start,
+        end: { x: start.x, y: end.y },
+        points: [{ x: end.x, y: start.y }, end]
+      };
+    }
+    if (kind === "gr_arc") {
+      const arc = { kind: "arc", width, start, end, mid: point3(child(primitive, "mid")) };
+      if (!pcbArc(arc)) return reject("Degenerate native custom pad arc.");
+      return arc;
+    }
+    if (kind === "gr_circle") {
+      if (start.x === end.x && start.y === end.y)
+        return reject("Degenerate native custom pad circle.");
+      return { kind: "circle", width, fill, start, end };
+    }
+    return { width, start, end };
+  });
+}
+function nativeCustomPadGraphics(pad) {
+  if (!pad.nativeCustomPad) return [];
+  return nativeCustomPadShapes(pad.nativeCustomPad, (message) => {
+    throw new Error(message);
+  }).map((shape, index) => ({ ...shape, id: `${pad.id}:${index}`, layer: "F.Cu" }));
+}
+function nativeCustomPadAnchor(pad) {
+  const shape = pad.customAnchor === "circle" ? "circle" : "rect";
+  const diameter = 2 * Math.floor(Math.round(pad.size.x * 1e6) / 2) / 1e6;
+  const size = shape === "circle" ? { x: diameter, y: diameter } : pad.size;
+  if (!size.x || !size.y) return void 0;
+  return { ...pad, shape, size, nativeCustomPad: void 0, outline: void 0 };
+}
+function nativeCustomPadPlotGraphics(pad, place) {
+  return nativeCustomPadGraphics(pad).map((graphic) => {
+    const shape = transformPCBGraphic(graphic, place);
+    if (shape.kind !== "polygon") return shape;
+    const vertices = [shape.start, ...shape.points ?? [], shape.end].map(({ x, y }) => ({ x: Math.round(x * 1e6) / 1e6, y: Math.round(y * 1e6) / 1e6 })).filter((point3, index, ring) => !index || squaredDistance(point3, ring[index - 1]) > 0);
+    if (squaredDistance(vertices[0], vertices.at(-1)) === 0) vertices.pop();
+    for (let i = 0; i + 3 < vertices.length; ) {
+      if (squaredDistance(vertices[i], vertices[i + 2]) === 0 && squaredDistance(vertices[i + 1], vertices[i + 3]) === 0) {
+        vertices.splice(i + 2, 2);
+        i = Math.max(0, i - 2);
+      } else i++;
+    }
+    if (vertices.length < 3)
+      throw new Error("A native custom pad polygon collapses at Gerber resolution.");
+    if (shape.fill) {
+      const edges = polygonEdges({ outer: vertices, holes: [] });
+      for (const [i, edge] of edges.entries()) {
+        const [a, b] = edge;
+        const c = vertices[(i + 2) % edges.length];
+        if (pointSegmentDistance(a, b, c) < 1e-16 || pointSegmentDistance(c, a, b) < 1e-16)
+          throw new Error("A native custom pad contains an overlapping polygon edge.");
+        for (let j = i + 2; j < edges.length; j++) {
+          if (i === 0 && j === edges.length - 1) continue;
+          if (segmentDistance(...edge, ...edges[j]) < 1e-16)
+            throw new Error("A native custom pad contains a non-simple filled polygon.");
+        }
+      }
+    }
+    return { ...shape, start: vertices[0], points: vertices.slice(1, -1), end: vertices.at(-1) };
+  });
+}
 
 // lib/pcb-custom-pad.ts
 var nmPerMm = 1e6;
@@ -7112,10 +8169,10 @@ function readPadPolygon(polygon, reject) {
     reject(
       `Custom pad polygons must be filled and unstroked with 3\u2013${customPadVertexLimit} vertices.`
     );
-  return points2.slice(1).map((point2) => {
-    if (!Array.isArray(point2) || point2[0] !== "xy" || point2.length !== 3 || !val(point2) || !val(point2, 2))
+  return points2.slice(1).map((point3) => {
+    if (!Array.isArray(point3) || point3[0] !== "xy" || point3.length !== 3 || !val(point3) || !val(point3, 2))
       reject("Invalid custom pad vertex.");
-    return { x: Number(val(point2)), y: Number(val(point2, 2)) };
+    return { x: Number(val(point3)), y: Number(val(point3, 2)) };
   });
 }
 function rectanglePath(left, top, right, bottom) {
@@ -7139,9 +8196,9 @@ function mergePadRectangles(pad, polygons, reject) {
     }));
     const xs = [...new Set(points2.map(({ x }) => x))].sort((a, b) => a - b);
     const ys = [...new Set(points2.map(({ y }) => y))].sort((a, b) => a - b);
-    if (points2.length !== 4 || xs.length !== 2 || ys.length !== 2 || points2.some((point2, i) => {
+    if (points2.length !== 4 || xs.length !== 2 || ys.length !== 2 || points2.some((point3, i) => {
       const next = points2[(i + 1) % points2.length];
-      return point2.x === next.x === (point2.y === next.y);
+      return point3.x === next.x === (point3.y === next.y);
     }) || new Set(points2.map(({ x, y }) => `${x},${y}`)).size !== 4)
       reject("Compound custom pad primitives must be axis-aligned rectangles.");
     return rectanglePath(xs[0], ys[0], xs[1], ys[1]);
@@ -7188,82 +8245,387 @@ function readCustomPad(pad, reject) {
   const outline = polygons.length === 1 ? polygons[0] : mergePadRectangles(pad, polygons, reject);
   return { outline, ...anchorShape === "circle" ? { customAnchor: "circle" } : {} };
 }
+function readBoardCustomPad(pad, geometry, reject) {
+  if (val(pad, 3) !== "custom") return readCustomPad(pad, reject);
+  const options = children(pad, "options");
+  const primitives = children(pad, "primitives");
+  const option = options[0];
+  const anchor = child(option ?? [], "anchor");
+  const clearanceField = child(option ?? [], "clearance");
+  const clearance = val(clearanceField);
+  const circular = val(anchor) === "circle";
+  if (options.length !== 1 || option.length !== 3 || anchor?.length !== 2 || !circular && val(anchor) !== "rect" || clearanceField?.length !== 2 || clearance !== "outline" && clearance !== "convexhull" || primitives.length !== 1)
+    return reject("Invalid native custom pad options.");
+  const records2 = primitives[0].slice(1).map(
+    (record2) => Array.isArray(record2) ? record2 : reject("Invalid native custom pad primitive.")
+  );
+  const nativeCustomPad = { clearance, primitives: records2 };
+  if (!records2.length) return { nativeCustomPad, ...circular ? { customAnchor: "circle" } : {} };
+  try {
+    const simple = readCustomPad(pad, reject);
+    validateCustomPad({ ...geometry, ...simple }, reject);
+    return simple;
+  } catch {
+  }
+  nativeCustomPadShapes(nativeCustomPad, reject);
+  return { nativeCustomPad, ...circular ? { customAnchor: "circle" } : {} };
+}
+function entersAnchor(a, b, half) {
+  let start = 0;
+  let end = 1;
+  for (const axis of ["x", "y"]) {
+    const delta = b[axis] - a[axis];
+    if (delta === 0) {
+      if (Math.abs(a[axis]) >= half[axis]) return false;
+      continue;
+    }
+    const first = (-half[axis] - a[axis]) / delta;
+    const last = (half[axis] - a[axis]) / delta;
+    start = Math.max(start, Math.min(first, last));
+    end = Math.min(end, Math.max(first, last));
+  }
+  return start < end;
+}
+function validateCustomPad({
+  shape,
+  type,
+  size,
+  outline,
+  customAnchor,
+  drillOffset,
+  nativeCustomPad
+}, reject) {
+  if (shape !== "custom") {
+    if (outline !== void 0 || customAnchor !== void 0 || nativeCustomPad !== void 0)
+      reject("Custom pad fields require a custom pad.");
+    return;
+  }
+  if (nativeCustomPad) {
+    if (outline || type !== "smd" && type !== "thru_hole" || ![size.x, size.y].every((dimension) => Number.isFinite(dimension) && dimension > 0))
+      reject("Invalid retained native custom pad.");
+    nativeCustomPadShapes(nativeCustomPad, reject);
+    return;
+  }
+  if (type !== "smd" && type !== "thru_hole" || drillOffset)
+    reject("Custom pads require surface mounting or a centred plated drill.");
+  if (!outline || outline.length < 3 || outline.length > customPadVertexLimit || outline.some(
+    ({ x, y }) => [x, y].some(
+      (value) => !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9
+    )
+  ) || new Set(outline.map(({ x, y }) => `${x},${y}`)).size !== outline.length)
+    reject("Custom pad vertices must be distinct and use native coordinate precision.");
+  const polygon = { outer: outline, holes: [] };
+  const edges = polygonEdges(polygon);
+  const coincident = 1e-18;
+  for (const [i, [a, b]] of edges.entries()) {
+    const next = edges[(i + 1) % edges.length][1];
+    if (
+      // Adjacent edges can share their endpoint, but must never double back.
+      segmentDistance(a, a, b, next) <= coincident || segmentDistance(next, next, a, b) <= coincident || edges.slice(i + 2, i ? void 0 : -1).some(([c, d]) => segmentDistance(a, b, c, d) <= coincident)
+    )
+      reject("A custom pad polygon must be simple and non-self-intersecting.");
+  }
+  if (![size.x, size.y].every((dimension) => Number.isFinite(dimension) && dimension > 0))
+    reject("Custom pad anchors require a positive size.");
+  if (customAnchor === "circle") {
+    if (size.x !== size.y) reject("A circular custom pad anchor requires equal dimensions.");
+    const center = { x: 0, y: 0 };
+    const radius = Math.floor(Math.round(size.x * 1e6) / 2) / 1e6;
+    const edgeDistance = Math.min(...edges.map(([a, b]) => pointSegmentDistance(center, a, b)));
+    const onBoundary = edgeDistance <= 1e-24;
+    if (!insidePolygon(center, polygon) && !onBoundary || Math.sqrt(edgeDistance) + 1e-12 < radius)
+      reject("A custom pad polygon must fully enclose its circular anchor.");
+    return;
+  }
+  const half = { x: size.x / 2, y: size.y / 2 };
+  if (!insidePolygon({ x: 0, y: 0 }, polygon) || edges.some(([a, b]) => entersAnchor(a, b, half)))
+    reject("A custom pad polygon must fully enclose its rectangular anchor.");
+}
 
-// lib/pcb-geometry.ts
-function transformPCBGraphic(g, point2, angle3 = (n) => n) {
-  return {
-    ...g,
-    start: point2(g.start),
-    end: point2(g.end),
-    ...g.mid ? { mid: point2(g.mid) } : {},
-    ...g.points ? { points: g.points.map(point2) } : {},
-    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
-    ...g.dimension ? {
-      dimension: {
-        ...g.dimension,
-        caption: {
-          ...g.dimension.caption,
-          ...point2(g.dimension.caption),
-          rotation: angle3(g.dimension.caption.rotation)
-        }
-      }
-    } : {}
-  };
-}
-function transformPCBZone(z, point2) {
-  return {
-    ...z,
-    outline: z.outline.map(point2),
-    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
-    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
-  };
-}
-function pcbArc(g) {
-  const a = g.start, b = g.mid, c = g.end;
-  if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
-  if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
-  const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
-  };
-  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
-  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
-  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
-  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
-}
-var pcbPadCorners = [
-  { x: -1, y: -1, name: "top_left" },
-  { x: 1, y: -1, name: "top_right" },
-  { x: 1, y: 1, name: "bottom_right" },
-  { x: -1, y: 1, name: "bottom_left" }
+// lib/pcb-native-via.ts
+var kinds = ["blind", "buried", "micro"];
+var sides = ["front", "back"];
+var backdrillFields = [
+  ["backdrill", "secondary"],
+  ["tertiary_drill", "tertiary"]
 ];
-function pcbPadChamferEndpoints({ x, y }, size, cut) {
-  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
-  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
-  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+function pcbViaCopperLayers(layers, via) {
+  if (!via.span) return layers;
+  return layers.slice(layers.indexOf(via.span.start), layers.indexOf(via.span.end) + 1);
+}
+function isPCBViaSpanValid(layers, span) {
+  const start = layers.indexOf(span.start);
+  const end = layers.indexOf(span.end);
+  return start >= 0 && end > start && (span.kind !== "micro" || end === start + 1);
+}
+function readPCBViaBackdrills(node, fail8) {
+  const result = {};
+  for (const [native, key2] of backdrillFields) {
+    const [record2, repeated] = children(node, native);
+    if (!record2) continue;
+    const [size, extraSize] = children(record2, "size");
+    const [layers, extraLayers] = children(record2, "layers");
+    const start = val(layers);
+    const end = pcbCopperLayers.find((layer) => layer === val(layers, 2));
+    const diameter = Number(val(size));
+    if (repeated || record2.length !== 3 || extraSize || extraLayers || size?.length !== 2 || !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(size[1])) || !(diameter >= 1e-6 && diameter <= 1e3) || layers?.length !== 3 || start !== "F.Cu" && start !== "B.Cu" || !end)
+      return fail8("Invalid native via backdrill diameter or layer range.");
+    result[key2] = { diameter, start, end };
+  }
+  return result.secondary || result.tertiary ? result : void 0;
+}
+function writePCBViaBackdrills(backdrills) {
+  if (!backdrills) return "";
+  return backdrillFields.map(([native, key2]) => {
+    const drill = backdrills[key2];
+    return drill ? ` (${native} (size ${drill.diameter}) (layers ${quote(drill.start)} ${quote(drill.end)}))` : "";
+  }).join("");
+}
+function readPCBViaSpan(node, layers, fail8) {
+  const records2 = children(node, "layers");
+  const [record2] = records2;
+  if (records2.length !== 1 || record2.length !== 3 || record2.slice(1).some((layer) => typeof layer !== "string"))
+    return fail8("Invalid native via layers.");
+  const start = layers.find((layer) => layer === val(record2));
+  const end = layers.find((layer) => layer === val(record2, 2));
+  const atoms = node.slice(1).filter((entry) => typeof entry === "string" && entry !== "locked");
+  const kind = kinds.find((option) => option === atoms[0]);
+  if (atoms.length > 1 || atoms.length && !kind)
+    return fail8("Invalid or unsupported native via type.");
+  if (!kind) {
+    if (start !== "F.Cu" || end !== "B.Cu") fail8("Through via requires both outer copper layers.");
+    return;
+  }
+  if (!start || !end || !isPCBViaSpanValid(layers, { kind, start, end }))
+    return fail8("Invalid native via span for this copper stack.");
+  return { kind, start, end };
+}
+function readPCBViaFlag(node, key2, fail8, allowBare = false) {
+  const records2 = children(node, key2);
+  const [record2] = records2;
+  if (!record2) return;
+  if (records2.length !== 1 || record2.length !== 2 && !(allowBare && record2.length === 1) || record2.length === 2 && record2[1] !== "yes" && record2[1] !== "no")
+    return fail8(`Invalid native via ${key2} setting.`);
+  return record2.length === 1 || record2[1] === "yes";
+}
+function readPCBViaPruning(node, fail8) {
+  const removeUnusedLayers = readPCBViaFlag(node, "remove_unused_layers", fail8, true);
+  const keepEndLayers = readPCBViaFlag(node, "keep_end_layers", fail8, true);
+  const startEndOnly = readPCBViaFlag(node, "start_end_only", fail8, true);
+  const [record2, duplicate] = children(node, "zone_layer_connections");
+  if (duplicate || record2?.slice(1).some((entry) => typeof entry !== "string"))
+    return fail8("Invalid native via zone layer connections.");
+  const zoneLayerConnections = record2?.slice(1).map((_, i) => val(record2, i + 1));
+  if (zoneLayerConnections?.some((layer) => !pcbCopperLayers.includes(layer)))
+    return fail8("Native via zone connections require copper layers.");
+  return {
+    ...removeUnusedLayers === void 0 ? {} : { removeUnusedLayers },
+    ...keepEndLayers === void 0 ? {} : { keepEndLayers },
+    ...startEndOnly === void 0 ? {} : { startEndOnly },
+    ...zoneLayerConnections === void 0 ? {} : { zoneLayerConnections }
+  };
+}
+function writePCBViaPruning(pruning) {
+  const fields4 = [
+    ...pruning.removeUnusedLayers === void 0 ? [] : [`(remove_unused_layers ${pruning.removeUnusedLayers ? "yes" : "no"})`],
+    ...pruning.keepEndLayers === void 0 ? [] : [`(keep_end_layers ${pruning.keepEndLayers ? "yes" : "no"})`],
+    ...pruning.startEndOnly === void 0 ? [] : [`(start_end_only ${pruning.startEndOnly ? "yes" : "no"})`],
+    ...pruning.zoneLayerConnections ? [
+      `(zone_layer_connections${pruning.zoneLayerConnections.map((layer) => ` ${quote(layer)}`).join("")})`
+    ] : []
+  ];
+  return fields4.length ? ` ${fields4.join(" ")}` : "";
+}
+function readPCBViaTreatment(node, fail8) {
+  const treatment = {};
+  for (const key2 of ["capping", "filling"]) {
+    const value = readPCBViaFlag(node, key2, fail8);
+    if (value !== void 0) treatment[key2] = value;
+  }
+  for (const key2 of ["covering", "plugging"]) {
+    const records2 = children(node, key2);
+    const [record2] = records2;
+    if (!record2) continue;
+    if (records2.length !== 1 || record2.length < 2 || record2.length > 3)
+      return fail8(`Invalid native via ${key2} settings.`);
+    const values = {};
+    for (const flag2 of record2.slice(1)) {
+      if (!Array.isArray(flag2) || flag2.length !== 2 || flag2[0] !== "front" && flag2[0] !== "back" || flag2[1] !== "yes" && flag2[1] !== "no" || Object.hasOwn(values, flag2[0]))
+        return fail8(`Invalid native via ${key2} settings.`);
+      values[flag2[0]] = flag2[1] === "yes";
+    }
+    treatment[key2] = values;
+  }
+  return Object.keys(treatment).length ? treatment : void 0;
+}
+function pcbViaHasTreatment(treatment) {
+  return Boolean(
+    treatment?.capping || treatment?.filling || sides.some((side) => treatment?.covering?.[side] || treatment?.plugging?.[side])
+  );
+}
+function writePCBViaTreatment(treatment) {
+  const flag2 = (value) => value ? "yes" : "no";
+  return ["capping", "covering", "plugging", "filling"].flatMap((key2) => {
+    const value = treatment[key2];
+    if (value === void 0) return [];
+    if (typeof value === "boolean") return [`(${key2} ${flag2(value)})`];
+    const records2 = sides.flatMap(
+      (side) => value[side] === void 0 ? [] : [`(${side} ${flag2(value[side])})`]
+    );
+    return [`(${key2} ${records2.join(" ")})`];
+  }).join(" ");
 }
 
-// lib/pcb-text.ts
-function footprintTextPlacement(node, fail6) {
-  const at = child(node, "at");
-  const inPosition = at?.at(-1) === "unlocked";
-  const flags = children(node, "unlocked");
-  const bare = node.filter((item) => item === "unlocked").length;
-  const [flag] = flags;
-  if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
-    fail6("Invalid footprint text orientation flag.");
-  return {
-    at: inPosition ? at.slice(0, -1) : at,
-    unlocked: inPosition || bare === 1 || val(flag) === "yes",
-    flag,
-    bare: bare === 1,
-    inPosition
+// lib/pcb-padstack-format.ts
+var pcbPadstackShapes = ["circle", "rect", "oval"];
+var maxPCBPadstackSize = 1e3;
+
+// lib/pcb-padstack.ts
+function readLayerStack(records2, readLayer, fail8) {
+  const [record2] = records2;
+  if (!record2) return;
+  const modes = children(record2, "mode");
+  const layers = children(record2, "layer");
+  const inner = layers.find((layer) => val(layer) === "Inner");
+  const back = layers.find((layer) => val(layer) === "B.Cu");
+  if (records2.length !== 1 || record2.length !== 4 || modes.length !== 1 || modes[0].length !== 2 || modes[0][1] !== "front_inner_back" || layers.length !== 2 || !inner || !back)
+    return fail8(
+      "Only native front_inner_back padstacks with Inner and B.Cu records are supported."
+    );
+  return { inner: readLayer(inner), back: readLayer(back) };
+}
+function readNumericAtoms(node, count, fail8) {
+  const atoms = node.slice(1);
+  if (atoms.length !== count || atoms.some((atom2) => typeof atom2 !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(atom2)))
+    return fail8(`Invalid native padstack ${node[0]} number.`);
+  const numbers = atoms.map(Number);
+  if (numbers.some((number6) => !Number.isFinite(number6) || Math.abs(number6) > maxPCBPadstackSize))
+    return fail8(`Invalid native padstack ${node[0]} number.`);
+  return numbers;
+}
+function readPCBPadstack(node, fail8) {
+  const readShape = (layer) => {
+    const shapes = children(layer, "shape");
+    const sizes = children(layer, "size");
+    const zones = children(layer, "zone_connect");
+    const offsets = children(layer, "offset");
+    const shape = pcbPadstackShapes.find((option) => option === shapes[0]?.[1]);
+    if (layer.length !== 4 + zones.length + offsets.length || shapes.length !== 1 || shapes[0].length !== 2 || !shape || sizes.length !== 1 || zones.length > 1 || offsets.length > 1)
+      return fail8("Unsupported through-pad layer shape in native padstack.");
+    const [x, y] = readNumericAtoms(sizes[0], 2, fail8);
+    if (x < 1e-6 || y < 1e-6 || shape === "circle" && x !== y)
+      return fail8("Invalid native padstack layer size.");
+    const zoneConnect = zones.length ? readNumericAtoms(zones[0], 1, fail8)[0] : void 0;
+    if (zoneConnect !== void 0 && (!Number.isInteger(zoneConnect) || zoneConnect < -1 || zoneConnect > 3))
+      return fail8("Invalid native padstack zone connection.");
+    const offset2 = offsets[0] ? readNumericAtoms(offsets[0], 2, fail8) : void 0;
+    return {
+      shape,
+      size: { x, y },
+      ...zoneConnect !== void 0 ? { zoneConnect } : {},
+      ...offset2 ? { offset: { x: offset2[0], y: offset2[1] } } : {}
+    };
   };
+  const records2 = children(node, "padstack");
+  const [record2, duplicate] = records2;
+  const mode = record2 && child(record2, "mode");
+  if (mode?.[1] !== "custom") return readLayerStack(records2, readShape, fail8);
+  const layers = children(record2, "layer");
+  if (duplicate || mode.length !== 2 || record2.length !== layers.length + 2 || !layers.length || layers.length > 32)
+    return fail8("Invalid native custom padstack.");
+  const seen = /* @__PURE__ */ new Set();
+  return {
+    mode: "custom",
+    layers: layers.map((item) => {
+      const layer = pcbCopperLayers.find((name) => name === val(item));
+      if (!layer || seen.has(layer))
+        return fail8("Native custom padstack needs unique copper layer records.");
+      seen.add(layer);
+      return { layer, ...readShape(item) };
+    })
+  };
+}
+function readPCBViaPadstack(node, fail8) {
+  return readLayerStack(
+    children(node, "padstack"),
+    (layer) => {
+      const [size] = children(layer, "size");
+      if (layer.length !== 3 || !size)
+        return fail8("Unsupported via layer shape in native padstack.");
+      const [diameter] = readNumericAtoms(size, 1, fail8);
+      if (diameter < 0) return fail8("Invalid native via padstack diameter.");
+      return diameter;
+    },
+    fail8
+  );
+}
+var format = (n) => String(Number(n.toFixed(12)));
+function writeLayerStack(data, writeLayer) {
+  return `(padstack (mode front_inner_back) (layer ${quote("Inner")} ${writeLayer(data.inner)}) (layer ${quote("B.Cu")} ${writeLayer(data.back)}))`;
+}
+function writePCBPadstack(stack) {
+  const writeShape = ({ shape, size, zoneConnect, offset: offset2 }) => `(shape ${shape}) (size ${format(size.x)} ${format(size.y)})${offset2 ? ` (offset ${format(offset2.x)} ${format(offset2.y)})` : ""}${zoneConnect === void 0 ? "" : ` (zone_connect ${zoneConnect})`}`;
+  return "mode" in stack ? `(padstack (mode custom) ${stack.layers.map((geometry) => `(layer ${quote(geometry.layer)} ${writeShape(geometry)})`).join(" ")})` : writeLayerStack(stack, writeShape);
+}
+function writePCBViaPadstack(stack) {
+  return writeLayerStack(stack, (size) => `(size ${format(size)})`);
+}
+function stackLayer(layer) {
+  return layer.startsWith("In") && layer.endsWith(".Cu") ? "inner" : layer.startsWith("B.") ? "back" : void 0;
+}
+function pcbPadStackShapeOnLayer(pad, layer) {
+  if (!pad.padstack) return;
+  const key2 = stackLayer(layer);
+  const copperLayer = layer.endsWith(".Cu") ? layer : layer.startsWith("B.") ? "B.Cu" : layer.startsWith("F.") ? "F.Cu" : void 0;
+  return "mode" in pad.padstack ? pad.padstack.layers.find(({ layer: layer2 }) => layer2 === copperLayer) ?? pad.padstack.layers.find(({ layer: layer2 }) => layer2 === "F.Cu") : key2 && pad.padstack[key2];
+}
+function pcbPadWithStackShape(pad, geometry) {
+  const x = geometry.offset?.x ?? 0;
+  const y = geometry.offset?.y ?? 0;
+  const dx = x + (pad.drillOffset?.x ?? 0);
+  const dy = y + (pad.drillOffset?.y ?? 0);
+  const angle3 = -pad.rotation * Math.PI / 180;
+  return {
+    ...pad,
+    shape: geometry.shape,
+    size: geometry.size,
+    ...geometry.zoneConnect === void 0 ? {} : { zoneConnect: geometry.zoneConnect },
+    x: pad.x + dx * Math.cos(angle3) - dy * Math.sin(angle3),
+    y: pad.y + dx * Math.sin(angle3) + dy * Math.cos(angle3),
+    drillOffset: geometry.offset ? { x: -x, y: -y } : void 0,
+    padstack: void 0,
+    roundrectRatio: void 0,
+    trapezoidDelta: void 0,
+    chamferRatio: void 0,
+    chamfer: void 0
+  };
+}
+function pcbPadOnLayer(pad, layer) {
+  const geometry = layer && pcbPadStackShapeOnLayer(pad, layer);
+  return geometry ? pcbPadWithStackShape(pad, geometry) : pad;
+}
+function pcbViaDiameter(via, layer) {
+  if (layer) {
+    const endpoint = layer === (via.span?.start ?? "F.Cu") || layer === (via.span?.end ?? "B.Cu");
+    if (via.startEndOnly && !endpoint) return 0;
+    if (via.removeUnusedLayers && !(via.keepEndLayers && endpoint) && !via.zoneLayerConnections?.some((item) => item === layer))
+      return 0;
+  }
+  return pcbViaLandDiameter(via, layer);
+}
+function pcbViaLandDiameter(via, layer) {
+  const key2 = layer && stackLayer(layer);
+  return (key2 ? via.padstack?.[key2] : void 0) ?? via.diameter;
 }
 
 // lib/pcb-pad-role.ts
+var silkscreenPadLayers = ["F.SilkS", "B.SilkS"];
+function padSilkscreenLayers(pad) {
+  const layers = pad.layers;
+  if (!layers) return [];
+  if (layers.includes("*.SilkS")) return silkscreenPadLayers;
+  return silkscreenPadLayers.filter((layer) => layers.includes(layer));
+}
 function isApertureLayer(layer) {
   return layer === "F.Paste" || layer === "B.Paste" || layer === "F.Mask" || layer === "B.Mask";
 }
@@ -7277,13 +8639,62 @@ function padApertureLayers(pad) {
 function padHasElectricalPin(pad) {
   return pad.type !== "np_thru_hole" && !padApertureLayers(pad);
 }
-function readPadHeatsink(node, fail6) {
+function readPCBPadPruning(record2, fail8) {
+  const flag2 = (key2) => {
+    const [node, duplicate2] = children(record2, key2);
+    if (!node) return;
+    if (duplicate2 || node.length !== 2 || node[1] !== "yes" && node[1] !== "no")
+      fail8(`Invalid pad ${key2} setting.`);
+    return node[1] === "yes";
+  };
+  const removeUnusedLayers = flag2("remove_unused_layers");
+  const keepEndLayers = flag2("keep_end_layers");
+  const [connectionRecord, duplicate] = children(record2, "zone_layer_connections");
+  if (duplicate || connectionRecord?.slice(1).some((item) => typeof item !== "string"))
+    fail8("Invalid pad zone_layer_connections.");
+  const zoneLayerConnections = connectionRecord?.slice(1).map((_, i) => val(connectionRecord, i + 1));
+  if (zoneLayerConnections?.some((layer) => !pcbCopperLayers.includes(layer)))
+    fail8("Pad zone layer connections require copper layers.");
+  return {
+    ...removeUnusedLayers === void 0 ? {} : { removeUnusedLayers },
+    ...keepEndLayers === void 0 ? {} : { keepEndLayers },
+    ...zoneLayerConnections === void 0 ? {} : { zoneLayerConnections }
+  };
+}
+function validatePCBNetTiePadGroups(groups, pads, fail8) {
+  if (!groups.length || groups.length > 128) fail8("Invalid number of footprint net-tie groups.");
+  const eligible = new Set(pads.filter(padHasElectricalPin).map((pad) => pad.number));
+  const assigned = /* @__PURE__ */ new Set();
+  for (const group of groups) {
+    const numbers = group.split(",").map((number6) => number6.trim());
+    if (numbers.length < 2) fail8("A footprint net-tie group requires two or more pad numbers.");
+    for (const number6 of numbers) {
+      if (!number6 || !eligible.has(number6) || assigned.has(number6))
+        fail8("Footprint net ties require distinct existing electrical pad numbers.");
+      assigned.add(number6);
+    }
+  }
+}
+function readPCBNetTiePadGroups(footprint, pads, fail8) {
+  const [node, duplicate] = children(footprint, "net_tie_pad_groups");
+  if (!node) return;
+  if (duplicate || node.slice(1).some((group) => typeof group !== "string" || !group.startsWith('"')))
+    fail8("Invalid native footprint net-tie groups.");
+  const groups = node.slice(1).map((_, index) => val(node, index + 1));
+  validatePCBNetTiePadGroups(groups, pads, fail8);
+  return groups;
+}
+function readPCBPadFabricationProperty(node, fail8) {
   const properties = children(node, "property");
   if (!properties.length) return {};
   const [property] = properties;
-  if (properties.length !== 1 || property.length !== 2 || property[1] !== "pad_prop_heatsink")
-    fail6("Unsupported pad fabrication property.");
-  return { heatsink: true };
+  const kind = property[1];
+  if (properties.length !== 1 || property.length !== 2)
+    fail8("Unsupported pad fabrication property.");
+  if (kind === "pad_prop_heatsink") return { heatsink: true };
+  if (kind === "pad_prop_bga" || kind === "pad_prop_mechanical" || kind === "pad_prop_pressfit" || kind === "pad_prop_fiducial_glob" || kind === "pad_prop_fiducial_loc" || kind === "pad_prop_castellated" || kind === "pad_prop_testpoint")
+    return { fabricationProperty: kind };
+  return fail8("Unsupported pad fabrication property.");
 }
 
 // lib/pcb-layout.ts
@@ -7307,74 +8718,547 @@ function padDrillLine(footprint, pad) {
   return [footprintPoint(at, start), footprintPoint(at, end)];
 }
 
+// lib/pcb-teardrop-settings.ts
+var pcbTeardropDimensionFields = {
+  bestLengthRatio: "best_length_ratio",
+  maxLength: "max_length",
+  bestWidthRatio: "best_width_ratio",
+  maxWidth: "max_width",
+  filterRatio: "filter_ratio"
+};
+var pcbTeardropOptionFields = {
+  curvedEdges: "curved_edges",
+  enabled: "enabled",
+  allowTwoSegments: "allow_two_segments",
+  preferZoneConnections: "prefer_zone_connections"
+};
+var maxPCBTeardropParameter = 1e3;
+var defaultPCBTeardropThermal = 0.5;
+
+// lib/pcb-teardrops.ts
+function readPCBTeardropSettings(owner, fail8) {
+  const records2 = children(owner, "teardrops");
+  if (!records2.length) return void 0;
+  const [record2] = records2;
+  if (records2.length !== 1 || record2.length < 2) return fail8("Invalid teardrop settings.");
+  const settings = {};
+  const remaining = new Set(record2.slice(1));
+  for (const key2 of Object.keys(pcbTeardropDimensionFields)) {
+    const field = child(record2, pcbTeardropDimensionFields[key2]);
+    if (!field) continue;
+    const value = field[1];
+    const number6 = Number(value);
+    if (field.length !== 2 || typeof value !== "string" || !/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value) || !Number.isFinite(number6) || number6 > maxPCBTeardropParameter)
+      return fail8(`Invalid teardrop ${pcbTeardropDimensionFields[key2]}.`);
+    settings[key2] = number6;
+    remaining.delete(field);
+  }
+  for (const key2 of Object.keys(pcbTeardropOptionFields)) {
+    const field = child(record2, pcbTeardropOptionFields[key2]);
+    if (!field) continue;
+    const value = field[1];
+    if (field.length !== 2 || value !== "yes" && value !== "no")
+      return fail8(`Invalid teardrop ${pcbTeardropOptionFields[key2]}.`);
+    settings[key2] = value === "yes";
+    remaining.delete(field);
+  }
+  if (remaining.size) return fail8("Teardrop settings contain an unsupported or duplicate field.");
+  return settings;
+}
+function writePCBTeardropSettings(settings) {
+  if (!settings) return "";
+  const fields4 = [];
+  for (const key2 of Object.keys(pcbTeardropDimensionFields)) {
+    if (settings[key2] !== void 0) fields4.push(`(${pcbTeardropDimensionFields[key2]} ${settings[key2]})`);
+  }
+  for (const key2 of Object.keys(pcbTeardropOptionFields)) {
+    if (settings[key2] !== void 0)
+      fields4.push(`(${pcbTeardropOptionFields[key2]} ${settings[key2] ? "yes" : "no"})`);
+  }
+  return fields4.length ? `(teardrops ${fields4.join(" ")})` : "";
+}
+function readPCBTeardropKind(zone, fail8) {
+  const records2 = children(zone, "attr");
+  if (!records2.length) return void 0;
+  const [record2] = records2;
+  const teardrop = child(record2, "teardrop");
+  const type = child(teardrop ?? [], "type");
+  const value = type?.[1];
+  if (records2.length !== 1 || record2.length !== 2 || teardrop?.length !== 2 || type?.length !== 2 || value !== "padvia" && value !== "track_end")
+    return fail8("Unsupported PCB zone attribute.");
+  return value;
+}
+
+// lib/pcb-via-tenting.ts
+var sides2 = ["front", "back"];
+function readPCBViaTenting(node, fail8) {
+  const records2 = children(node, "tenting");
+  if (records2.length === 0) return;
+  const [record2] = records2;
+  if (records2.length !== 1 || record2.length < 2 || record2.length > 3)
+    return fail8("Invalid via tenting settings.");
+  const tenting = {};
+  for (const side of record2.slice(1)) {
+    if (!Array.isArray(side) || side.length !== 2 || side[0] !== "front" && side[0] !== "back" || side[1] !== "yes" && side[1] !== "no" || Object.hasOwn(tenting, side[0]))
+      return fail8("Invalid via tenting settings.");
+    tenting[side[0]] = side[1] === "yes";
+  }
+  return tenting;
+}
+function writePCBViaTenting(tenting) {
+  const flags = sides2.flatMap(
+    (side) => tenting[side] === void 0 ? [] : [`(${side} ${tenting[side] ? "yes" : "no"})`]
+  );
+  return `(tenting ${flags.join(" ")})`;
+}
+
+// lib/pcb-barcode.ts
+var cached = /* @__PURE__ */ new WeakMap();
+var fields = [
+  "at",
+  "layer",
+  "size",
+  "text",
+  "text_height",
+  "type",
+  "ecc_level",
+  "hide",
+  "knockout",
+  "margins",
+  "locked",
+  "uuid"
+];
+function unsupported() {
+  throw new Error("KiCad PCB: Unsupported barcode. Use bounded QR or Data Matrix artwork.");
+}
+function readBarcode(node) {
+  const previous = cached.get(node);
+  if (previous) return previous;
+  const seen = /* @__PURE__ */ new Set();
+  if (node[0] !== "barcode") return unsupported();
+  for (const field of node.slice(1)) {
+    if (!Array.isArray(field) || typeof field[0] !== "string" || !fields.includes(field[0]) || seen.has(field[0]))
+      return unsupported();
+    seen.add(field[0]);
+    if (field.length !== (field[0] === "at" ? 4 : ["size", "margins"].includes(field[0]) ? 3 : 2))
+      return unsupported();
+  }
+  const position2 = child(node, "at");
+  const size = child(node, "size");
+  const literal = child(node, "text");
+  const value = val(literal);
+  const id = val(child(node, "uuid"));
+  const layer = val(child(node, "layer"));
+  const ecc = val(child(node, "ecc_level"));
+  const kind = val(child(node, "type"));
+  const knockout = val(child(node, "knockout"));
+  const margins = child(node, "margins");
+  const numeric = (record2, index = 1) => {
+    const value2 = val(record2, index);
+    return value2 ? Number(value2) : NaN;
+  };
+  const x = numeric(position2);
+  const y = numeric(position2, 2);
+  const rotation = numeric(position2, 3);
+  const width = numeric(size);
+  const height = numeric(size, 2);
+  const textHeight = numeric(child(node, "text_height"));
+  const marginX = margins ? numeric(margins) : 0;
+  const marginY = margins ? numeric(margins, 2) : 0;
+  const hide = val(child(node, "hide"));
+  const locked = val(child(node, "locked"));
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || layer !== "F.SilkS" && layer !== "B.SilkS" && layer !== "Edge.Cuts" && layer !== "F.Cu" && layer !== "B.Cu" || seen.has("knockout") && knockout !== "no" && knockout !== "yes" || seen.has("hide") && hide !== "yes" && hide !== "no" || seen.has("locked") && locked !== "yes" && locked !== "no" || ![x, y, rotation, width, height, textHeight, marginX, marginY].every(
+    (n) => Number.isFinite(n) && Math.abs(n) <= 1e5
+  ) || width < 0.01 || height < 0.01 || textHeight < 0.01 || marginX < 0 || marginY < 0 || typeof literal?.[1] !== "string" || !literal[1].startsWith('"') || !/^[\x20-\x7e]{1,128}$/.test(value) || /\$\{|[~^_]\{/.test(value))
+    return unsupported();
+  const placement = {
+    id,
+    layer,
+    x,
+    y,
+    rotation,
+    width,
+    height,
+    value,
+    textHeight,
+    showText: hide !== "yes",
+    knockout: knockout === "yes",
+    marginX,
+    marginY
+  };
+  let barcode;
+  if (kind === "qr" && (ecc === "L" || ecc === "M" || ecc === "Q" || ecc === "H"))
+    barcode = { ...placement, kind, ecc };
+  else if (kind === "datamatrix" && !seen.has("ecc_level")) barcode = { ...placement, kind };
+  else return unsupported();
+  if (isOwnedProjectNode(node)) cached.set(node, Object.freeze(barcode));
+  return barcode;
+}
+function pcbBarcodes(records2) {
+  if (!records2) return [];
+  if (records2.length > 32) return unsupported();
+  return records2.map(readBarcode);
+}
+
+// lib/pcb-reference-image.ts
+var cachedImages2 = /* @__PURE__ */ new WeakMap();
+var fields2 = /* @__PURE__ */ new Set(["at", "layer", "scale", "locked", "uuid", "data"]);
+var invalidImage2 = () => {
+  throw new Error("KiCad PCB: Unsupported reference image. Use bounded embedded PNG artwork.");
+};
+function readReferenceImage(node) {
+  const cached2 = cachedImages2.get(node);
+  if (cached2) return cached2;
+  const seen = /* @__PURE__ */ new Set();
+  if (node[0] !== "image") return invalidImage2();
+  for (const field of node.slice(1)) {
+    if (!Array.isArray(field) || typeof field[0] !== "string" || !fields2.has(field[0]) || seen.has(field[0]))
+      return invalidImage2();
+    seen.add(field[0]);
+  }
+  const uuid = child(node, "uuid");
+  const nativeLayer = child(node, "layer");
+  const locked = child(node, "locked");
+  const id = val(uuid);
+  const layer = pcbBoardLayers.find((value) => value === val(nativeLayer));
+  if (uuid?.length !== 2 || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || nativeLayer?.length !== 2 || !layer || locked && (locked.length !== 2 || !["yes", "no"].includes(val(locked))))
+    return invalidImage2();
+  const image = { id, layer, ...readKiCadEmbeddedPng(node, invalidImage2) };
+  if (isOwnedProjectNode(node)) cachedImages2.set(node, Object.freeze(image));
+  return image;
+}
+function pcbReferenceImages(records2) {
+  if (!records2?.length) return [];
+  if (records2.length > 16) return invalidImage2();
+  const images = records2.map(readReferenceImage);
+  if (images.reduce((pixels, image) => pixels + image.pixels, 0) > 16e6)
+    return invalidImage2();
+  return images;
+}
+
+// lib/pcb-native-table.ts
+var strokeTypes = ["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"];
+var fail2 = () => {
+  throw new Error("KiCad PCB: Unsupported native PCB table geometry or cell fields.");
+};
+function fields3(record2, offset2, names) {
+  const result = /* @__PURE__ */ new Map();
+  for (const entry of record2.slice(offset2)) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string" || !names.includes(entry[0]) || result.has(entry[0]))
+      return fail2();
+    result.set(entry[0], entry);
+  }
+  return result;
+}
+function number(record2, index = 1) {
+  const atom2 = val(record2, index);
+  const value = Number(atom2);
+  return !atom2 || !Number.isFinite(value) || Math.abs(value) > 1e5 ? fail2() : value;
+}
+function point(record2) {
+  return record2?.length === 3 ? { x: number(record2), y: number(record2, 2) } : fail2();
+}
+function flag(record2) {
+  return record2?.length === 2 && (record2[1] === "yes" || record2[1] === "no") ? record2[1] === "yes" : fail2();
+}
+function positiveSizes(record2) {
+  if (!record2 || record2.length < 2 || record2.length > 257) return fail2();
+  return record2.slice(1).map((_, index) => {
+    const size = number(record2, index + 1);
+    return size > 0 ? size : fail2();
+  });
+}
+function strokeSettings(record2, keys3) {
+  if (!record2) return fail2();
+  const values = fields3(record2, 1, [...keys3, "stroke"]);
+  const stroke = values.get("stroke");
+  const width = child(stroke ?? [], "width");
+  const type = child(stroke ?? [], "type");
+  const kind = strokeTypes.find((name) => name === val(type));
+  if (stroke?.length !== 3 || width?.length !== 2 || type?.length !== 2 || !kind) return fail2();
+  return {
+    enabled: keys3.map((key2) => flag(values.get(key2))),
+    width: number(width),
+    stroke: kind
+  };
+}
+var uuidPattern2 = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+var samePoint = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= 3e-6;
+var sameSize = (value, expected) => Math.abs(value - expected) <= 3e-6;
+function readNativePCBTable(record2) {
+  if (record2[0] !== "table") return fail2();
+  const native = fields3(record2, 1, [
+    "column_count",
+    "uuid",
+    "layer",
+    "border",
+    "separators",
+    "column_widths",
+    "row_heights",
+    "cells",
+    "locked"
+  ]);
+  const id = val(native.get("uuid"));
+  const layer = pcbBoardLayers.find((name) => name === val(native.get("layer")));
+  const widths = positiveSizes(native.get("column_widths"));
+  const heights = positiveSizes(native.get("row_heights"));
+  const cellRecords = native.get("cells")?.slice(1) ?? [];
+  const columns = widths.length;
+  const rows = heights.length;
+  const locked = native.get("locked");
+  if (native.get("uuid")?.length !== 2 || !uuidPattern2.test(id) || !layer || native.get("layer")?.length !== 2 || native.get("column_count")?.length !== 2 || number(native.get("column_count")) !== columns || cellRecords.length !== columns * rows || cellRecords.length > 256)
+    return fail2();
+  if (locked) flag(locked);
+  const border = strokeSettings(native.get("border"), ["external", "header"]);
+  const separators = strokeSettings(native.get("separators"), ["rows", "cols"]);
+  const cells = cellRecords.map((cell, index) => {
+    if (!Array.isArray(cell) || cell[0] !== "table_cell" || typeof cell[1] !== "string" || !cell[1].startsWith('"') || val(cell).includes("${"))
+      return fail2();
+    const cellFields = fields3(cell, 2, [
+      "start",
+      "end",
+      "pts",
+      "margins",
+      "span",
+      "angle",
+      "layer",
+      "uuid",
+      "effects",
+      "render_cache",
+      "locked"
+    ]);
+    const span = cellFields.get("span");
+    const nativeLayer = cellFields.get("layer");
+    const uuid = cellFields.get("uuid");
+    const outline = cellFields.get("pts");
+    if (span?.length !== 3 || span[1] !== "1" || span[2] !== "1" || nativeLayer?.length !== 2 || val(nativeLayer) !== layer || uuid?.length !== 2 || !uuidPattern2.test(val(uuid)))
+      return fail2();
+    let corners;
+    if (outline) {
+      if (outline.length !== 5 || cellFields.has("start") || cellFields.has("end")) return fail2();
+      corners = outline.slice(1).map((item) => Array.isArray(item) && item[0] === "xy" ? point(item) : fail2());
+    } else {
+      const start = point(cellFields.get("start"));
+      const end = point(cellFields.get("end"));
+      corners = [start, { x: end.x, y: start.y }, end, { x: start.x, y: end.y }];
+    }
+    const angle3 = cellFields.has("angle") ? number(cellFields.get("angle")) : 0;
+    const rad = angle3 * Math.PI / 180;
+    const [topLeft, topRight, bottomRight, bottomLeft] = corners;
+    const w = widths[index % columns];
+    const h = heights[Math.floor(index / columns)];
+    const corner = (dx, dy) => ({
+      x: topLeft.x + dx * Math.cos(rad) + dy * Math.sin(rad),
+      y: topLeft.y - dx * Math.sin(rad) + dy * Math.cos(rad)
+    });
+    if (!sameSize(Math.hypot(topRight.x - topLeft.x, topRight.y - topLeft.y), w) || !samePoint(topRight, corner(w, 0)) || !samePoint(bottomRight, corner(w, h)) || !samePoint(bottomLeft, corner(0, h)))
+      return fail2();
+    const text2 = [
+      "gr_text_box",
+      cell[1],
+      ...cell.slice(2).filter((entry) => entry !== span),
+      ["border", "no"],
+      ["stroke", ["width", "0"], ["type", "default"]],
+      ["knockout", "no"]
+    ];
+    return { corners, text: text2 };
+  });
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const at = cells[row * columns + col].corners;
+      const right = col + 1 < columns ? cells[row * columns + col + 1].corners : null;
+      const below = row + 1 < rows ? cells[(row + 1) * columns + col].corners : null;
+      if (right && (!samePoint(at[1], right[0]) || !samePoint(at[2], right[3]))) return fail2();
+      if (below && (!samePoint(at[3], below[0]) || !samePoint(at[2], below[1]))) return fail2();
+    }
+  }
+  const borders = [];
+  const line = (start, end, style) => {
+    if (style.width <= 0) return fail2();
+    borders.push({
+      id: nativeIdentity(`${id}:table border:${borders.length}`),
+      layer,
+      start,
+      end,
+      width: style.width,
+      stroke: style.stroke
+    });
+  };
+  const [external, header] = border.enabled;
+  const [drawRows, drawColumns] = separators.enabled;
+  for (let col = 0; col < columns - 1; col++)
+    for (let row = 0; row < rows; row++) {
+      const style = row === 0 && header ? border : drawColumns ? separators : null;
+      const [, start, end] = cells[row * columns + col].corners;
+      if (style) line(start, end, style);
+    }
+  for (let row = 0; row < rows - 1; row++)
+    for (let col = 0; col < columns; col++) {
+      const style = row === 0 && header ? border : drawRows ? separators : null;
+      const [, , start, end] = cells[row * columns + col].corners;
+      if (style) line(start, end, style);
+    }
+  if (external) {
+    const first = cells[0].corners[0];
+    const right = cells[columns - 1].corners[1];
+    const bottom = cells.at(-1).corners[2];
+    const left = cells[(rows - 1) * columns].corners[3];
+    line(first, right, border);
+    line(right, bottom, border);
+    line(bottom, left, border);
+    line(left, first, border);
+  }
+  return { id, layer, cells: cells.map((cell) => cell.text), borders };
+}
+
 // lib/kicad-pcb.ts
 var round2 = (n) => Number(n.toFixed(6));
 var angle2 = (n) => round2((n % 360 + 360) % 360);
-var fail = (message) => {
+var fail3 = (message) => {
   throw new Error(`KiCad PCB: ${message}`);
 };
 function allow(node, names, context) {
   for (const n of node.filter(Array.isArray))
-    if (!names.includes(String(n[0]))) fail(`${context} contains unsupported ${n[0]}.`);
+    if (!names.includes(String(n[0]))) fail3(`${context} contains unsupported ${n[0]}.`);
 }
-function number(n, index = 1, fallback) {
+function number2(n, index = 1, fallback) {
   if (!n || !val(n, index)) {
     if (fallback !== void 0) return fallback;
-    return fail("Missing numeric field.");
+    return fail3("Missing numeric field.");
   }
   const v = Number(val(n, index));
   if (!Number.isFinite(v) || Math.abs(v) > 1e5)
-    fail(`Invalid precision or number ${val(n, index)}.`);
+    fail3(`Invalid precision or number ${val(n, index)}.`);
   return v;
 }
-var point = (n) => ({ x: number(n), y: number(n, 2) });
-var points = (n) => n ? children(n, "xy").map(point) : fail("Missing polygon points.");
+var footprintZoneOverrideNames = pcbFootprintZoneOverrideFields.map(([native]) => native);
+var padZoneOverrideNames = pcbPadZoneOverrideFields.map(([native]) => native);
+function readZoneOverrides(node, footprint = false) {
+  const overrides = {};
+  const fields4 = footprint ? pcbFootprintZoneOverrideFields : pcbPadZoneOverrideFields;
+  for (const [native, key2] of fields4) {
+    const records2 = children(node, native);
+    if (!records2.length) continue;
+    const [record2] = records2;
+    if (records2.length !== 1 || record2.length !== 2 || typeof record2[1] !== "string")
+      fail3(`Invalid ${native} override.`);
+    const value = number2(record2);
+    if (key2 === "zoneConnect" ? !Number.isInteger(value) || value < -1 || value > 3 : value < 0)
+      fail3(`Invalid ${native} override.`);
+    overrides[key2] = value;
+  }
+  return overrides;
+}
+var point2 = (n) => ({ x: number2(n), y: number2(n, 2) });
+var points = (n) => n ? children(n, "xy").map(point2) : fail3("Missing polygon points.");
 function nativeLocked(n) {
   const flags = children(n, "locked");
-  if (flags.length > 1 || flags.some((flag) => flag.length !== 2 || !["yes", "no"].includes(val(flag))) || flags.length && n.includes("locked") || n.filter((item) => item === "locked").length > 1)
-    fail("Invalid native editing lock.");
+  if (flags.length > 1 || flags.some((flag2) => flag2.length !== 2 || !["yes", "no"].includes(val(flag2))) || flags.length && n.includes("locked") || n.filter((item) => item === "locked").length > 1)
+    fail3("Invalid native editing lock.");
   return n.includes("locked") || val(flags[0]) === "yes";
 }
-function expandNativeBoardZones(root) {
+function boardVersion(tree) {
+  const versions = children(tree, "version");
+  const version = versions[0]?.[1];
+  if (tree[0] !== "kicad_pcb" || versions.length !== 1 || versions[0].length !== 2 || typeof version !== "string" || !/^\d{8}$/.test(version))
+    return fail3("Expected a native KiCad board with one valid format version.");
+  return version;
+}
+function hasKiCad10Generator(tree) {
+  const [generator, extraGenerator] = children(tree, "generator");
+  const [release, extraRelease] = children(tree, "generator_version");
+  return !extraGenerator && !extraRelease && generator?.length === 2 && val(generator) === "pcbnew" && release?.length === 2 && /^10\.(?!99(?:\.|$))\d+(?:\.\d+)?$/.test(val(release));
+}
+function expandNativeBoardZones(root, stableIdSeed, placementLayers) {
   const copper = (child(root, "layers") ?? []).filter(Array.isArray).map((layer) => val(layer)).filter((layer) => layer.endsWith(".Cu"));
-  const expand = (container) => container.flatMap((node) => {
-    if (!Array.isArray(node)) return [node];
-    if (node[0] === "footprint") return [expand(node)];
-    const layers = node[0] === "zone" ? child(node, "layers") : void 0;
-    if (!layers) return [node];
-    if (child(node, "layer")) fail("Zone cannot specify both layer and layers.");
-    const names = layers.slice(1).flatMap((_, index) => {
-      const name = val(layers, index + 1);
-      return name === "*.Cu" ? copper : [name];
+  const expand = (container, scope) => {
+    const groupedZoneLayers = child(container, "group") ? /* @__PURE__ */ new Map() : void 0;
+    let footprintIndex = 0;
+    let zoneIndex = 0;
+    const expanded = container.flatMap((node) => {
+      if (!Array.isArray(node)) return [node];
+      if (node[0] === "footprint") return [expand(node, `${scope}fp:${footprintIndex++}:`)];
+      if (node[0] !== "zone") return [node];
+      const zoneKey = `${scope}zone:${zoneIndex++}`;
+      const layers = child(node, "layers");
+      if (!layers) return [node];
+      if (child(node, "layer")) fail3("Zone cannot specify both layer and layers.");
+      const names = layers.slice(1).flatMap((_, index) => {
+        const name = val(layers, index + 1);
+        return name === "*.Cu" ? copper : [name];
+      });
+      const [uuidField, extraUuid] = children(node, "uuid");
+      const nativeUuid = val(uuidField);
+      if (extraUuid || uuidField && !nativeUuid || !names.length || names.length > 64 || new Set(names).size !== names.length)
+        fail3("Invalid multi-layer zone identity or layers.");
+      if (children(node, "filled_polygon").some((fill) => !names.includes(val(child(fill, "layer")))))
+        fail3("Filled polygon layer disagrees with its multi-layer zone.");
+      if (children(node, "property").some(
+        (property) => !names.includes(val(child(property, "layer")))
+      ))
+        fail3("Property layer disagrees with its multi-layer zone.");
+      const uuid = nativeUuid || nativeIdentity(`${stableIdSeed}: native multi-layer ${zoneKey}`);
+      const layerIds = names.map(
+        (name, index) => index === 0 ? uuid : nativeIdentity(`${uuid}:layer:${name}`)
+      );
+      if (nativeUuid && layerIds.length > 1)
+        groupedZoneLayers?.set(nativeUuid.toLowerCase(), layerIds.slice(1).map(quote));
+      const placement = child(node, "placement");
+      if (placementLayers && names.length > 1 && placement && val(child(placement, "enabled")) === "yes")
+        placementLayers(names.map((layer, index) => ({ layer, id: layerIds[index] })));
+      return names.map(
+        (name, index) => node.flatMap((item) => {
+          if (!Array.isArray(item)) return [item];
+          if (item[0] === "layers")
+            return [
+              ["layer", quote(name)],
+              ...uuidField ? [] : [["uuid", quote(layerIds[index])]]
+            ];
+          if (item[0] === "uuid" && index) return [["uuid", quote(layerIds[index])]];
+          if (item[0] === "filled_polygon" && val(child(item, "layer")) !== name) return [];
+          if (item[0] === "property" && val(child(item, "layer")) !== name) return [];
+          return [item];
+        })
+      );
     });
-    const uuid = val(child(node, "uuid"));
-    if (!uuid || !names.length || names.length > 4 || new Set(names).size !== names.length)
-      fail("Invalid multi-layer zone identity or layers.");
-    if (children(node, "filled_polygon").some((fill) => !names.includes(val(child(fill, "layer")))))
-      fail("Filled polygon layer disagrees with its multi-layer zone.");
-    return names.map(
-      (name, index) => node.flatMap((item) => {
-        if (!Array.isArray(item)) return [item];
-        if (item[0] === "layers") return [["layer", quote(name)]];
-        if (item[0] === "uuid" && index)
-          return [["uuid", quote(nativeIdentity(`${uuid}:layer:${name}`))]];
-        if (item[0] === "filled_polygon" && val(child(item, "layer")) !== name) return [];
-        return [item];
-      })
-    );
-  });
-  return expand(root);
+    if (!groupedZoneLayers?.size) return expanded;
+    return expanded.map((node) => {
+      if (!Array.isArray(node) || node[0] !== "group") return node;
+      const members = child(node, "members");
+      if (!members) return node;
+      const expandedMembers = members.flatMap((member, index) => [
+        member,
+        ...groupedZoneLayers.get(val(members, index).toLowerCase()) ?? []
+      ]);
+      return expandedMembers.length === members.length ? node : node.map((item) => item === members ? expandedMembers : item);
+    });
+  };
+  return expand(root, "");
 }
 function textData(n, value, at = child(n, "at")) {
   const e = child(n, "effects"), f = e && child(e, "font");
-  if (!f) fail("Text has no font geometry.");
+  if (!f) {
+    if (e || !isExplicitlyHiddenFootprintCaption(n) || child(n, "render_cache") || child(n, "layer")?.includes("knockout"))
+      return fail3("Text has no font geometry.");
+    const size = nativeFootprintCaptionDefaultSize;
+    return {
+      value,
+      rotation: number2(at, 3, 0),
+      size: { x: size, y: size },
+      thickness: 0,
+      hidden: true
+    };
+  }
   allow(e, ["font", "justify", "hide"], "text effects");
-  allow(f, ["size", "thickness", "bold", "italic"], "font");
+  allow(f, ["size", "thickness", "line_spacing", "bold", "italic", "face"], "font");
   return {
     value,
-    rotation: number(at, 3, 0),
-    size: point(child(f, "size")),
-    thickness: number(child(f, "thickness"), 1, 0),
+    rotation: number2(at, 3, 0),
+    size: point2(child(f, "size")),
+    thickness: number2(child(f, "thickness"), 1, 0),
+    ...readPCBTextLineSpacing(f, fail3),
+    ...readPCBTextFont(n, f, fail3),
+    ...child(n, "layer")?.includes("knockout") ? { knockout: true } : {},
     ...child(e, "justify") ? {
       justify: child(e, "justify").slice(1).map((_, i) => val(child(e, "justify"), i + 1))
     } : {},
@@ -7383,13 +9267,116 @@ function textData(n, value, at = child(n, "at")) {
     ...val(child(f, "italic")) === "yes" ? { italic: true } : {}
   };
 }
+function readBoardTextBox(n, common, readText = textData) {
+  const fields4 = [
+    "start",
+    "end",
+    "pts",
+    "angle",
+    "layer",
+    "uuid",
+    "effects",
+    "locked",
+    "render_cache",
+    "margins",
+    "border",
+    "stroke",
+    "knockout"
+  ];
+  allow(n, fields4, "text box");
+  if (fields4.some((key2) => children(n, key2).length > 1) || typeof n[1] !== "string" || !n[1].startsWith('"'))
+    return fail3("Invalid PCB text box fields.");
+  const boundary = child(n, "pts");
+  const a = child(n, "start");
+  const b = child(n, "end");
+  if (boundary ? a || b : a?.length !== 3 || b?.length !== 3)
+    return fail3("PCB text box requires one native boundary.");
+  if (boundary && (boundary.length < 4 || boundary.length > 257 || boundary.slice(1).some((item) => !Array.isArray(item) || item[0] !== "xy" || item.length !== 3)))
+    return fail3("PCB text box polygon has unsupported points.");
+  const outline = boundary ? points(boundary) : void 0;
+  const margins = child(n, "margins");
+  if (margins?.length !== 5) return fail3("PCB text box requires four native margins.");
+  const flag2 = (key2) => {
+    const record2 = child(n, key2);
+    if (record2?.length !== 2 || record2[1] !== "yes" && record2[1] !== "no")
+      return fail3(`Invalid PCB text box ${key2}.`);
+    return record2[1] === "yes";
+  };
+  const stroke = child(n, "stroke");
+  const strokeType = val(child(stroke ?? [], "type"));
+  if (stroke?.length !== 3 || child(stroke, "width")?.length !== 2 || child(stroke, "type")?.length !== 2 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(strokeType))
+    return fail3("Unsupported PCB text box stroke.");
+  const boxAngle = child(n, "angle");
+  if (boxAngle && boxAngle.length !== 2) return fail3("Invalid PCB text box angle.");
+  const text2 = readText(n, val(n));
+  text2.rotation = number2(boxAngle, 1, 0);
+  if (flag2("knockout")) text2.knockout = true;
+  const start = outline?.[0] ?? point2(a);
+  const end = outline?.at(-1) ?? point2(b);
+  return {
+    ...common,
+    width: Math.max(0, common.width),
+    start,
+    end,
+    kind: "text",
+    stroke: strokeType,
+    text: text2,
+    textBox: {
+      ...outline ? { outline } : {},
+      margins: [number2(margins), number2(margins, 2), number2(margins, 3), number2(margins, 4)],
+      border: flag2("border"),
+      strokeWidth: common.width
+    }
+  };
+}
+function readNativePCBTableDrawing(record2) {
+  const table = readNativePCBTable(record2);
+  return {
+    id: table.id,
+    layer: table.layer,
+    graphics: [
+      ...table.cells.map(
+        (cell) => readBoardTextBox(cell, {
+          id: val(child(cell, "uuid")),
+          layer: table.layer,
+          width: 0,
+          ...nativeLocked(cell) ? { locked: true } : {}
+        })
+      ),
+      ...table.borders
+    ]
+  };
+}
+var nativePCBTableDrawings = /* @__PURE__ */ new WeakMap();
+function pcbTableDrawings(records2) {
+  if (!records2?.length) return [];
+  if (records2.length > 32) return fail3("A board can contain at most 32 native tables.");
+  return records2.map((record2) => {
+    const cached2 = nativePCBTableDrawings.get(record2);
+    if (cached2) return cached2;
+    const drawing = readNativePCBTableDrawing(record2);
+    if (!isOwnedProjectNode(record2)) return drawing;
+    const owned = ownProjectData(drawing);
+    nativePCBTableDrawings.set(record2, owned);
+    return owned;
+  });
+}
 function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping) {
-  return parseKiCadPCBTree(parseSExpr(source), schematic, stableIdSeed, referenceMapping);
+  return parseKiCadPCBTree(parseNativePCBSource(source), schematic, stableIdSeed, referenceMapping);
+}
+function parseNativePCBSource(source, owned = false) {
+  const parse = owned ? parseOwnedSExpr : parseSExpr;
+  return parse(source, MAX_NATIVE_PCB_BYTES, MAX_NATIVE_PCB_NODES);
 }
 function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {}) {
-  const root = expandNativeBoardZones(tree);
-  if (root[0] !== "kicad_pcb" || val(child(root, "version")) !== "20260206")
-    fail("Expected the pinned KiCad 10 board format.");
+  const version = boardVersion(tree);
+  if (version !== KICAD_PCB_VERSION && !hasKiCad10Generator(tree))
+    fail3(`Unsupported board format ${version}. Use KiCad 10.`);
+  const normalized = normalizeNativePCBIdentifiers(tree);
+  const textVariables = validateNativeBoardMetadata(normalized);
+  validatePCBAssemblyVariants(normalized);
+  validateNativePCBEmbeddedFiles(normalized);
+  const root = expandNativeBoardZones(normalized, stableIdSeed);
   allow(
     root,
     [
@@ -7401,24 +9388,44 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       "layers",
       "setup",
       "title_block",
+      "image",
+      "table",
+      "property",
+      "variants",
+      "group",
       "net",
       "footprint",
       "gr_line",
       "gr_rect",
       "gr_arc",
+      "gr_curve",
       "gr_circle",
       "gr_poly",
       "gr_text",
+      "gr_text_box",
       "dimension",
       "segment",
+      "arc",
+      "generated",
       "via",
       "zone",
-      "embedded_fonts"
+      "embedded_fonts",
+      "embedded_files",
+      "point",
+      "barcode"
     ],
     "board"
   );
   const stable = (key2) => nativeIdentity(stableIdSeed + ": " + key2);
   const id = (n, key2) => val(child(n, "uuid")) || stable(key2);
+  const nativeRectangleIds = /* @__PURE__ */ new Set();
+  const groupLocked = nativePCBGroupLocks(root);
+  const groupLocks = [];
+  const lock = (n, id2, native = nativeLocked(n)) => {
+    const inherited = groupLocked.has(id2.toLowerCase());
+    if (inherited) groupLocks.push(id2);
+    return native || inherited ? { locked: true } : {};
+  };
   const nets = /* @__PURE__ */ new Map();
   const nativeNets = /* @__PURE__ */ new Map();
   for (const declaration of children(root, "net")) {
@@ -7430,30 +9437,67 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
   const net = (n) => {
     const node = child(n, "net");
     if (!node) return null;
-    const name = node.length > 2 ? val(node, 2) : nativeNets.get(val(node)) ?? val(node);
-    if (!name || name === "0") return null;
+    const name = node.length > 2 ? val(node, 2) : typeof node[1] === "string" && node[1].startsWith('"') ? val(node) : nativeNets.get(val(node)) ?? val(node);
+    if (!name || node[1] === "0" && name === "0") return null;
     if (!nets.has(name)) nets.set(name, stable("net:" + name));
     return nets.get(name);
   };
+  const readText = (record2, literal, at) => {
+    const text2 = textData(record2, literal, at);
+    if (!textVariables.size || !literal.includes("${")) return text2;
+    let length = literal.length;
+    const value = literal.replace(/\$\{([^{}]+)\}/g, (token, name) => {
+      const replacement = textVariables.get(name);
+      if (replacement === void 0 || name === "REFERENCE" || name === "VALUE") return token;
+      length += replacement.length - token.length;
+      if (length > 4096 || replacement.includes("${"))
+        return fail3("Unsupported nested or oversized PCB text expansion.");
+      return replacement;
+    });
+    return value === literal ? text2 : { ...text2, nativeExpansion: { source: literal, value } };
+  };
   const graph = (n, key2, footprintRotation) => {
     const kind = String(n[0]).replace(/^(fp|gr)_/, "");
-    const layer = val(child(n, "layer"));
+    const nativeLayer = child(n, "layer");
+    const nativeLayers = child(n, "layers");
+    const layer = val(nativeLayer ?? nativeLayers);
+    const recordId = id(n, key2);
     const common = {
-      id: id(n, key2),
+      id: recordId,
       layer,
-      width: number(child(child(n, "stroke") ?? [], "width"), 1, 0),
-      ...nativeLocked(n) ? { locked: true } : {}
+      width: number2(child(child(n, "stroke") ?? [], "width"), 1, 0),
+      ...lock(n, recordId)
     };
+    if (kind === "point") {
+      const fields4 = ["at", "size", "layer", "uuid", "locked"];
+      allow(n, fields4, "board reference point");
+      const anchor = child(n, "at");
+      const size = child(n, "size");
+      if (anchor?.length !== 3 || size?.length !== 2 || fields4.some((field) => children(n, field).length > 1))
+        return fail3("Invalid board reference point.");
+      const start = point2(anchor);
+      return { ...common, kind, start, end: start, width: number2(size) };
+    }
+    if (kind === "text_box") return readBoardTextBox(n, common, readText);
     if (kind === "text" || kind === "property") {
       const inFootprint = footprintRotation !== void 0;
       allow(
         n,
-        ["at", "layer", "uuid", "effects", "hide", "locked", ...inFootprint ? ["unlocked"] : []],
+        [
+          "at",
+          "layer",
+          "uuid",
+          "effects",
+          "hide",
+          "locked",
+          "render_cache",
+          ...inFootprint ? ["unlocked"] : []
+        ],
         "text"
       );
-      const placement = inFootprint ? footprintTextPlacement(n, fail) : { at: child(n, "at") };
-      const at = point(placement.at);
-      const t = textData(
+      const placement = inFootprint ? footprintTextPlacement(n, fail3) : { at: child(n, "at") };
+      const at = point2(placement.at);
+      const t = readText(
         n,
         val(n, kind === "property" || n[0] === "fp_text" ? 2 : 1),
         placement.at
@@ -7478,6 +9522,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           "uuid",
           "pts",
           "height",
+          "orientation",
           "leader_length",
           "format",
           "style",
@@ -7487,13 +9532,25 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         "dimension"
       );
       const pts = points(child(n, "pts"));
-      if (pts.length !== 2) fail("Only two-anchor dimensions are supported.");
+      if (pts.length !== 2) fail3("Only two-anchor dimensions are supported.");
       const f = child(n, "format"), s = child(n, "style"), t = child(n, "gr_text");
-      allow(
-        f,
-        ["prefix", "suffix", "units", "units_format", "precision", "override_value"],
-        "dimension format"
-      );
+      const dimensionType = val(child(n, "type"));
+      if (!s || (dimensionType === "center" ? f || t || child(n, "height") || child(n, "leader_length") : !f || !t))
+        return fail3("Invalid PCB dimension caption, format or style for its native type.");
+      if (f)
+        allow(
+          f,
+          [
+            "prefix",
+            "suffix",
+            "units",
+            "units_format",
+            "precision",
+            "override_value",
+            "suppress_zeroes"
+          ],
+          "dimension format"
+        );
       allow(
         s,
         [
@@ -7508,145 +9565,364 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         ],
         "dimension style"
       );
+      const orientation = child(n, "orientation");
+      if (dimensionType === "orthogonal" !== Boolean(orientation) || orientation && (orientation.length !== 2 || orientation[1] !== "0" && orientation[1] !== "1"))
+        return fail3("Invalid orthogonal PCB dimension orientation.");
+      const suppressZeroes = f && child(f, "suppress_zeroes");
+      if (suppressZeroes && (suppressZeroes.length !== 2 || !["yes", "no"].includes(val(suppressZeroes))))
+        return fail3("Invalid PCB dimension suppress-zeroes flag.");
       return {
         ...common,
-        width: number(child(s, "thickness")),
+        width: number2(child(s, "thickness")),
         kind: "dimension",
         start: pts[0],
         end: pts[1],
         dimension: {
-          type: val(child(n, "type")),
-          ...child(n, "height") ? { height: number(child(n, "height")) } : {},
-          ...child(n, "leader_length") ? { leaderLength: number(child(n, "leader_length")) } : {},
-          format: {
-            prefix: val(child(f, "prefix")),
-            suffix: val(child(f, "suffix")),
-            units: number(child(f, "units")),
-            unitsFormat: number(child(f, "units_format")),
-            precision: number(child(f, "precision")),
-            ...child(f, "override_value") ? { overrideValue: val(child(f, "override_value")) } : {}
-          },
+          type: dimensionType,
+          ...orientation ? { orientation: number2(orientation) } : {},
+          ...child(n, "height") ? { height: number2(child(n, "height")) } : {},
+          ...child(n, "leader_length") ? { leaderLength: number2(child(n, "leader_length")) } : {},
+          ...f && t ? {
+            format: {
+              prefix: val(child(f, "prefix")),
+              suffix: val(child(f, "suffix")),
+              units: number2(child(f, "units")),
+              unitsFormat: number2(child(f, "units_format")),
+              precision: number2(child(f, "precision")),
+              ...suppressZeroes ? { suppressZeroes: val(suppressZeroes) === "yes" } : {},
+              ...child(f, "override_value") ? { overrideValue: val(child(f, "override_value")) } : {}
+            },
+            caption: { ...point2(child(t, "at")), ...readText(t, val(t)) }
+          } : {},
           style: {
-            arrowLength: number(child(s, "arrow_length")),
-            textPositionMode: number(child(s, "text_position_mode")),
-            extensionOffset: number(child(s, "extension_offset")),
+            arrowLength: number2(child(s, "arrow_length")),
+            textPositionMode: number2(child(s, "text_position_mode")),
+            extensionOffset: number2(child(s, "extension_offset")),
             ...child(s, "arrow_direction") ? { arrowDirection: val(child(s, "arrow_direction")) } : {},
-            ...child(s, "extension_height") ? { extensionHeight: number(child(s, "extension_height")) } : {},
+            ...child(s, "extension_height") ? { extensionHeight: number2(child(s, "extension_height")) } : {},
             ...child(s, "keep_text_aligned") ? { keepTextAligned: val(child(s, "keep_text_aligned")) === "yes" } : {},
-            ...child(s, "text_frame") ? { textFrame: number(child(s, "text_frame")) } : {}
-          },
-          caption: { ...point(child(t, "at")), ...textData(t, val(t)) }
+            ...child(s, "text_frame") ? { textFrame: number2(child(s, "text_frame")) } : {}
+          }
         }
       };
     }
     allow(
       n,
-      ["start", "mid", "end", "center", "pts", "stroke", "fill", "layer", "uuid", "locked"],
+      [
+        "start",
+        "mid",
+        "end",
+        "center",
+        "pts",
+        "stroke",
+        "fill",
+        "layer",
+        "layers",
+        "net",
+        "solder_mask_margin",
+        "uuid",
+        "locked",
+        ...kind === "rect" ? ["radius"] : []
+      ],
       "graphic"
     );
+    const mask = val(nativeLayers, 2);
+    if (children(n, "layer").length + children(n, "layers").length !== 1 || nativeLayers && (nativeLayers.length !== 3 || !(layer === "F.Cu" && mask === "F.Mask" || layer === "B.Cu" && mask === "B.Mask")))
+      return fail3("Graphic layers require one native layer or a same-side copper and mask pair.");
+    const nativeNet = child(n, "net");
+    if (nativeNet && (footprintRotation !== void 0 || !layer.endsWith(".Cu") || nativeNet.length !== 2 || typeof nativeNet[1] !== "string" || children(n, "net").length !== 1 || typeof nativeNet[1] === "string" && /^\d+$/.test(nativeNet[1]) && nativeNet[1] !== "0" && !nativeNets.has(nativeNet[1])))
+      return fail3("Invalid native board graphic net.");
+    const margin = child(n, "solder_mask_margin");
+    if (margin && (!nativeLayers || margin.length !== 2 || children(n, "solder_mask_margin").length !== 1))
+      return fail3("Graphic solder-mask margin requires native paired layers.");
+    const graphicNet = net(n);
     const stroke = val(child(child(n, "stroke") ?? [], "type"));
+    const filled = ["yes", "solid"].includes(val(child(n, "fill")));
+    const noStroke = common.width === -1e-6 && filled && ["rect", "poly", "circle"].includes(kind);
     const extra = {
+      ...graphicNet ? { netId: graphicNet } : {},
+      ...nativeLayers ? { maskLayer: mask } : {},
+      ...margin ? { solderMaskMargin: number2(margin) } : {},
       ...stroke ? { stroke } : {},
-      ...child(n, "fill") ? { fill: ["yes", "solid"].includes(val(child(n, "fill"))) } : {}
+      ...child(n, "fill") ? { fill: filled } : {},
+      ...noStroke ? { width: 0, nativeNoStroke: true } : {}
     };
     if (kind === "rect") {
-      const a = point(child(n, "start")), b = point(child(n, "end"));
+      nativeRectangleIds.add(common.id);
+      const a = point2(child(n, "start")), b = point2(child(n, "end"));
+      const radii = children(n, "radius");
+      const nativeRadius = radii[0];
+      if (radii.length > 1 || nativeRadius && nativeRadius.length !== 2)
+        return fail3("Invalid native rounded rectangle radius.");
+      const roundedRectRadius = nativeRadius ? number2(nativeRadius) : void 0;
       return {
         ...common,
         ...extra,
         kind: "polygon",
         start: a,
         end: { x: a.x, y: b.y },
-        points: [{ x: b.x, y: a.y }, b]
+        points: [{ x: b.x, y: a.y }, b],
+        ...roundedRectRadius === void 0 ? {} : { roundedRectRadius }
       };
     }
     if (kind === "poly") {
-      const p = points(child(n, "pts"));
-      if (p.length < 3) fail("Degenerate polygon.");
+      const records2 = children(n, "pts");
+      if (records2.length !== 1) fail3("A PCB polygon requires one native contour.");
+      const p = [];
+      const polygonArcs = [];
+      for (const item of records2[0].slice(1)) {
+        if (!Array.isArray(item)) return fail3("Invalid PCB polygon vertex.");
+        if (item[0] === "xy" && item.length === 3) p.push(point2(item));
+        else if (item[0] === "arc" && item.length === 4 && ["start", "mid", "end"].every(
+          (name) => children(item, name).length === 1 && child(item, name)?.length === 3
+        )) {
+          polygonArcs.push({ vertex: p.length, mid: point2(child(item, "mid")) });
+          p.push(point2(child(item, "start")), point2(child(item, "end")));
+        } else fail3("Unsupported PCB polygon vertex.");
+      }
+      if (p.length + polygonArcs.length < 3) fail3("Degenerate polygon.");
       return {
         ...common,
         ...extra,
         kind: "polygon",
         start: p[0],
         end: p[p.length - 1],
-        points: p.slice(1, -1)
+        points: p.slice(1, -1),
+        ...polygonArcs.length ? { polygonArcs } : {}
       };
+    }
+    if (kind === "curve") {
+      const records2 = children(n, "pts");
+      const coordinates = records2[0]?.slice(1);
+      if (records2.length !== 1 || coordinates?.length !== 4 || ["start", "mid", "end", "center", "fill"].some((name) => child(n, name)))
+        return fail3("A native PCB B\xE9zier requires four XY points.");
+      const [start, firstControl, secondControl, end] = coordinates.map((item) => {
+        if (!Array.isArray(item) || item[0] !== "xy" || item.length !== 3)
+          return fail3("Invalid native PCB B\xE9zier point.");
+        return point2(item);
+      });
+      return { ...common, ...extra, kind, start, end, points: [firstControl, secondControl] };
     }
     if (kind === "circle")
       return {
         ...common,
         ...extra,
         kind: "circle",
-        start: point(child(n, "center")),
-        end: point(child(n, "end"))
+        start: point2(child(n, "center")),
+        end: point2(child(n, "end"))
       };
     if (kind === "arc")
       return {
         ...common,
         ...extra,
         kind: "arc",
-        start: point(child(n, "start")),
-        mid: point(child(n, "mid")),
-        end: point(child(n, "end"))
+        start: point2(child(n, "start")),
+        mid: point2(child(n, "mid")),
+        end: point2(child(n, "end"))
       };
-    if (kind !== "line") fail(`Unsupported graphic ${kind}.`);
-    return { ...common, ...extra, start: point(child(n, "start")), end: point(child(n, "end")) };
+    if (kind !== "line") fail3(`Unsupported graphic ${kind}.`);
+    return { ...common, ...extra, start: point2(child(n, "start")), end: point2(child(n, "end")) };
   };
   const zone = (n, key2, local = (p) => p) => {
     allow(
       n,
       [
         "net",
+        "net_name",
         "layer",
         "uuid",
         "name",
         "hatch",
+        "property",
         "priority",
         "connect_pads",
         "min_thickness",
+        "filled_areas_thickness",
         "fill",
         "polygon",
         "filled_polygon",
         "keepout",
         "placement",
+        "attr",
         "locked"
       ],
       "zone"
     );
     const fill = child(n, "fill"), connection = child(n, "connect_pads"), keep = child(n, "keepout");
-    allow(fill, ["thermal_gap", "thermal_bridge_width", "island_removal_mode"], "zone fill");
-    const polygons = children(n, "polygon").map((p) => points(child(p, "pts")).map(local));
+    const [fillThickness, repeatFillThickness] = children(n, "filled_areas_thickness");
+    if (fillThickness && (repeatFillThickness || fillThickness.length !== 2 || fillThickness[1] !== "no"))
+      return fail3("Only unstroked native zone contours are supported.");
+    allow(
+      fill,
+      [
+        "thermal_gap",
+        "thermal_bridge_width",
+        "island_removal_mode",
+        "island_area_min",
+        "smoothing",
+        "radius",
+        "mode",
+        "hatch_border_algorithm",
+        ...pcbZoneHatchNumericFields.map(([field]) => field)
+      ],
+      "zone fill"
+    );
+    const netId = net(n);
+    const netName = child(n, "net_name");
+    if (netName && (children(n, "net_name").length !== 1 || netName.length !== 2 || typeof netName[1] !== "string" || !netName[1].startsWith('"') || val(netName) !== (netId ? [...nets].find(([, id2]) => id2 === netId)?.[0] : "")))
+      fail3("Zone net name disagrees with its electrical net.");
+    const smoothing = child(fill, "smoothing");
+    const [fillMode, extraMode] = children(fill, "mode");
+    const [hatchBorder, extraBorder] = children(fill, "hatch_border_algorithm");
+    const hatchBorderAlgorithm = pcbZoneHatchBorderAlgorithms.find(
+      (option) => option === hatchBorder?.[1]
+    );
+    const hatchFields = pcbZoneHatchNumericFields.map(([field]) => {
+      const [record2, duplicate] = children(fill, field);
+      if (duplicate || record2 && (record2.length !== 2 || typeof record2[1] !== "string"))
+        fail3(`Invalid native zone ${field} setting.`);
+      return record2 && number2(record2);
+    });
+    let hatchFill;
+    if (fillMode || hatchBorder || hatchFields.some((field) => field !== void 0)) {
+      const [thickness2, gap, orientation, minHoleArea, smoothingLevel, smoothingValue] = hatchFields;
+      if (extraMode || extraBorder || fillMode?.length !== 2 || fillMode[1] !== "hatch" || hatchBorder?.length !== 2 || !hatchBorderAlgorithm || thickness2 === void 0 || gap === void 0 || orientation === void 0 || minHoleArea === void 0)
+        return fail3("Invalid or unsupported native zone hatch fill.");
+      hatchFill = {
+        thickness: thickness2,
+        gap,
+        orientation,
+        minHoleArea,
+        borderAlgorithm: hatchBorderAlgorithm,
+        ...smoothingLevel === void 0 ? {} : { smoothingLevel },
+        ...smoothingValue === void 0 ? {} : { smoothingValue }
+      };
+    }
+    const radius = child(fill, "radius");
+    const style = val(smoothing);
+    let cornerSmoothing;
+    if (smoothing || radius) {
+      if (smoothing?.length !== 2 || radius && radius.length !== 2 || children(fill, "smoothing").length !== 1 || children(fill, "radius").length > 1 || style !== "chamfer" && style !== "fillet")
+        return fail3("Invalid zone corner smoothing.");
+      cornerSmoothing = { style, ...radius ? { radius: number2(radius) } : {} };
+    }
+    const priority = child(n, "priority");
+    const priorityValue = priority ? Number(val(priority)) : void 0;
+    if (priority && (children(n, "priority").length !== 1 || priority.length !== 2 || !/^\d+$/.test(val(priority)) || !Number.isInteger(priorityValue) || priorityValue > maxPCBZonePriority))
+      fail3("Invalid zone priority.");
+    const islandAreas = children(fill, "island_area_min");
+    const islandArea = islandAreas[0];
+    if (islandArea && (islandAreas.length !== 1 || islandArea.length !== 2))
+      fail3("Invalid minimum island area.");
+    const [property, extraProperty] = children(n, "property");
+    let hatchPosition;
+    if (property) {
+      const propertyLayer = child(property, "layer");
+      const hatch = child(property, "hatch_position");
+      const xy2 = hatch && child(hatch, "xy");
+      if (extraProperty || property.length !== 3 || propertyLayer?.length !== 2 || val(propertyLayer) !== val(child(n, "layer")) || hatch?.length !== 2 || xy2?.length !== 3)
+        return fail3("Invalid or unsupported native zone layer property.");
+      hatchPosition = point2(xy2);
+    }
+    const polygons = children(n, "polygon");
+    const outlines = polygons.map((polygon) => {
+      const pts = child(polygon, "pts");
+      if (polygon.length !== 2 || !pts) return fail3("Invalid native zone polygon.");
+      return pts;
+    });
+    let nativeCircularOutline;
+    let nativeOutlineArcs;
+    const rings = outlines.map((pts) => {
+      const curved = children(pts, "arc").length > 0;
+      const outlinePoint = (p) => local(p, curved ? 9 : 6);
+      const vertices = [];
+      for (const entry of pts.slice(1)) {
+        if (Array.isArray(entry) && entry[0] === "xy" && entry.length === 3) {
+          vertices.push(outlinePoint(point2(entry)));
+          continue;
+        }
+        if (!keep || outlines.length !== 1 || !Array.isArray(entry) || entry[0] !== "arc" || entry.length !== 4 || !["start", "mid", "end"].every(
+          (name) => children(entry, name).length === 1 && child(entry, name)?.length === 3
+        ))
+          return fail3("Unsupported native zone polygon vertex or curved contour.");
+        const a = point2(child(entry, "start"));
+        const b = point2(child(entry, "mid"));
+        const c = point2(child(entry, "end"));
+        if (a.x === c.x && a.y === c.y) {
+          if (pts.length !== 2 || a.x === b.x && a.y === b.y)
+            return fail3("Invalid complete circular native rule-area outline.");
+          nativeCircularOutline = true;
+          return [outlinePoint(a), outlinePoint(b)];
+        }
+        (nativeOutlineArcs ??= []).push({ vertex: vertices.length, mid: outlinePoint(b) });
+        vertices.push(outlinePoint(a), outlinePoint(c));
+      }
+      if (vertices.length + (nativeOutlineArcs?.length ?? 0) < 3)
+        return fail3("Invalid native zone polygon vertices.");
+      return vertices;
+    });
     const filled = children(n, "filled_polygon").map((p) => {
       allow(p, ["layer", "island", "pts"], "filled polygon");
+      const islands = children(p, "island");
+      const island = islands[0];
+      if (islands.length > 1 || island && island.length !== 1 && (island.length !== 2 || !["yes", "no"].includes(val(island))))
+        fail3("Invalid zone fill island flag.");
       if (val(child(p, "layer")) !== val(child(n, "layer")))
-        fail("Filled polygon layer disagrees with its zone.");
+        fail3("Filled polygon layer disagrees with its zone.");
       const pts = child(p, "pts");
       if (pts) allow(pts, ["xy"], "filled polygon points");
       return {
-        points: points(pts).map(local),
-        ...child(p, "island") ? { island: true } : {}
+        points: points(pts).map((p2) => local(p2)),
+        ...island && val(island) !== "no" ? { island: true } : {}
       };
     });
-    if (!polygons.length) fail("Zone without outline.");
-    const placement = child(n, "placement");
-    if (placement && val(child(placement, "enabled")) !== "no")
-      fail("Enabled placement rule is unsupported.");
+    if (!polygons.length && (filled.length || keep))
+      fail3("Native zones without an outline cannot have saved fills or keepout rules.");
+    const [placement, extraPlacement] = children(n, "placement");
+    let nativePlacement;
+    if (placement) {
+      const [enabled, extraEnabled] = children(placement, "enabled");
+      if (extraPlacement || extraEnabled || enabled?.length !== 2 || !["yes", "no"].includes(val(enabled)))
+        fail3("Invalid native placement rule.");
+      if (val(enabled) === "yes") {
+        const source = placement.slice(1).find((field) => field !== enabled);
+        const sourceKind = Array.isArray(source) ? pcbPlacementSourceKinds.find((kind) => kind === source[0]) : void 0;
+        const sourceName = Array.isArray(source) ? val(source) : "";
+        if (!keep || placement.length !== 3 || !Array.isArray(source) || source.length !== 2 || !sourceKind || !sourceName || sourceName.length > 4096)
+          return fail3("Enabled native placement areas require a rule area and a named source.");
+        nativePlacement = { sourceKind, sourceName };
+      }
+    }
+    const teardrop = readPCBTeardropKind(n, fail3);
+    const thermalGap = child(fill, "thermal_gap");
+    const thermalBridge = child(fill, "thermal_bridge_width");
+    const recordId = id(n, key2);
+    const layer = val(child(n, "layer"));
     return {
-      id: id(n, key2),
-      ...nativeLocked(n) ? { locked: true } : {},
-      netId: net(n),
-      layer: val(child(n, "layer")),
-      outline: polygons[0],
-      ...polygons.length > 1 ? { holes: polygons.slice(1) } : {},
+      id: recordId,
+      ...teardrop ? { teardrop } : {},
+      ...lock(n, recordId),
+      netId,
+      layer,
+      outline: rings[0] ?? [],
+      ...nativeCircularOutline ? { nativeCircularOutline } : {},
+      ...nativeOutlineArcs ? { nativeOutlineArcs } : {},
+      ...rings.length > 1 ? { holes: rings.slice(1) } : {},
       ...filled.length ? { filledPolygons: filled } : {},
-      clearance: number(child(connection, "clearance")),
-      minThickness: number(child(n, "min_thickness")),
-      thermalGap: number(child(fill, "thermal_gap")),
-      thermalBridge: number(child(fill, "thermal_bridge_width")),
+      ...filled.length && netId === null && layer.endsWith(".Cu") ? { nativeUnassignedFill: true } : {},
+      clearance: number2(child(connection, "clearance")),
+      minThickness: number2(child(n, "min_thickness")),
+      thermalGap: teardrop && !thermalGap ? defaultPCBTeardropThermal : number2(thermalGap),
+      thermalBridge: teardrop && !thermalBridge ? defaultPCBTeardropThermal : number2(thermalBridge),
       fillEnabled: fill.includes("yes"),
-      ...child(n, "priority") ? { priority: number(child(n, "priority")) } : {},
+      ...priorityValue === void 0 ? {} : { priority: priorityValue },
       ...typeof connection[1] === "string" ? { padConnection: val(connection) } : {},
-      ...child(fill, "island_removal_mode") ? { islandRemovalMode: number(child(fill, "island_removal_mode")) } : {},
+      ...child(fill, "island_removal_mode") ? { islandRemovalMode: number2(child(fill, "island_removal_mode")) } : {},
+      ...islandArea ? { islandAreaMin: number2(islandArea) } : {},
+      ...cornerSmoothing ? { cornerSmoothing } : {},
+      ...hatchPosition ? { hatchPosition } : {},
+      ...hatchFill ? { hatchFill } : {},
+      ...nativePlacement ? { nativePlacement } : {},
       ...keep ? {
         keepout: Object.fromEntries(
           ["tracks", "vias", "pads", "copperpour", "footprints"].map((k) => [
@@ -7661,61 +9937,101 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
     Object.entries(referenceMapping).map(([original, converted]) => [converted, original])
   );
   const footprints = children(root, "footprint").map((n, fi) => {
+    if (typeof n[1] !== "string") fail3("Expected a native footprint library identity.");
     allow(
       n,
       [
+        "version",
+        "generator",
+        "generator_version",
         "layer",
         "uuid",
         "at",
         "locked",
+        "placed",
         "units",
         "solder_mask_margin",
         "solder_paste_margin",
         "solder_paste_margin_ratio",
+        ...footprintZoneOverrideNames,
         "path",
         "attr",
         "sheetname",
         "sheetfile",
         "tags",
         "property",
+        "variant",
         "duplicate_pad_numbers_are_jumpers",
+        "jumper_pad_groups",
+        "net_tie_pad_groups",
         "descr",
         "fp_line",
         "fp_rect",
         "fp_arc",
+        "fp_curve",
         "fp_circle",
         "fp_poly",
         "fp_text",
+        "fp_text_box",
+        "group",
         "point",
         "pad",
         "zone",
         "embedded_fonts",
+        "embedded_files",
+        "stackup",
         "model"
       ],
       "footprint"
     );
-    const locked = nativeLocked(n);
+    const versions = children(n, "version");
+    if (versions.length > 1 || versions[0] && (versions[0].length !== 2 || typeof versions[0][1] !== "string" || !/^\d{8}$/.test(versions[0][1]) || versions[0][1] > KICAD_PCB_VERSION))
+      fail3("Invalid or unsupported native embedded footprint format version.");
+    for (const key2 of ["generator", "generator_version"]) {
+      const fields4 = children(n, key2);
+      if (fields4.length > 1 || fields4.some((field) => field.length !== 2 || typeof field[1] !== "string" || !val(field)))
+        fail3(`Invalid native embedded footprint ${key2}.`);
+    }
+    const placed = children(n, "placed");
+    if (placed.length > 1 || placed[0] && (placed[0].length !== 2 || !["yes", "no"].includes(val(placed[0]))))
+      fail3("Invalid native footprint placement state.");
+    validateNativePCBEmbeddedFiles(n);
+    const stackups = children(n, "stackup");
+    if (stackups.length) {
+      const [stackup] = stackups;
+      const layerNames = /* @__PURE__ */ new Set();
+      if (stackups.length !== 1 || stackup.length < 2 || stackup.length > 78 || stackup.slice(1).some((item) => {
+        if (!Array.isArray(item) || item[0] !== "layer" || item.length !== 2 || typeof item[1] !== "string" || !item[1].startsWith('"'))
+          return true;
+        const layer = val(item);
+        if (layerNames.has(layer) || !layer) return true;
+        layerNames.add(layer);
+        return false;
+      }))
+        return fail3("Invalid native footprint stackup.");
+    }
+    const footprintId = id(n, `footprint:${fi}`);
     const units = child(n, "units");
     if (units) {
       allow(units, ["unit"], "footprint units");
       for (const unit of children(units, "unit")) {
         allow(unit, ["name", "pins"], "footprint unit");
         if (!child(unit, "name") || !child(unit, "pins"))
-          fail("Incomplete footprint unit metadata.");
+          fail3("Incomplete footprint unit metadata.");
       }
     }
     const referenceField = children(n, "property").find((p) => val(p) === "Reference");
-    const reference = val(referenceField, 2), value = val(
-      children(n, "property").find((p) => val(p) === "Value"),
-      2
-    );
+    const valueField = children(n, "property").find((p) => val(p) === "Value");
+    if ([referenceField, valueField].some((record2) => record2 && typeof record2[2] !== "string"))
+      fail3("Invalid native footprint caption.");
+    const reference = val(referenceField, 2), value = val(valueField, 2);
     const originalReference = reverseReferences.get(reference) ?? reference;
     const nativeSymbol = val(child(n, "path")).split("/").filter(Boolean).at(-1);
     const part = schematic.parts.find((p) => p.id === nativeSymbol) ?? schematic.parts.find((p) => p.ref === originalReference);
     const symbolPins = new Set(
       part ? children(schematic.libraries[part.libId], "symbol").flatMap((s) => children(s, "pin")).map((p) => val(child(p, "number"))) : []
     );
-    const at = point(child(n, "at")), rotation = number(child(n, "at"), 3, 0);
+    const at = point2(child(n, "at")), rotation = number2(child(n, "at"), 3, 0);
     const radians = rotation * Math.PI / 180;
     const cosine = Math.cos(radians);
     const sine = Math.sin(radians);
@@ -7738,16 +10054,25 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           "net",
           "uuid",
           "remove_unused_layers",
+          "keep_end_layers",
+          "zone_layer_connections",
+          "front_post_machining",
+          "back_post_machining",
+          "die_length",
+          "die_delay",
+          "padstack",
           "solder_mask_margin",
           "solder_paste_margin",
           "solder_paste_margin_ratio",
           "thermal_bridge_angle",
+          "teardrops",
           "roundrect_rratio",
+          "rect_delta",
           "chamfer_ratio",
           "chamfer",
           "options",
           "primitives",
-          "zone_connect",
+          ...padZoneOverrideNames,
           "pinfunction",
           "pintype",
           "property",
@@ -7756,58 +10081,93 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         "pad"
       );
       for (const key2 of ["pinfunction", "pintype"]) {
-        const fields = children(p, key2);
-        if (fields.length > 1 || fields.some((field) => field.length !== 2 || typeof field[1] !== "string"))
-          fail(`Pad has invalid ${key2} metadata.`);
+        const fields4 = children(p, key2);
+        if (fields4.length > 1 || fields4.some((field) => field.length !== 2 || typeof field[1] !== "string"))
+          fail3(`Pad has invalid ${key2} metadata.`);
       }
       const drills = children(p, "drill");
-      if (drills.length > 1) fail("A pad repeats its drill.");
-      const drill = readPadDrill(drills[0], fail);
-      const customPad = readCustomPad(p, fail);
-      const padRotation2 = angle2(number(child(p, "at"), 3, 0) - rotation);
-      const anchor = point(child(p, "at"));
+      if (drills.length > 1) fail3("A pad repeats its drill.");
+      const type = val(p, 2) === "connect" ? "smd" : val(p, 2);
+      const drill = readPadDrill(drills[0], fail3, type === "smd");
+      const shape = val(p, 3);
+      const nativeSize = point2(child(p, "size"));
+      if (nativeSize.x < 1e-6 || nativeSize.y < 1e-6)
+        fail3("Pad dimensions must be positive.");
+      const size = shape === "circle" ? { x: nativeSize.x, y: nativeSize.x } : nativeSize;
+      const customPad = readBoardCustomPad(
+        p,
+        { type, shape, size, drillOffset: drill.drillOffset },
+        fail3
+      );
+      const padRotation2 = angle2(number2(child(p, "at"), 3, 0) - rotation);
+      const anchor = point2(child(p, "at"));
       const offset2 = drill.drillOffset;
       const copper = offset2 ? footprintPoint({ ...anchor, rotation: padRotation2 }, { x: -offset2.x, y: -offset2.y }) : anchor;
+      const teardrops = readPCBTeardropSettings(p, fail3);
+      const padId = id(p, `fp:${fi}:pad:${pi}`);
+      const roundrectRatio = readPCBPadRoundRectRatio(p, fail3);
+      const trapezoidDelta = readPCBPadTrapezoidDelta(p, fail3);
+      const postMachining = readPCBPadPostMachining(p, fail3);
+      const padstack = readPCBPadstack(p, fail3);
       const result = {
-        id: id(p, `fp:${fi}:pad:${pi}`),
-        ...nativeLocked(p) ? { locked: true } : {},
+        id: padId,
+        ...lock(p, padId),
         number: val(p),
-        type: val(p, 2),
-        shape: val(p, 3),
+        type,
+        ...val(p, 2) === "connect" ? { nativeConnect: true } : {},
+        shape,
         ...copper,
         rotation: padRotation2,
         ...drill,
-        size: point(child(p, "size")),
+        size,
+        ...roundrectRatio === void 0 ? {} : { roundrectRatio },
+        ...trapezoidDelta ? { trapezoidDelta } : {},
+        ...postMachining ? { postMachining } : {},
+        ...padstack ? { padstack } : {},
         ...customPad,
-        ...readPadHeatsink(p, fail),
+        ...readPCBPadFabricationProperty(p, fail3),
+        ...readPCBPadPruning(p, fail3),
+        ...teardrops ? { teardrops } : {},
+        ...readZoneOverrides(p),
         netId: net(p),
         layers: child(p, "layers").slice(1).map((_, i) => val(child(p, "layers"), i + 1))
       };
+      validatePCBPadTrapezoid(result, fail3);
       for (const [key2, native] of [
-        ["roundrectRatio", "roundrect_rratio"],
+        ["dieLength", "die_length"],
+        ["dieDelay", "die_delay"],
         ["chamferRatio", "chamfer_ratio"],
         ["solderMaskMargin", "solder_mask_margin"],
         ["solderPasteMargin", "solder_paste_margin"],
         ["solderPasteMarginRatio", "solder_paste_margin_ratio"],
-        ["thermalBridgeAngle", "thermal_bridge_angle"],
-        ["zoneConnect", "zone_connect"]
-      ])
-        if (child(p, native)) result[key2] = number(child(p, native));
+        ["thermalBridgeAngle", "thermal_bridge_angle"]
+      ]) {
+        const fields4 = children(p, native);
+        if (!fields4.length) continue;
+        if (fields4.length !== 1 || fields4[0].length !== 2) fail3(`Invalid native pad ${native}.`);
+        result[key2] = number2(fields4[0]);
+      }
       if (child(p, "chamfer"))
         result.chamfer = child(p, "chamfer").slice(1).map((_, i) => val(child(p, "chamfer"), i + 1));
-      if (child(p, "remove_unused_layers"))
-        result.removeUnusedLayers = val(child(p, "remove_unused_layers")) === "yes";
       if (part && symbolPins.size && !symbolPins.has(result.number) && padHasElectricalPin(result)) {
         if (result.netId)
-          fail(`${originalReference} package pad ${result.number} has a net but no source pin.`);
+          fail3(`${originalReference} package pad ${result.number} has a net but no source pin.`);
         result.unconnected = true;
       }
       return result;
     });
     const graphics2 = n.filter(
-      (c) => Array.isArray(c) && !(c[0] === "property" && !child(c, "at") && !child(c, "effects")) && ["fp_line", "fp_rect", "fp_arc", "fp_circle", "fp_poly", "fp_text", "property"].includes(
-        String(c[0])
-      )
+      (c) => Array.isArray(c) && !(c[0] === "property" && !child(c, "at") && !child(c, "effects")) && [
+        "fp_line",
+        "fp_rect",
+        "fp_arc",
+        "fp_curve",
+        "fp_circle",
+        "fp_poly",
+        "fp_text",
+        "fp_text_box",
+        "property"
+      ].includes(String(c[0]))
     ).map((g, gi) => graph(g, `fp:${fi}:graphic:${gi}`, rotation));
     for (const g of graphics2) {
       if (g.text?.property === "Reference") g.text.value = "${REFERENCE}";
@@ -7819,98 +10179,208 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       const layer = child(record2, "layer");
       const uuid = child(record2, "uuid");
       if (record2.length !== 5 || position2?.length !== 3 || size?.length !== 2 || layer?.length !== 2 || uuid?.length !== 2)
-        fail("Invalid footprint reference point.");
-      const layerName = val(layer);
-      if (layerName !== "F.Fab" && layerName !== "B.Fab")
-        return fail("Footprint reference points require a fabrication layer.");
-      return { ...local(point(position2), 12), id: val(uuid), size: number(size), layer: layerName };
+        fail3("Invalid footprint reference point.");
+      const layerName = pcbBoardLayers.find((name) => name === val(layer));
+      if (!layerName) return fail3("Unsupported footprint reference point layer.");
+      return { ...local(point2(position2), 12), id: val(uuid), size: number2(size), layer: layerName };
     });
     const hasPins = part && children(schematic.libraries[part.libId], "symbol").some((s) => children(s, "pin").length);
-    if (!hasPins && !originalReference && typeof referenceField?.[2] !== "string")
-      fail("An unlinked footprint requires a native Reference property.");
+    const netTiePadGroups = readPCBNetTiePadGroups(n, pads, fail3);
+    const [jumpers, duplicateJumpers] = children(n, "jumper_pad_groups");
+    const jumperPadGroups = jumpers?.slice(1).map((group) => {
+      if (!Array.isArray(group) || group.some((item) => typeof item !== "string" || !item.startsWith('"')))
+        return fail3("Invalid native footprint jumper group.");
+      return group.map((item) => val(["pad", item]));
+    });
+    if (duplicateJumpers) return fail3("Repeated native footprint jumper groups.");
     return {
-      id: id(n, `footprint:${fi}`),
+      id: footprintId,
       symbolId: hasPins ? part.id : null,
       libraryId: val(n),
       ...at,
       rotation,
-      ...locked ? { locked: true } : {},
-      ...child(n, "solder_mask_margin") ? { solderMaskMargin: number(child(n, "solder_mask_margin")) } : {},
-      ...child(n, "solder_paste_margin") ? { solderPasteMargin: number(child(n, "solder_paste_margin")) } : {},
-      ...child(n, "solder_paste_margin_ratio") ? { solderPasteMarginRatio: number(child(n, "solder_paste_margin_ratio")) } : {},
+      ...readZoneOverrides(n, true),
+      ...lock(n, footprintId),
+      ...child(n, "solder_mask_margin") ? { solderMaskMargin: number2(child(n, "solder_mask_margin")) } : {},
+      ...child(n, "solder_paste_margin") ? { solderPasteMargin: number2(child(n, "solder_paste_margin")) } : {},
+      ...child(n, "solder_paste_margin_ratio") ? { solderPasteMarginRatio: number2(child(n, "solder_paste_margin_ratio")) } : {},
       side: val(child(n, "layer")) === "B.Cu" ? "back" : "front",
       ...!hasPins ? { reference: originalReference, value } : {},
+      ...!hasPins && !referenceField ? { nativeMissingReference: true } : {},
+      ...!hasPins && !valueField ? { nativeMissingValue: true } : {},
+      ...netTiePadGroups ? { netTiePadGroups } : {},
+      ...jumperPadGroups ? { jumperPadGroups } : {},
       pads,
       graphics: graphics2,
       ...referencePoints.length ? { referencePoints } : {},
       ...children(n, "model").length ? { models: footprintModels(n) } : {},
       ...child(n, "zone") ? {
         zones: children(n, "zone").map(
-          (z, i) => zone(z, `fp:${fi}:zone:${i}`, (p) => local(p, 6))
+          (z, i) => zone(z, `fp:${fi}:zone:${i}`, (p, digits = 6) => local(p, digits))
         )
       } : {}
     };
   });
+  const trackLayers = (n) => {
+    const [single, duplicateSingle] = children(n, "layer");
+    const [pair, duplicatePair] = children(n, "layers");
+    const [margin, duplicateMargin] = children(n, "solder_mask_margin");
+    if (duplicateSingle || duplicatePair || duplicateMargin || single && pair || (single ? single.length !== 2 || margin : !pair || pair.length !== 3))
+      return fail3("Invalid native track layers or solder mask margin.");
+    const names = (single ?? pair).slice(1).map((_, index) => val(single ?? pair, index + 1));
+    const layer = names.find((name) => name.endsWith(".Cu"));
+    if (!layer) return fail3("Native track requires a copper layer.");
+    if (!pair) return { layer };
+    const maskLayer = names.find(
+      (name) => name === "F.Mask" || name === "B.Mask"
+    );
+    if (!maskLayer || (layer !== "F.Cu" || maskLayer !== "F.Mask") && (layer !== "B.Cu" || maskLayer !== "B.Mask") || margin && (margin.length !== 2 || typeof margin[1] !== "string"))
+      return fail3("Native track solder mask must match its outer copper side.");
+    return { layer, maskLayer, ...margin ? { solderMaskMargin: number2(margin) } : {} };
+  };
+  const trackFields = [
+    "start",
+    "end",
+    "width",
+    "layer",
+    "layers",
+    "solder_mask_margin",
+    "net",
+    "uuid",
+    "locked"
+  ];
   const tracks = children(root, "segment").map((n, i) => {
-    allow(n, ["start", "end", "width", "layer", "net", "uuid", "locked"], "track");
-    const lock = children(n, "locked");
-    if (n.filter((entry) => entry === "locked").length > 1 || lock.length > 1 || lock.length && n.includes("locked") || lock.length && (lock[0].length !== 2 || !["yes", "no"].includes(val(lock[0]))))
-      fail("Track has an invalid locked setting.");
-    const netId = net(n);
-    if (!netId) fail("Track lacks a net.");
+    allow(n, trackFields, "track");
+    const flags = children(n, "locked");
+    if (n.filter((entry) => entry === "locked").length > 1 || flags.length > 1 || flags.length && n.includes("locked") || flags.length && (flags[0].length !== 2 || !["yes", "no"].includes(val(flags[0]))))
+      fail3("Track has an invalid locked setting.");
+    const netId = net(n) ?? "";
+    const recordId = id(n, `track:${i}`);
     return {
-      id: id(n, `track:${i}`),
-      start: point(child(n, "start")),
-      end: point(child(n, "end")),
-      width: number(child(n, "width")),
-      layer: val(child(n, "layer")),
+      id: recordId,
+      start: point2(child(n, "start")),
+      end: point2(child(n, "end")),
+      width: number2(child(n, "width")),
+      ...trackLayers(n),
       netId,
-      ...n.includes("locked") || val(lock[0]) === "yes" ? { locked: true } : {}
+      ...lock(n, recordId, n.includes("locked") || val(flags[0]) === "yes")
     };
   });
+  const arcTracks = children(root, "arc").map((n, i) => {
+    allow(n, [...trackFields, "mid"], "arc track");
+    const netId = net(n) ?? "";
+    const recordId = id(n, `arcTrack:${i}`);
+    return {
+      id: recordId,
+      start: point2(child(n, "start")),
+      mid: point2(child(n, "mid")),
+      end: point2(child(n, "end")),
+      width: number2(child(n, "width")),
+      ...trackLayers(n),
+      netId,
+      ...lock(n, recordId)
+    };
+  });
+  const layers = (child(root, "layers") ?? []).filter((l) => Array.isArray(l) && val(l, 1).endsWith(".Cu")).map((l) => val(l, 1));
+  if (!isPCBCopperStack(layers)) return fail3("Expected 2 to 32 ordered KiCad copper layers.");
   const vias = children(root, "via").map((n, i) => {
     allow(
       n,
-      ["at", "size", "drill", "layers", "net", "uuid", "free", "remove_unused_layers", "locked"],
+      [
+        "at",
+        "size",
+        "drill",
+        "backdrill",
+        "tertiary_drill",
+        "layers",
+        "net",
+        "uuid",
+        "free",
+        "remove_unused_layers",
+        "keep_end_layers",
+        "start_end_only",
+        "zone_layer_connections",
+        "locked",
+        "capping",
+        "covering",
+        "plugging",
+        "filling",
+        "tenting",
+        "teardrops",
+        "padstack"
+      ],
       "via"
     );
+    const span = readPCBViaSpan(n, layers, fail3);
+    const backdrills = readPCBViaBackdrills(n, fail3);
+    const treatment = readPCBViaTreatment(n, fail3);
+    const padstack = readPCBViaPadstack(n, fail3);
+    const free = readPCBViaFlag(n, "free", fail3, true);
     const netId = net(n);
-    if (!netId) fail("Via lacks a net.");
-    if (JSON.stringify(
-      child(n, "layers")?.slice(1).map((_, i2) => val(child(n, "layers"), i2 + 1))
-    ) !== JSON.stringify(["F.Cu", "B.Cu"]))
-      fail("Only through vias are supported.");
+    const teardrops = readPCBTeardropSettings(n, fail3);
+    const tenting = readPCBViaTenting(n, fail3);
+    const recordId = id(n, `via:${i}`);
     return {
-      id: id(n, `via:${i}`),
-      ...nativeLocked(n) ? { locked: true } : {},
-      ...point(child(n, "at")),
-      diameter: number(child(n, "size")),
-      drill: number(child(n, "drill")),
-      netId
+      id: recordId,
+      ...span ? { span } : {},
+      ...backdrills ? { backdrills } : {},
+      ...treatment ? { treatment } : {},
+      ...padstack ? { padstack } : {},
+      ...free !== void 0 ? { free } : {},
+      ...readPCBViaPruning(n, fail3),
+      ...teardrops ? { teardrops } : {},
+      ...tenting ? { tenting } : {},
+      ...lock(n, recordId),
+      ...point2(child(n, "at")),
+      diameter: number2(child(n, "size")),
+      drill: number2(child(n, "drill")),
+      netId: netId ?? ""
     };
   });
   const zones = children(root, "zone").map((n, i) => zone(n, `zone:${i}`));
   const graphics = root.filter(
-    (n) => Array.isArray(n) && (String(n[0]).startsWith("gr_") || n[0] === "dimension")
+    (n) => Array.isArray(n) && (String(n[0]).startsWith("gr_") || n[0] === "dimension" || n[0] === "point")
   ).map((n, i) => graph(n, `graphic:${i}`));
-  const layers = child(root, "layers").filter((l) => Array.isArray(l) && val(l, 1).endsWith(".Cu")).map((l) => val(l, 1));
+  const referenceImages = children(root, "image");
+  pcbReferenceImages(referenceImages);
+  const barcodes = children(root, "barcode");
+  pcbBarcodes(barcodes);
+  const nativeTables = children(root, "table");
+  pcbTableDrawings(nativeTables);
+  const tuningPatterns = children(root, "generated");
+  if (tuningPatterns.length)
+    validateNativePCBTuningPatterns(
+      tuningPatterns,
+      tracks.concat(arcTracks),
+      layers,
+      children(root, "group")
+    );
+  const thickness = child(child(root, "general") ?? [], "thickness");
   const board = {
     id: stable("board"),
-    thickness: number(child(child(root, "general"), "thickness")),
+    thickness: thickness ? number2(thickness) : 1.6,
     layers,
     nets: [...nets].map(([name, id2]) => ({ id: id2, name })),
     footprints,
     tracks,
+    ...arcTracks.length ? { arcTracks } : {},
+    ...tuningPatterns.length ? { tuningPatterns } : {},
+    ...referenceImages.length ? { referenceImages } : {},
+    ...barcodes.length ? { barcodes } : {},
+    ...nativeTables.length ? { nativeTables } : {},
+    ...groupLocks.length ? { groupLocks: groupLocks.sort() } : {},
     vias,
     graphics,
     zones
   };
   return {
     board,
+    normalized,
+    nativeRectangleIds,
     audit: {
       footprints: footprints.length,
       pads: footprints.reduce((n, f) => n + f.pads.length, 0),
-      tracks: tracks.length,
+      tracks: tracks.length + arcTracks.length,
       vias: vias.length,
       zones: zones.length + footprints.reduce((n, f) => n + (f.zones?.length ?? 0), 0),
       graphics: graphics.length + footprints.reduce((n, f) => n + f.graphics.length, 0),
@@ -7967,8 +10437,13 @@ var pcbDesignRuleScopes = {
   ],
   clearance: ["pcb.short", "pcb.clearance"],
   edge: ["pcb.outline", "pcb.copper-edge"],
-  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
-  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing", "pcb.holes-co-located"],
+  silkscreen: [
+    "pcb.silk-clearance",
+    "pcb.silk-edge",
+    "pcb.silk-text-height",
+    "pcb.silk-text-thickness"
+  ],
   courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
   keepouts: ["pcb.keepout"],
   connectivity: ["pcb.unrouted"]
@@ -8048,8 +10523,8 @@ var documentPinKey = (component, pin) => JSON.stringify([component, pin]);
 var documentPhysicalPinKey = (reference, pin) => `physical:${JSON.stringify([reference, pin])}`;
 function projectNetGroups(circuit) {
   const owned = isOwnedCircuit(circuit);
-  const cached = owned ? ownedGroups.get(circuit) : void 0;
-  if (cached) return copyGroups(cached);
+  const cached2 = owned ? ownedGroups.get(circuit) : void 0;
+  if (cached2) return copyGroups(cached2);
   const groups = groupCircuit(circuit);
   if (owned) {
     ownedGroups.set(circuit, groups);
@@ -8091,14 +10566,14 @@ function groupCircuit(circuit, joinNames = true) {
     const definitions2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
     const positions = pinPositions(part, library);
     definitions2.forEach((pin, i) => {
-      const index = add(positions[i]), number5 = val(child(pin, "number"));
-      const key2 = JSON.stringify([part.ref, number5]);
+      const index = add(positions[i]), number6 = val(child(pin, "number"));
+      const key2 = JSON.stringify([part.ref, number6]);
       const previous = physical.get(key2);
       if (previous !== void 0) join(index, previous);
       physical.set(key2, index);
       pins.push(
-        { key: documentPinKey(part.id, number5), index },
-        { key: documentPhysicalPinKey(part.ref, number5), index }
+        { key: documentPinKey(part.id, number6), index },
+        { key: documentPhysicalPinKey(part.ref, number6), index }
       );
       if (child(library, "power") && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
@@ -8201,8 +10676,8 @@ var ownedOrderedDrawings = /* @__PURE__ */ new WeakMap();
 var ownedNetworkDrawings = /* @__PURE__ */ new WeakMap();
 function packDrawing(item, order, reuse) {
   if (!reuse || !isOwnedProjectNode(item)) return { ...item, order };
-  const cached = ownedOrderedDrawings.get(item);
-  if (cached?.order === order) return cached.packet;
+  const cached2 = ownedOrderedDrawings.get(item);
+  if (cached2?.order === order) return cached2.packet;
   const packet = ownProjectData({ ...item, order });
   ownedOrderedDrawings.set(item, { order, packet });
   return packet;
@@ -8210,12 +10685,12 @@ function packDrawing(item, order, reuse) {
 function retainNetworkDrawing(drawing, reuse) {
   const first = drawing.wires?.[0] ?? drawing.labels?.[0] ?? drawing.junctions?.[0];
   if (!reuse || !first || !isOwnedProjectNode(first)) return drawing;
-  const cached = ownedNetworkDrawings.get(first);
-  if (cached && ["wires", "junctions", "labels"].every((key2) => {
-    const before = cached[key2] ?? [], after = drawing[key2] ?? [];
+  const cached2 = ownedNetworkDrawings.get(first);
+  if (cached2 && ["wires", "junctions", "labels"].every((key2) => {
+    const before = cached2[key2] ?? [], after = drawing[key2] ?? [];
     return before.length === after.length && before.every((item, index) => item === after[index]);
   }))
-    return cached;
+    return cached2;
   const owned = ownProjectData(drawing);
   ownedNetworkDrawings.set(first, owned);
   return owned;
@@ -8227,8 +10702,8 @@ var vector = (value, n) => value.x === n && value.y === n && value.z === n;
 var ownedPackedFootprints = /* @__PURE__ */ new WeakMap();
 function packFootprint(footprint, order, shareGeometry = false) {
   const reusable = shareGeometry && isOwnedProjectNode(footprint);
-  const cached = reusable ? ownedPackedFootprints.get(footprint) : void 0;
-  if (cached?.order === order) return cached;
+  const cached2 = reusable ? ownedPackedFootprints.get(footprint) : void 0;
+  if (cached2?.order === order) return cached2;
   const {
     symbolId: _symbolId,
     models: models3,
@@ -8262,20 +10737,20 @@ var ownedBoardNetworks = /* @__PURE__ */ new WeakMap();
 var ownedCopperRecords = /* @__PURE__ */ new WeakMap();
 var ownedNetPackets = /* @__PURE__ */ new WeakMap();
 function packCopper(item, order) {
-  const cached = ownedCopperRecords.get(item);
-  if (cached?.order === order) return cached.packet;
+  const cached2 = ownedCopperRecords.get(item);
+  if (cached2?.order === order) return cached2.packet;
   const { netId: _netId, ...data } = item;
   const packet = ownProjectData({ ...data, order });
   ownedCopperRecords.set(item, { order, packet });
   return packet;
 }
 function retainNetPacket(net, packet) {
-  const cached = ownedNetPackets.get(net);
-  if (cached?.order === packet.order && ["tracks", "vias", "zones"].every((key2) => {
-    const previous = cached[key2] ?? [], next = packet[key2] ?? [];
+  const cached2 = ownedNetPackets.get(net);
+  if (cached2?.order === packet.order && ["tracks", "arcTracks", "vias", "zones"].every((key2) => {
+    const previous = cached2[key2] ?? [], next = packet[key2] ?? [];
     return previous.length === next.length && previous.every((item, index) => item === next[index]);
   }))
-    return cached;
+    return cached2;
   const owned = ownProjectData(packet);
   ownedNetPackets.set(net, owned);
   return owned;
@@ -8283,11 +10758,11 @@ function retainNetPacket(net, packet) {
 var ownedBoardDocuments = /* @__PURE__ */ new WeakMap();
 function packComponent(component) {
   const reusable = isOwnedProjectNode(component);
-  const cached = reusable ? ownedPackedComponents.get(component) : void 0;
-  if (cached) return { ...cached };
+  const cached2 = reusable ? ownedPackedComponents.get(component) : void 0;
+  if (cached2) return { ...cached2 };
   const copy = structuredClone(component);
   const simulation = { ...copy.simulation };
-  const fields = {};
+  const fields4 = {};
   const nativeNames = new Map(
     Object.entries(simulationFieldNames).map(([key2, name]) => [
       name,
@@ -8297,7 +10772,7 @@ function packComponent(component) {
   for (const [key2, value] of Object.entries(copy.fields ?? {})) {
     if (nativeNames.has(key2)) simulation[nativeNames.get(key2)] = value;
     else if (key2.startsWith("Sim.")) (simulation.fields ??= {})[key2] = value;
-    else fields[key2] = value;
+    else fields4[key2] = value;
   }
   const flags = copy.kicad?.filter((node) => node[0] === "exclude_from_sim") ?? [];
   if (flags.length > 1)
@@ -8313,7 +10788,7 @@ function packComponent(component) {
   delete copy.simulation;
   const result = {
     ...copy,
-    ...Object.keys(fields).length ? { fields } : {},
+    ...Object.keys(fields4).length ? { fields: fields4 } : {},
     ...Object.keys(simulation).length ? { simulation } : {}
   };
   const originalOrder = Object.keys(component.fields ?? {});
@@ -8330,31 +10805,31 @@ function packComponent(component) {
 function unpackComponent(component) {
   const { footprints: _footprints, ...schematic } = component;
   const { simulation, fieldOrder, ...body } = structuredClone(schematic);
-  const fields = { ...body.fields };
+  const fields4 = { ...body.fields };
   if (simulation?.nativeOrder !== void 0 && (simulation.excluded === void 0 || simulation.nativeOrder > (body.kicad?.length ?? 0)))
     invalid(`${component.reference}: invalid simulation native metadata order.`);
   for (const [key2, name] of Object.entries(simulationFieldNames)) {
     const value = simulation?.[key2];
     if (value !== void 0) {
-      if (Object.hasOwn(fields, name))
+      if (Object.hasOwn(fields4, name))
         invalid(`${component.reference}: duplicate simulation field ${name}.`);
-      fields[name] = value;
+      fields4[name] = value;
     }
   }
   for (const [name, value] of Object.entries(simulation?.fields ?? {})) {
     if (Object.values(simulationFieldNames).includes(
       name
-    ) || !name.startsWith("Sim.") || Object.hasOwn(fields, name))
+    ) || !name.startsWith("Sim.") || Object.hasOwn(fields4, name))
       invalid(`${component.reference}: invalid simulation field ${name}.`);
-    fields[name] = value;
+    fields4[name] = value;
   }
-  if (simulation?.valueFormat && Object.hasOwn(fields, "Sim.Params"))
+  if (simulation?.valueFormat && Object.hasOwn(fields4, "Sim.Params"))
     invalid(`${component.reference}: simulation.valueFormat replaces Sim.Params; edit value only.`);
-  const result = { ...body, ...Object.keys(fields).length ? { fields } : {} };
+  const result = { ...body, ...Object.keys(fields4).length ? { fields: fields4 } : {} };
   if (fieldOrder) {
-    if (new Set(fieldOrder).size !== fieldOrder.length || fieldOrder.length !== Object.keys(fields).length || fieldOrder.some((name) => !Object.hasOwn(fields, name)))
+    if (new Set(fieldOrder).size !== fieldOrder.length || fieldOrder.length !== Object.keys(fields4).length || fieldOrder.some((name) => !Object.hasOwn(fields4, name)))
       invalid(`${component.reference}: fieldOrder must name each stored field exactly once.`);
-    result.fields = Object.fromEntries(fieldOrder.map((name) => [name, fields[name]]));
+    result.fields = Object.fromEntries(fieldOrder.map((name) => [name, fields4[name]]));
   }
   if (simulation?.valueFormat !== void 0)
     result.simulation = { valueFormat: simulation.valueFormat };
@@ -8430,8 +10905,8 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
     }
     if (board2) {
       if (!cachedNetworks)
-        for (const key2 of ["tracks", "vias", "zones"])
-          board2[key2].forEach((item, order) => {
+        for (const key2 of ["tracks", "arcTracks", "vias", "zones"])
+          board2[key2]?.forEach((item, order) => {
             if (!item.netId) return;
             const net = byId.get(item.netId);
             let packet;
@@ -8466,9 +10941,9 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
         const source = components[index];
         if (!isOwnedProjectNode(source)) return component;
         if (!component.footprints) return ownedPackedComponents.get(source);
-        const cached = ownedAttachedComponents.get(source);
-        if (cached && cached.footprints.length === component.footprints.length && cached.footprints.every((footprint, index2) => footprint === component.footprints[index2]))
-          return cached.component;
+        const cached2 = ownedAttachedComponents.get(source);
+        if (cached2 && cached2.footprints.length === component.footprints.length && cached2.footprints.every((footprint, index2) => footprint === component.footprints[index2]))
+          return cached2.component;
         const owned = ownProjectData(component);
         ownedAttachedComponents.set(source, { footprints: owned.footprints, component: owned });
         return owned;
@@ -8479,18 +10954,40 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
   const { schematic, pcb, additionalSchematics } = document2;
   let board;
   if (pcb) {
-    const cached = shareGeometry ? ownedBoardDocuments.get(pcb) : void 0;
-    board = cached ?? { id: pcb.id, thickness: pcb.thickness, layers: pcb.layers };
-    if (!cached) {
+    const cached2 = shareGeometry ? ownedBoardDocuments.get(pcb) : void 0;
+    board = cached2 ?? { id: pcb.id, thickness: pcb.thickness, layers: pcb.layers };
+    if (!cached2) {
       const footprints = pcb.footprints.flatMap(
         (footprint, order) => footprint.symbolId ? [] : [packFootprint(footprint, order, shareGeometry)]
       );
       const zones = pcb.zones.flatMap(
         ({ netId, ...zone }, order) => netId ? [] : [{ ...zone, order }]
       );
+      const vias = pcb.vias.flatMap(
+        ({ netId, ...via }, order) => netId ? [] : [{ ...via, order }]
+      );
+      const tracks = pcb.tracks.flatMap(
+        ({ netId, ...track }, order) => netId ? [] : [{ ...track, order }]
+      );
+      if (tracks.length) board.tracks = tracks;
+      const arcTracks = pcb.arcTracks?.flatMap(
+        ({ netId, ...track }, order) => netId ? [] : [{ ...track, order }]
+      );
+      if (arcTracks?.length) board.arcTracks = arcTracks;
+      if (vias.length) board.vias = vias;
       if (footprints.length) board.footprints = footprints;
       if (pcb.graphics.length)
         board.graphics = shareGeometry ? pcb.graphics : structuredClone(pcb.graphics);
+      if (pcb.tuningPatterns?.length)
+        board.tuningPatterns = shareGeometry ? pcb.tuningPatterns : structuredClone(pcb.tuningPatterns);
+      if (pcb.referenceImages?.length)
+        board.referenceImages = shareGeometry ? pcb.referenceImages : structuredClone(pcb.referenceImages);
+      if (pcb.barcodes?.length)
+        board.barcodes = shareGeometry ? pcb.barcodes : structuredClone(pcb.barcodes);
+      if (pcb.nativeTables?.length)
+        board.nativeTables = shareGeometry ? pcb.nativeTables : structuredClone(pcb.nativeTables);
+      if (pcb.groupLocks?.length)
+        board.groupLocks = shareGeometry ? pcb.groupLocks : [...pcb.groupLocks];
       if (zones.length) board.zones = shareGeometry ? zones : structuredClone(zones);
       if (shareGeometry) {
         board = ownProjectData(board);
@@ -8626,16 +11123,16 @@ function documentTexts(root) {
 }
 function toEditorDocument(project, reuseOwnedGeometry = false) {
   const reusable = reuseOwnedGeometry && isOwnedCircuit(project.schematic);
-  const cached = reusable ? ownedSheetDocuments.get(project.schematic) : void 0;
-  if (cached) return projectDocumentFields(project, reuseOwnedGeometry, cached);
+  const cached2 = reusable ? ownedSheetDocuments.get(project.schematic) : void 0;
+  if (cached2) return projectDocumentFields(project, reuseOwnedGeometry, cached2);
   const root = materializedCircuitTree(project.schematic);
   const parts = new Map(project.schematic.parts.map((part) => [part.id, part]));
   const componentOwners = /* @__PURE__ */ new Map();
   const drawingOwners = /* @__PURE__ */ new Map();
   const drawing = (node, create) => {
     const owned = reusable && isOwnedProjectNode(node);
-    const cached2 = owned ? ownedDrawingDocuments.get(node) : void 0;
-    if (cached2) return cached2;
+    const cached3 = owned ? ownedDrawingDocuments.get(node) : void 0;
+    if (cached3) return cached3;
     const value = create();
     if (owned) drawingOwners.set(value, node);
     return value;
@@ -8876,6 +11373,42 @@ function rememberNativeSourceJson(file, encode) {
 
 // lib/pcb.ts
 var fmt2 = (n) => String(Number(n.toFixed(12)));
+function hasNativePCBTableOutput(board) {
+  return (board.nativeTables ?? []).some((table) => {
+    const layer = val(child(table, "layer"));
+    return layer === "Edge.Cuts" || /\.(?:Cu|SilkS|Mask|Paste)$/.test(layer);
+  });
+}
+function hasPCBTrackMask(board) {
+  return board.tracks.some((track) => track.maskLayer) || Boolean(board.arcTracks?.some((track) => track.maskLayer));
+}
+function isNativePCBEdgeCutFill(zone) {
+  return zone.layer === "Edge.Cuts" && Boolean(zone.filledPolygons?.length);
+}
+function pcbTrackMaskOpeningWidth(track) {
+  return track.maskLayer && track.solderMaskMargin !== void 0 ? Math.max(0, track.width + 2 * track.solderMaskMargin) : 0;
+}
+function hasNativePCBPadMachining(board) {
+  return board.footprints.some(
+    (footprint) => footprint.pads.some(
+      (pad) => pad.postMachining || pad.fabricationProperty === "pad_prop_pressfit"
+    )
+  );
+}
+function hasPCBGraphicMask(board) {
+  return board.graphics.some((graphic) => graphic.maskLayer) || board.footprints.some((footprint) => footprint.graphics.some((graphic) => graphic.maskLayer));
+}
+var ownedNativeCustomPadBoards = /* @__PURE__ */ new WeakMap();
+function hasNativeCustomPads(board) {
+  const owned = isOwnedProjectNode(board.footprints);
+  const cached2 = owned ? ownedNativeCustomPadBoards.get(board.footprints) : void 0;
+  if (cached2 !== void 0) return cached2;
+  const hasNative = board.footprints.some(
+    (footprint) => footprint.pads.some((pad) => pad.nativeCustomPad)
+  );
+  if (owned) ownedNativeCustomPadBoards.set(board.footprints, hasNative);
+  return hasNative;
+}
 function resolvePCBGraphic(g, reference, value) {
   if (!g.text) return g;
   const text2 = g.text.property === "Reference" ? reference : g.text.property === "Value" ? value : g.text.value.replaceAll("${REFERENCE}", reference).replaceAll("${VALUE}", value);
@@ -8894,8 +11427,8 @@ function boardSource(board, schematic) {
       return part ? [part.id, part.ref, part.value] : null;
     })
   ]) : "";
-  const cached = owned ? ownedBoardSources.get(board) : void 0;
-  if (cached?.symbols === symbols) return cached;
+  const cached2 = owned ? ownedBoardSources.get(board) : void 0;
+  if (cached2?.symbols === symbols) return cached2;
   const chunks = serializePCBContent(board, schematic, parts);
   const result = {
     symbols,
@@ -8917,49 +11450,107 @@ function materializedPCBTree(board, schematic) {
     let node = chunk.tree;
     if (!node) {
       const source = chunk.source + (index ? "" : ")");
-      node = owned ? parseOwnedSExpr(source) : parseSExpr(source);
+      const parse = owned ? parseOwnedSExpr : parseSExpr;
+      node = parse(source, MAX_NATIVE_PCB_BYTES, MAX_NATIVE_PCB_NODES);
       if (owned) chunk.tree = node;
     }
     if (index) tree.push(node);
     else tree.push(...node);
   }
-  if (owned) snapshot.tree = ownProjectData(tree);
+  if (owned) snapshot.tree = ownProjectData(tree, void 0, MAX_NATIVE_PCB_NODES);
   return snapshot.tree ?? tree;
 }
 function serializePCBContent(board, schematic, parts) {
   const reusable = isOwnedPCB(board);
   const retain = (record2, context, create) => {
     const owned = reusable && isOwnedProjectNode(record2);
-    const cached = owned ? ownedBoardChunks.get(record2) : void 0;
-    if (cached?.context === context) return cached.chunk;
+    const cached2 = owned ? ownedBoardChunks.get(record2) : void 0;
+    if (cached2?.context === context) return cached2.chunk;
     const chunk = { source: create() };
     if (owned) ownedBoardChunks.set(record2, { context, chunk });
     return chunk;
   };
   const xy2 = (p) => `${fmt2(p.x)} ${fmt2(p.y)}`;
+  const nativePolygonPoints = (vertices, arcEdges, transform = (p) => p) => {
+    const arcs = new Map(arcEdges?.map(({ vertex, mid }) => [vertex, mid]));
+    const points2 = [];
+    for (let i = 0; i < vertices.length; i++) {
+      const mid = arcs.get(i);
+      const start = xy2(transform(vertices[i]));
+      points2.push(
+        mid ? `(arc (start ${start}) (mid ${xy2(transform(mid))}) (end ${xy2(transform(vertices[++i]))}))` : `(xy ${start})`
+      );
+    }
+    return points2.join(" ");
+  };
+  const trackLayers = (track) => track.maskLayer ? `(layers ${quote(track.layer)} ${quote(track.maskLayer)})${track.solderMaskMargin === void 0 ? "" : ` (solder_mask_margin ${fmt2(track.solderMaskMargin)})`}` : `(layer ${quote(track.layer)})`;
   const netName = new Map(board.nets.map((n) => [n.id, n.name]));
-  const effects = (t) => `(effects (font (size ${xy2(t.size)}) (thickness ${fmt2(t.thickness)})${t.italic ? " (italic yes)" : ""}${t.bold ? " (bold yes)" : ""})${t.justify?.length ? ` (justify ${t.justify.join(" ")})` : ""})`;
+  const effects = (t) => `(effects (font${t.fontFace ? ` (face ${quote(t.fontFace)})` : ""} (size ${xy2(t.size)}) (thickness ${fmt2(t.thickness)})${t.lineSpacing === void 0 ? "" : ` (line_spacing ${t.lineSpacing})`}${t.italic ? " (italic yes)" : ""}${t.bold ? " (bold yes)" : ""})${t.justify?.length ? ` (justify ${t.justify.join(" ")})` : ""})`;
   const graphic = (g, prefix, footprintRotation = 0) => {
-    const tail = `(layer ${quote(g.layer)}) (uuid ${quote(g.id)})${g.locked ? " (locked yes)" : ""})`;
-    const stroke = `(stroke (width ${fmt2(g.width)}) (type ${g.stroke ?? "default"}))`;
+    const nativeLayers = g.maskLayer ? `(layers ${quote(g.layer)} ${quote(g.maskLayer)})` : `(layer ${quote(g.layer)}${g.text?.knockout ? " knockout" : ""})`;
+    const tail = `${nativeLayers}${g.netId ? ` (net ${quote(netName.get(g.netId))})` : ""}${g.solderMaskMargin === void 0 ? "" : ` (solder_mask_margin ${fmt2(g.solderMaskMargin)})`} (uuid ${quote(g.id)})${g.locked ? " (locked yes)" : ""})`;
+    if (g.kind === "point") return `(point (at ${xy2(g.start)}) (size ${fmt2(g.width)}) ${tail}`;
+    const stroke = `(stroke (width ${g.nativeNoStroke ? "-0.000001" : fmt2(g.width)}) (type ${g.stroke ?? "default"}))`;
+    if (g.textBox) {
+      const box = g.textBox;
+      const t = g.text;
+      const boundary = box.outline ? `(pts ${box.outline.map((point3) => `(xy ${xy2(point3)})`).join(" ")})` : `(start ${xy2(g.start)}) (end ${xy2(g.end)})`;
+      const angle3 = t.rotation ? ` (angle ${fmt2(t.rotation)})` : "";
+      return `(${prefix}_text_box ${quote(t.value)}${g.locked ? " (locked yes)" : ""} ${boundary} (margins ${box.margins.map(fmt2).join(" ")})${angle3} (layer ${quote(g.layer)}) (uuid ${quote(g.id)}) ${effects(t)} (border ${box.border ? "yes" : "no"}) (stroke (width ${fmt2(box.strokeWidth)}) (type ${g.stroke ?? "default"})) (knockout ${t.knockout ? "yes" : "no"})${writePCBTextRenderCache(t.renderCache)})`;
+    }
     if (g.kind === "text") {
       const t = g.text;
       const unlocked = prefix === "fp" && g.keepUpright === false ? "(unlocked yes) " : "";
-      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${unlocked}${t.hidden ? "(hide yes) " : ""}${effects(t)} ${tail}`;
+      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${unlocked}${t.hidden ? "(hide yes) " : ""}${effects(t)}${writePCBTextRenderCache(t.renderCache)} ${tail}`;
     }
     if (g.kind === "dimension") {
-      const d = g.dimension, f = d.format, s = d.style;
-      return `(dimension (type ${d.type}) (layer ${quote(g.layer)}) (uuid ${quote(g.id)})${g.locked ? " (locked yes)" : ""} (pts (xy ${xy2(g.start)}) (xy ${xy2(g.end)}))${d.height === void 0 ? "" : ` (height ${fmt2(d.height)})`}${d.leaderLength === void 0 ? "" : ` (leader_length ${fmt2(d.leaderLength)})`} (format (prefix ${quote(f.prefix)}) (suffix ${quote(f.suffix)}) (units ${f.units}) (units_format ${f.unitsFormat}) (precision ${f.precision})${f.overrideValue === void 0 ? "" : ` (override_value ${quote(f.overrideValue)})`}) (style (thickness ${fmt2(g.width)}) (arrow_length ${fmt2(s.arrowLength)}) (text_position_mode ${s.textPositionMode})${s.arrowDirection ? ` (arrow_direction ${s.arrowDirection})` : ""}${s.extensionHeight === void 0 ? "" : ` (extension_height ${fmt2(s.extensionHeight)})`} (extension_offset ${fmt2(s.extensionOffset)})${s.keepTextAligned === void 0 ? "" : ` (keep_text_aligned ${s.keepTextAligned ? "yes" : "no"})`}${s.textFrame === void 0 ? "" : ` (text_frame ${s.textFrame})`}) (gr_text ${quote(d.caption.value)} (at ${xy2(d.caption)} ${fmt2(d.caption.rotation)}) (layer ${quote(g.layer)}) ${effects(d.caption)}))`;
+      const d = g.dimension, f = d.format, s = d.style, t = d.caption;
+      const orientation = d.orientation === void 0 ? "" : ` (orientation ${d.orientation})`;
+      const suppressZeroes = f?.suppressZeroes === void 0 ? "" : ` (suppress_zeroes ${f.suppressZeroes ? "yes" : "no"})`;
+      const format2 = f ? ` (format (prefix ${quote(f.prefix)}) (suffix ${quote(f.suffix)}) (units ${f.units}) (units_format ${f.unitsFormat}) (precision ${f.precision})${suppressZeroes}${f.overrideValue === void 0 ? "" : ` (override_value ${quote(f.overrideValue)})`})` : "";
+      const caption = t ? ` (gr_text ${quote(t.value)} (at ${xy2(t)} ${fmt2(t.rotation)}) (layer ${quote(g.layer)}${t.knockout ? " knockout" : ""}) ${effects(t)}${writePCBTextRenderCache(t.renderCache)})` : "";
+      return `(dimension (type ${d.type}) (layer ${quote(g.layer)}) (uuid ${quote(g.id)})${g.locked ? " (locked yes)" : ""} (pts (xy ${xy2(g.start)}) (xy ${xy2(g.end)}))${d.height === void 0 ? "" : ` (height ${fmt2(d.height)})`}${d.leaderLength === void 0 ? "" : ` (leader_length ${fmt2(d.leaderLength)})`}${orientation}${format2} (style (thickness ${fmt2(g.width)}) (arrow_length ${fmt2(s.arrowLength)}) (text_position_mode ${s.textPositionMode})${s.arrowDirection ? ` (arrow_direction ${s.arrowDirection})` : ""}${s.extensionHeight === void 0 ? "" : ` (extension_height ${fmt2(s.extensionHeight)})`} (extension_offset ${fmt2(s.extensionOffset)})${s.keepTextAligned === void 0 ? "" : ` (keep_text_aligned ${s.keepTextAligned ? "yes" : "no"})`}${s.textFrame === void 0 ? "" : ` (text_frame ${s.textFrame})`})${caption})`;
     }
     if (g.kind === "arc")
       return `(${prefix}_arc (start ${xy2(g.start)}) (mid ${xy2(g.mid)}) (end ${xy2(g.end)}) ${stroke} ${tail}`;
+    if (g.kind === "curve")
+      return `(${prefix}_curve (pts ${[g.start, ...g.points, g.end].map((p) => `(xy ${xy2(p)})`).join(" ")}) ${stroke} ${tail}`;
     if (g.kind === "circle")
       return `(${prefix}_circle (center ${xy2(g.start)}) (end ${xy2(g.end)}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
-    if (g.kind === "polygon")
-      return `(${prefix}_poly (pts ${[g.start, ...g.points ?? [], g.end].map((p) => `(xy ${xy2(p)})`).join(" ")}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
+    if (g.roundedRectRadius !== void 0)
+      return `(${prefix}_rect (start ${xy2(g.start)}) (end ${xy2(g.points[1])}) (radius ${fmt2(g.roundedRectRadius)}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
+    if (g.kind === "polygon") {
+      const vertices = [g.start, ...g.points ?? [], g.end];
+      return `(${prefix}_poly (pts ${nativePolygonPoints(vertices, g.polygonArcs)}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
+    }
     return `(${prefix}_line (start ${xy2(g.start)}) (end ${xy2(g.end)}) ${stroke} ${tail}`;
   };
-  const zone = (z, transform = (p) => p) => `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)})${z.locked ? " (locked yes)" : ""} (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key2, disabled]) => `(${key2} ${disabled ? "not_allowed" : "allowed"})`).join(" ")}) (placement (enabled no) (sheetname ""))` : ""} (fill${z.fillEnabled === false ? "" : " yes"} (thermal_gap ${fmt2(z.thermalGap)}) (thermal_bridge_width ${fmt2(z.thermalBridge)})${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}) ${[z.outline, ...z.holes ?? []].map((outline) => `(polygon (pts ${outline.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join(" ")}${(z.filledPolygons ?? []).map((polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island)" : ""} (pts ${polygon.points.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join("")})`;
+  const zone = (z, transform = (p) => p) => {
+    const attribute = z.teardrop ? ` (attr (teardrop (type ${z.teardrop})))` : z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key2, disabled]) => `(${key2} ${disabled ? "not_allowed" : "allowed"})`).join(" ")})${z.nativePlacement ? ` (placement (enabled yes) (${z.nativePlacement.sourceKind} ${quote(z.nativePlacement.sourceName)}))` : ' (placement (enabled no) (sheetname ""))'}` : "";
+    const thermalGap = !z.teardrop || z.thermalGap !== defaultPCBTeardropThermal ? ` (thermal_gap ${fmt2(z.thermalGap)})` : "";
+    const thermalBridge = !z.teardrop || z.thermalBridge !== defaultPCBTeardropThermal ? ` (thermal_bridge_width ${fmt2(z.thermalBridge)})` : "";
+    const smoothing = z.cornerSmoothing ? ` (smoothing ${z.cornerSmoothing.style})${z.cornerSmoothing.radius === void 0 ? "" : ` (radius ${fmt2(z.cornerSmoothing.radius)})`}` : "";
+    const hatch = z.hatchFill && ` (mode hatch) (hatch_border_algorithm ${z.hatchFill.borderAlgorithm})${pcbZoneHatchNumericFields.flatMap(([field, key2]) => z.hatchFill?.[key2] === void 0 ? [] : [` (${field} ${fmt2(z.hatchFill[key2])})`]).join("")}`;
+    const fill = `(fill${z.fillEnabled === false ? "" : " yes"}${thermalGap}${thermalBridge}${smoothing}${hatch ?? ""}${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}${z.islandAreaMin === void 0 ? "" : ` (island_area_min ${fmt2(z.islandAreaMin)})`})`;
+    const points2 = (list2) => list2.map((p) => `(xy ${xy2(transform(p))})`).join(" ");
+    const outlines = z.nativeCircularOutline ? `(polygon (pts (arc (start ${xy2(transform(z.outline[0]))}) (mid ${xy2(transform(z.outline[1]))}) (end ${xy2(transform(z.outline[0]))}))))` : z.outline.length ? [z.outline, ...z.holes ?? []].map(
+      (outline, index) => `(polygon (pts ${nativePolygonPoints(outline, index === 0 ? z.nativeOutlineArcs : void 0, transform)}))`
+    ).join(" ") : "";
+    const contours = (z.filledPolygons ?? []).map(
+      (polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island yes)" : ""} (pts ${points2(polygon.points)}))`
+    ).join("");
+    const property = z.hatchPosition ? ` (property (layer ${quote(z.layer)}) (hatch_position (xy ${xy2(z.hatchPosition)})))` : "";
+    return `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)})${z.locked ? " (locked yes)" : ""} (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${attribute} ${fill}${property} ${outlines}${contours})`;
+  };
+  const usedUserLayers = /* @__PURE__ */ new Set([
+    ...pcbUserLayers.slice(0, 4),
+    ...board.graphics.map(({ layer }) => layer),
+    ...board.zones.map(({ layer }) => layer),
+    ...board.footprints.flatMap((footprint) => [
+      ...footprint.graphics.map(({ layer }) => layer),
+      ...(footprint.zones ?? []).map(({ layer }) => layer)
+    ])
+  ]);
   const technicalLayers = [
     [1, "F.Mask"],
     [3, "B.Mask"],
@@ -8979,16 +11570,15 @@ function serializePCBContent(board, schematic, parts) {
     [31, "F.CrtYd"],
     [33, "B.Fab"],
     [35, "F.Fab"],
-    [39, "User.1"],
-    [41, "User.2"],
-    [43, "User.3"],
-    [45, "User.4"]
+    ...pcbUserLayers.flatMap(
+      (layer, index) => usedUserLayers.has(layer) ? [[39 + 2 * index, layer]] : []
+    )
   ];
   const lines = [
     `(kicad_pcb (version ${KICAD_PCB_VERSION}) (generator "openpe") (generator_version "0.1")`,
     `  (general (thickness ${fmt2(board.thickness)})) (paper "A4")`,
     `  (title_block (title ${quote(schematic.title)}))`,
-    `  (layers (0 "F.Cu" signal)${board.layers.length === 4 ? ' (4 "In1.Cu" signal) (6 "In2.Cu" signal)' : ""} (2 "B.Cu" signal) ${technicalLayers.map(([id, name]) => `(${id} ${quote(name)} user)`).join(" ")})`,
+    `  (layers ${board.layers.map((layer) => `(${pcbNativeCopperLayerId(layer)} ${quote(layer)} signal)`).join(" ")} ${technicalLayers.map(([id, name]) => `(${id} ${quote(name)} user)`).join(" ")})`,
     "  (setup (pad_to_mask_clearance 0))",
     // The 10.0 reader still accepts declarations; retain unused named nets as well.
     ...board.nets.map((n, i) => `  (net ${i + 1} ${quote(n.name)})`)
@@ -9008,15 +11598,24 @@ function serializePCBContent(board, schematic, parts) {
           ...[
             ["solderMaskMargin", "solder_mask_margin"],
             ["solderPasteMargin", "solder_paste_margin"],
-            ["solderPasteMarginRatio", "solder_paste_margin_ratio"]
+            ["solderPasteMarginRatio", "solder_paste_margin_ratio"],
+            ...pcbFootprintZoneOverrideFields.map(([native, key2]) => [key2, native])
           ].flatMap(
             ([key2, native]) => f[key2] === void 0 ? [] : [`    (${native} ${fmt2(f[key2])})`]
           ),
           ...p ? [`    (path ${quote("/" + schematic.id + "/" + p.id)})`] : [],
           `    (attr ${f.pads.some((pad) => pad.type === "thru_hole") ? "through_hole" : "smd"})`,
+          ...f.netTiePadGroups ? [`    (net_tie_pad_groups ${f.netTiePadGroups.map(quote).join(" ")})`] : [],
+          ...f.jumperPadGroups ? [
+            `    (jumper_pad_groups ${f.jumperPadGroups.map((group) => `(${group.map(quote).join(" ")})`).join(" ")})`
+          ] : [],
           ...!f.graphics.some((g) => g.text?.property === "Reference") ? [
-            `    (property "Reference" ${quote(p?.ref ?? f.reference ?? "")} (at 0 -3 ${fmt2(f.rotation)}) (layer "${side}.SilkS") ${effects2})`,
-            `    (property "Value" ${quote(p?.value ?? f.value ?? "")} (at 0 3 ${fmt2(f.rotation)}) (layer "${side}.Fab") ${effects2})`
+            ...f.nativeMissingReference ? [] : [
+              `    (property "Reference" ${quote(p?.ref ?? f.reference ?? "")} (at 0 -3 ${fmt2(f.rotation)}) (layer "${side}.SilkS") ${effects2})`
+            ],
+            ...f.nativeMissingValue ? [] : [
+              `    (property "Value" ${quote(p?.value ?? f.value ?? "")} (at 0 3 ${fmt2(f.rotation)}) (layer "${side}.Fab") ${effects2})`
+            ]
           ] : [],
           ...f.graphics.map(
             (g) => "    " + graphic(
@@ -9026,7 +11625,7 @@ function serializePCBContent(board, schematic, parts) {
             )
           ),
           ...(f.models ?? []).map((m) => {
-            const xyz = (v) => `${xy2(v)} ${fmt2(v.z)}`;
+            const xyz = (v) => `${v.x} ${v.y} ${v.z}`;
             return `    (model ${quote(m.path)}${m.hidden ? " (hide yes)" : ""}${m.opacity !== void 0 ? ` (opacity ${fmt2(m.opacity)})` : ""} (offset (xyz ${xyz(m.offset)})) (scale (xyz ${xyz(m.scale)})) (rotate (xyz ${xyz(m.rotation)})))`;
           })
         );
@@ -9034,8 +11633,14 @@ function serializePCBContent(board, schematic, parts) {
           const layers = pad.layers ? pad.layers.map(quote).join(" ") : pad.type !== "smd" ? '"*.Cu" "*.Mask"' : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
           const extras = pad.locked ? ["(locked yes)"] : [];
           if (pad.heatsink) extras.push("(property pad_prop_heatsink)");
+          if (pad.fabricationProperty) extras.push(`(property ${pad.fabricationProperty})`);
+          if (pad.postMachining) extras.push(...writePCBPadPostMachining(pad.postMachining));
+          if (pad.dieLength !== void 0) extras.push(`(die_length ${fmt2(pad.dieLength)})`);
+          if (pad.dieDelay !== void 0) extras.push(`(die_delay ${fmt2(pad.dieDelay)})`);
           if (pad.roundrectRatio !== void 0)
             extras.push(`(roundrect_rratio ${pad.roundrectRatio})`);
+          if (pad.trapezoidDelta)
+            extras.push(`(rect_delta ${fmt2(pad.trapezoidDelta.x)} ${fmt2(pad.trapezoidDelta.y)})`);
           if (pad.chamferRatio !== void 0) extras.push(`(chamfer_ratio ${pad.chamferRatio})`);
           if (pad.solderPasteMarginRatio !== void 0)
             extras.push(`(solder_paste_margin_ratio ${pad.solderPasteMarginRatio})`);
@@ -9043,22 +11648,40 @@ function serializePCBContent(board, schematic, parts) {
             ["solderMaskMargin", "solder_mask_margin"],
             ["solderPasteMargin", "solder_paste_margin"],
             ["thermalBridgeAngle", "thermal_bridge_angle"],
-            ["zoneConnect", "zone_connect"]
+            ...pcbPadZoneOverrideFields.map(([native2, key3]) => [key3, native2])
           ])
             if (pad[key2] !== void 0) extras.push(`(${native} ${fmt2(pad[key2])})`);
           if (pad.chamfer) extras.push(`(chamfer ${pad.chamfer.join(" ")})`);
-          if (pad.outline)
+          if (pad.nativeCustomPad)
+            extras.push(
+              `(options (clearance ${pad.nativeCustomPad.clearance}) (anchor ${pad.customAnchor ?? "rect"}))`,
+              writeSExpr(["primitives", ...pad.nativeCustomPad.primitives])
+            );
+          else if (pad.outline)
             extras.push(
               `(options (clearance outline) (anchor ${pad.customAnchor ?? "rect"}))`,
               `(primitives (gr_poly (pts ${pad.outline.map((p2) => `(xy ${fmt2(p2.x)} ${fmt2(p2.y)})`).join(" ")}) (width 0) (fill yes)))`
             );
           if (pad.removeUnusedLayers !== void 0)
             extras.push(`(remove_unused_layers ${pad.removeUnusedLayers ? "yes" : "no"})`);
+          if (pad.keepEndLayers !== void 0)
+            extras.push(`(keep_end_layers ${pad.keepEndLayers ? "yes" : "no"})`);
+          if (pad.zoneLayerConnections)
+            extras.push(
+              `(zone_layer_connections${pad.zoneLayerConnections.map((layer) => ` ${quote(layer)}`).join("")})`
+            );
+          if (pad.teardrops) extras.push(writePCBTeardropSettings(pad.teardrops));
+          if (pad.padstack) extras.push(writePCBPadstack(pad.padstack));
           const offset2 = pad.drillOffset;
           const anchor = offset2 ? footprintPoint(pad, offset2) : pad;
-          const drill = pad.drill === void 0 ? "" : ` (drill ${pad.drillSlot ? `oval ${xy2(padDrillSize(pad))}` : fmt2(pad.drill)}${offset2 ? ` (offset ${fmt2(-offset2.x)} ${fmt2(-offset2.y)})` : ""})`;
+          const dimensions = pad.drill === void 0 ? [] : pad.drillSlot ? [`oval ${xy2(padDrillSize(pad))}`] : [
+            fmt2(pad.drill),
+            ...pad.nativeRoundDrillY === void 0 ? [] : [fmt2(pad.nativeRoundDrillY)]
+          ];
+          const drillFields = offset2 ? [...dimensions, `(offset ${fmt2(-offset2.x)} ${fmt2(-offset2.y)})`] : dimensions;
+          const drill = drillFields.length ? ` (drill ${drillFields.join(" ")})` : "";
           lines2.push(
-            `    (pad ${quote(pad.number)} ${pad.type} ${pad.shape} (at ${xy2(anchor)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${drill} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
+            `    (pad ${quote(pad.number)} ${pad.nativeConnect ? "connect" : pad.type} ${pad.shape} (at ${xy2(anchor)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${drill} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
           );
         }
         const radians = -f.rotation * Math.PI / 180;
@@ -9077,23 +11700,45 @@ function serializePCBContent(board, schematic, parts) {
       })
     );
   }
-  chunks.push(...board.graphics.map((g) => retain(g, "", () => "  " + graphic(g, "gr"))));
+  chunks.push(
+    ...board.graphics.map(
+      (g) => retain(g, netName.get(g.netId ?? "") ?? "", () => "  " + graphic(g, "gr"))
+    )
+  );
   for (const t of board.tracks)
     chunks.push(
       retain(
         t,
-        netName.get(t.netId),
-        () => `  (segment (start ${xy2(t.start)}) (end ${xy2(t.end)}) (width ${fmt2(t.width)}) (layer ${quote(t.layer)}) (net ${quote(netName.get(t.netId))}) (uuid ${quote(t.id)})${t.locked ? " (locked yes)" : ""})`
+        netName.get(t.netId) ?? "",
+        () => `  (segment (start ${xy2(t.start)}) (end ${xy2(t.end)}) (width ${fmt2(t.width)}) ${trackLayers(t)} (net ${t.netId ? quote(netName.get(t.netId)) : "0"}) (uuid ${quote(t.id)})${t.locked ? " (locked yes)" : ""})`
       )
     );
-  for (const v of board.vias)
+  for (const t of board.arcTracks ?? [])
+    chunks.push(
+      retain(
+        t,
+        netName.get(t.netId) ?? "",
+        () => `  (arc (start ${xy2(t.start)}) (mid ${xy2(t.mid)}) (end ${xy2(t.end)}) (width ${fmt2(t.width)}) ${trackLayers(t)} (net ${t.netId ? quote(netName.get(t.netId)) : "0"}) (uuid ${quote(t.id)})${t.locked ? " (locked yes)" : ""})`
+      )
+    );
+  for (const pattern of board.tuningPatterns ?? [])
+    chunks.push(retain(pattern, "", () => "  " + writeSExpr(pattern, 1)));
+  for (const image of board.referenceImages ?? [])
+    chunks.push(retain(image, "", () => "  " + writeSExpr(image, 1)));
+  for (const barcode of board.barcodes ?? [])
+    chunks.push(retain(barcode, "", () => "  " + writeSExpr(barcode, 1)));
+  for (const table of board.nativeTables ?? [])
+    chunks.push(retain(table, "", () => "  " + writeSExpr(table, 1)));
+  for (const v of board.vias) {
+    const netKey = netName.get(v.netId);
     chunks.push(
       retain(
         v,
-        netName.get(v.netId),
-        () => `  (via (at ${xy2(v)}) (size ${fmt2(v.diameter)}) (drill ${fmt2(v.drill)}) (layers "F.Cu" "B.Cu") (net ${quote(netName.get(v.netId))}) (uuid ${quote(v.id)})${v.locked ? " (locked yes)" : ""})`
+        netKey ?? "",
+        () => `  (via${v.span ? ` ${v.span.kind}` : ""} (at ${xy2(v)}) (size ${fmt2(v.diameter)}) (drill ${fmt2(v.drill)})${writePCBViaBackdrills(v.backdrills)} (layers ${quote(v.span?.start ?? "F.Cu")} ${quote(v.span?.end ?? "B.Cu")}) (net ${netKey === void 0 ? "0" : quote(netKey)}) (uuid ${quote(v.id)})${v.locked ? " (locked yes)" : ""}${v.free === void 0 ? "" : ` (free ${v.free ? "yes" : "no"})`}${writePCBViaPruning(v)}${v.teardrops ? ` ${writePCBTeardropSettings(v.teardrops)}` : ""}${v.tenting ? ` ${writePCBViaTenting(v.tenting)}` : ""}${v.treatment ? ` ${writePCBViaTreatment(v.treatment)}` : ""}${v.padstack ? ` ${writePCBViaPadstack(v.padstack)}` : ""})`
       )
     );
+  }
   chunks.push(
     ...board.zones.map((z) => retain(z, netName.get(z.netId ?? "") ?? "", () => "  " + zone(z)))
   );
@@ -9302,8 +11947,8 @@ var object = (properties, optional = []) => ({
   required: Object.keys(properties).filter((key2) => !optional.includes(key2)),
   additionalProperties: false
 });
-var number2 = (minimum, maximum) => ({ type: "number", minimum, maximum });
-var vector2 = (minimum, maximum) => object({ x: number2(minimum, maximum), y: number2(minimum, maximum), z: number2(minimum, maximum) });
+var number3 = (minimum, maximum) => ({ type: "number", minimum, maximum });
+var vector2 = (minimum, maximum) => object({ x: number3(minimum, maximum), y: number3(minimum, maximum), z: number3(minimum, maximum) });
 var identity = {
   type: "string",
   pattern: "^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
@@ -9318,14 +11963,14 @@ var modelCadProfileSchema = {
         type: "array",
         minItems: 3,
         maxItems: 128,
-        items: object({ x: number2(-500, 500), y: number2(-500, 500) })
+        items: object({ x: number3(-500, 500), y: number3(-500, 500) })
       }
     })
   ]
 };
 var modelCadEdgeTreatmentSchema = object({
   kind: { enum: ["chamfer", "fillet"] },
-  distanceMm: number2(0.01, 500),
+  distanceMm: number3(0.01, 500),
   edges: {
     type: "array",
     minItems: 1,
@@ -9384,7 +12029,7 @@ var modelCadObjectSchema = object(
     rotation: vector2(-360, 360),
     size: vector2(0.5, 1e3),
     material: { enum: ["aluminium", "pmma", "plastic"] },
-    opacity: number2(0.05, 1),
+    opacity: number3(0.05, 1),
     color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", minLength: 7, maxLength: 7 },
     profile: modelCadProfileSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema,
@@ -9405,7 +12050,7 @@ var checkObject = compileCapabilitySchema(modelCadObjectSchema);
 var checkModel = compileCapabilitySchema(modelCadSchema);
 var checkShape = compileCapabilitySchema(modelCadShapeSchema);
 var checkProfile = compileCapabilitySchema(modelCadProfileSchema);
-var fail2 = (message) => {
+var fail4 = (message) => {
   throw new Error(`Model CAD: ${message}`);
 };
 var epsilon = 1e-6;
@@ -9424,23 +12069,23 @@ function intersects(a, b, c, d) {
     [cdA, a, c, d],
     [cdB, b, c, d]
   ].some(
-    ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance2(point2, start, end) <= epsilon : false
+    ([area, point3, start, end]) => Math.abs(area) <= epsilon ? segmentDistance2(point3, start, end) <= epsilon : false
   );
 }
 function validateModelCadProfile(input, size) {
   const result = checkProfile(input);
-  if (!result.valid) return fail2(`Invalid profile: ${result.error}.`);
+  if (!result.valid) return fail4(`Invalid profile: ${result.error}.`);
   if (![size.x, size.y].every((n) => Number.isFinite(n) && n >= 0.5 && n <= 1e3))
-    return fail2("Profile dimensions must be between 0.5 and 1,000 mm.");
+    return fail4("Profile dimensions must be between 0.5 and 1,000 mm.");
   const profile = input;
   if (profile.kind === "circle") {
-    if (size.x !== size.y) return fail2("A circular profile must have equal X and Y diameters.");
+    if (size.x !== size.y) return fail4("A circular profile must have equal X and Y diameters.");
   } else if (profile.kind === "polygon") {
     const { points: points2 } = profile;
     for (let i = 0; i < points2.length; i++) {
       const a = points2[i], b = points2[(i + 1) % points2.length];
       if (Math.hypot(b.x - a.x, b.y - a.y) <= epsilon)
-        return fail2(
+        return fail4(
           "Polygon profile edges must have positive length; do not repeat the closing point."
         );
     }
@@ -9451,15 +12096,15 @@ function validateModelCadProfile(input, size) {
       for (let j = i + 1; j < points2.length; j++) {
         if (j === i + 1 || i === 0 && j === points2.length - 1) continue;
         if (intersects(a, b, points2[j], points2[(j + 1) % points2.length]))
-          return fail2("Polygon profiles cannot cross or touch themselves.");
+          return fail4("Polygon profiles cannot cross or touch themselves.");
       }
     }
-    if (Math.abs(area) <= epsilon) return fail2("A polygon profile must enclose positive area.");
+    if (Math.abs(area) <= epsilon) return fail4("A polygon profile must enclose positive area.");
     const xs = points2.map((p) => p.x), ys = points2.map((p) => p.y), minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     if (Math.abs(minX + maxX) > epsilon || Math.abs(minY + maxY) > epsilon)
-      return fail2("Polygon profile bounds must be centred on the local origin.");
+      return fail4("Polygon profile bounds must be centred on the local origin.");
     if (Math.abs(maxX - minX - size.x) > epsilon || Math.abs(maxY - minY - size.y) > epsilon)
-      return fail2("Polygon profile bounds must match the extrusion X and Y dimensions.");
+      return fail4("Polygon profile bounds must match the extrusion X and Y dimensions.");
   }
   return profile;
 }
@@ -9507,30 +12152,30 @@ function selectableEdges(shape) {
 }
 function validateModelCadShape(input) {
   const result = checkShape(input);
-  if (!result.valid) return fail2(`Invalid shape: ${result.error}.`);
+  if (!result.valid) return fail4(`Invalid shape: ${result.error}.`);
   let operations = 0;
   const visit = (shape, depth) => {
     if (shape.kind === "cylinder" && shape.size.x !== shape.size.y)
-      return fail2("A cylinder must have equal X and Y diameters.");
+      return fail4("A cylinder must have equal X and Y diameters.");
     if (shape.kind === "extrusion") validateModelCadProfile(shape.profile, shape.size);
     if (shape.edgeTreatment) {
       const treatment = shape.edgeTreatment;
       const selected = treatment.edges;
       const available = new Set(selectableEdges(shape).map((edge) => edge.id));
       if (selected.some((edge) => !available.has(edge)))
-        return fail2("A selected edge is unavailable on this base shape.");
+        return fail4("A selected edge is unavailable on this base shape.");
       const d = treatment.distanceMm, count = Number(selected.some((edge) => edge.includes(":top:"))) + Number(selected.some((edge) => edge.includes(":bottom:")));
       if (count * d >= shape.size.z - epsilon || 2 * d >= Math.min(shape.size.x, shape.size.y) - epsilon)
-        return fail2("The edge treatment must leave positive body height and profile area.");
+        return fail4("The edge treatment must leave positive body height and profile area.");
     }
     if (shape.kind === "boolean") {
       if (depth > 4 || ++operations > 32)
-        return fail2("Boolean geometry exceeds the supported depth or operation count.");
+        return fail4("Boolean geometry exceeds the supported depth or operation count.");
       for (const operand of shape.boolean.operands) visit(operand.shape, depth + 1);
       const bounds = booleanBounds(shape.boolean);
       for (const axis of ["x", "y", "z"])
         if (bounds.max[axis] <= bounds.min[axis] || bounds.min[axis] < -shape.size[axis] / 2 - epsilon || bounds.max[axis] > shape.size[axis] / 2 + epsilon)
-          return fail2("The Boolean envelope must contain its positive bounded result.");
+          return fail4("The Boolean envelope must contain its positive bounded result.");
     }
   };
   visit(input, 0);
@@ -9566,46 +12211,46 @@ function modelCadOperandBounds(operand) {
   for (const x of [-operand.shape.size.x / 2, operand.shape.size.x / 2])
     for (const y of [-operand.shape.size.y / 2, operand.shape.size.y / 2])
       for (const z of [-operand.shape.size.z / 2, operand.shape.size.z / 2]) {
-        const zx = cz * x - sz * y, zy = sz * x + cz * y, yx = cy * zx + sy * z, yz = -sy * zx + cy * z, point2 = {
+        const zx = cz * x - sz * y, zy = sz * x + cz * y, yx = cy * zx + sy * z, yz = -sy * zx + cy * z, point3 = {
           x: yx + operand.position.x,
           y: cx * zy - sx * yz + operand.position.y,
           z: sx * zy + cx * yz + operand.position.z
         };
         for (const axis of ["x", "y", "z"]) {
-          min[axis] = Math.min(min[axis], point2[axis]);
-          max[axis] = Math.max(max[axis], point2[axis]);
+          min[axis] = Math.min(min[axis], point3[axis]);
+          max[axis] = Math.max(max[axis], point3[axis]);
         }
       }
   return { min, max };
 }
-function booleanBounds(operation) {
-  const [target, tool] = operation.operands.map(modelCadOperandBounds);
-  if (operation.operation === "difference") return target;
+function booleanBounds(operation2) {
+  const [target, tool] = operation2.operands.map(modelCadOperandBounds);
+  if (operation2.operation === "difference") return target;
   const min = { ...target.min }, max = { ...target.max };
   for (const axis of ["x", "y", "z"]) {
-    min[axis] = operation.operation === "union" ? Math.min(min[axis], tool.min[axis]) : Math.max(min[axis], tool.min[axis]);
-    max[axis] = operation.operation === "union" ? Math.max(max[axis], tool.max[axis]) : Math.min(max[axis], tool.max[axis]);
+    min[axis] = operation2.operation === "union" ? Math.min(min[axis], tool.min[axis]) : Math.max(min[axis], tool.min[axis]);
+    max[axis] = operation2.operation === "union" ? Math.max(max[axis], tool.max[axis]) : Math.min(max[axis], tool.max[axis]);
   }
   return { min, max };
 }
 function validateModelCadObject(input) {
   const result = checkObject(input);
-  if (!result.valid) return fail2(`Invalid object: ${result.error}.`);
+  if (!result.valid) return fail4(`Invalid object: ${result.error}.`);
   const body = input;
-  if (!body.name.trim()) return fail2("An object name is required.");
+  if (!body.name.trim()) return fail4("An object name is required.");
   validateModelCadShape(modelCadShape(body));
   return body;
 }
 function validateModelCad(input) {
   const result = checkModel(input);
-  if (!result.valid) return fail2(`Invalid model: ${result.error}.`);
+  if (!result.valid) return fail4(`Invalid model: ${result.error}.`);
   const model = input;
   if (JSON.stringify(model).length > 256e3)
-    return fail2("Model parameters exceed the supported 256,000-character native limit.");
+    return fail4("Model parameters exceed the supported 256,000-character native limit.");
   const identities = /* @__PURE__ */ new Set();
   for (const body of model.objects) {
     validateModelCadObject(body);
-    if (identities.has(body.id.toLowerCase())) return fail2("Object identities must be unique.");
+    if (identities.has(body.id.toLowerCase())) return fail4("Object identities must be unique.");
     identities.add(body.id.toLowerCase());
   }
   return model;
@@ -9796,7 +12441,7 @@ function validateSimulationModels(models3) {
 import {
   createProject as createProject2,
   exportKiCadSchematicTree,
-  MAX_PROJECT_BYTES,
+  MAX_PROJECT_BYTES as MAX_PROJECT_BYTES2,
   MAX_SCHEMATIC_FILES,
   projectSchematics,
   validateProject as validateProject2
@@ -9810,7 +12455,7 @@ var MODEL_VARIABLE = "OPENPE_SIMULATION_MODELS";
 var PROJECT_NAME_VARIABLE = "OPENPE_PROJECT_NAME";
 var ext = (name, suffix) => name.toLowerCase().endsWith(suffix);
 var stem = (name) => name.replace(/\.kicad_(?:pro|sch|pcb)$/i, "");
-var fail3 = (message) => {
+var fail5 = (message) => {
   throw new Error(`Invalid KiCad project: ${message}`);
 };
 var safeName = (name) => typeof name === "string" && name.length > 0 && name.length <= 240 && !/[\\\x00-\x1f:*?"<>|]/.test(name) && name.split("/").every(
@@ -9833,12 +12478,12 @@ var nativeName = (name) => {
   ) && (/\.kicad_(?:pro|sch|pcb|dru|wks|sym|mod|jobset)$/i.test(name) || /\.(?:lib|cir|spice|dcm)$/i.test(name) || ["sym-lib-table", "fp-lib-table"].includes(segments.at(-1)));
 };
 function validateKiCadProjectFiles(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) fail3("expected project files.");
+  if (!input || typeof input !== "object" || Array.isArray(input)) fail5("expected project files.");
   const bundle = input;
   if (Object.keys(bundle).some((key2) => !["entry", "files"].includes(key2)) || !safeName(bundle.entry) || !/\.kicad_(?:pro|sch|pcb)$/i.test(bundle.entry))
-    fail3("choose a .kicad_pro, .kicad_sch or .kicad_pcb entry file.");
+    fail5("choose a .kicad_pro, .kicad_sch or .kicad_pcb entry file.");
   if (!Array.isArray(bundle.files) || !bundle.files.length || bundle.files.length > MAX_NATIVE_PROJECT_FILES)
-    fail3(`a project supports 1\u2013${MAX_NATIVE_PROJECT_FILES} text files.`);
+    fail5(`a project supports 1\u2013${MAX_NATIVE_PROJECT_FILES} text files.`);
   let total = 0;
   const names = /* @__PURE__ */ new Set();
   const checked = [];
@@ -9846,34 +12491,35 @@ function validateKiCadProjectFiles(input) {
     const owned = !!file && typeof file === "object" && isOwnedProjectNode(file);
     const cachedSize = owned ? ownedNativeFileSizes.get(file) : void 0;
     if (cachedSize === void 0 && (!file || typeof file !== "object" || Object.keys(file).some((key3) => !["name", "source", "encoding"].includes(key3)) || !safeName(file.name) || !nativeName(file.name) || typeof file.source !== "string" || file.source.includes("\0") || file.encoding !== void 0 && file.encoding !== "latin1" || file.encoding === "latin1" && (/[^\x00-\xff]/.test(file.source) || /\.kicad_(?:pro|sch|pcb)$/i.test(file.name))))
-      fail3(
+      fail5(
         "files require a contained relative name and supported KiCad text. Native project, schematic and PCB sources must be UTF-8; Latin-1 vendor sources must contain representable characters."
       );
     const key2 = file.name.toLowerCase();
-    if (names.has(key2)) fail3(`duplicate file ${file.name}.`);
+    if (names.has(key2)) fail5(`duplicate file ${file.name}.`);
     names.add(key2);
     if (ext(file.name, ".openpe.json"))
-      fail3("Private JSON snapshots are not native KiCad project files.");
+      fail5("Private JSON snapshots are not native KiCad project files.");
     const size = cachedSize ?? (file.encoding === "latin1" ? file.source.length : utf8Size(file.source));
-    if (size > MAX_PROJECT_BYTES) fail3(`${file.name} exceeds 8 MB.`);
+    const fileLimit = ext(file.name, ".kicad_pcb") ? MAX_NATIVE_PCB_BYTES : MAX_PROJECT_BYTES2;
+    if (size > fileLimit) fail5(`${file.name} exceeds ${fileLimit / 1e6} MB.`);
     total += size;
     if (owned && cachedSize === void 0) checked.push({ file, size });
   }
   for (const name of names) {
     let separator = name.indexOf("/");
     while (separator >= 0) {
-      if (names.has(name.slice(0, separator))) fail3(`file and directory names overlap at ${name}.`);
+      if (names.has(name.slice(0, separator))) fail5(`file and directory names overlap at ${name}.`);
       separator = name.indexOf("/", separator + 1);
     }
   }
-  if (total > MAX_NATIVE_PROJECT_BYTES) fail3("project text exceeds 96 MB.");
-  if (!names.has(bundle.entry.toLowerCase())) fail3("the entry file is missing.");
+  if (total > MAX_NATIVE_PROJECT_BYTES) fail5("project text exceeds 96 MB.");
+  if (!names.has(bundle.entry.toLowerCase())) fail5("the entry file is missing.");
   if (bundle.files.filter((file) => ext(file.name, ".kicad_pro")).length > 1)
-    fail3("open one KiCad project at a time.");
+    fail5("open one KiCad project at a time.");
   if (bundle.files.filter((file) => ext(file.name, ".kicad_pcb")).length > 1)
-    fail3("a project supports one PCB layout.");
+    fail5("a project supports one PCB layout.");
   if (bundle.files.filter((file) => ext(file.name, ".kicad_sch")).length > MAX_SCHEMATIC_FILES)
-    fail3(`a project supports up to ${MAX_SCHEMATIC_FILES} schematic files.`);
+    fail5(`a project supports up to ${MAX_SCHEMATIC_FILES} schematic files.`);
   for (const { file, size } of checked) ownedNativeFileSizes.set(file, size);
 }
 function projectSettings(source) {
@@ -9881,14 +12527,14 @@ function projectSettings(source) {
   try {
     parsed = JSON.parse(source);
   } catch {
-    return fail3("the .kicad_pro file must contain valid JSON.");
+    return fail5("the .kicad_pro file must contain valid JSON.");
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    return fail3("the .kicad_pro file must contain a JSON object.");
+    return fail5("the .kicad_pro file must contain a JSON object.");
   const visit = (value, depth) => {
-    if (depth > 80) fail3("project settings nesting exceeds the supported limit.");
+    if (depth > 80) fail5("project settings nesting exceeds the supported limit.");
     if (typeof value === "number" && !Number.isFinite(value))
-      fail3("project settings numbers must be finite.");
+      fail5("project settings numbers must be finite.");
     if (value && typeof value === "object")
       for (const item of Object.values(value)) visit(item, depth + 1);
   };
@@ -9899,22 +12545,22 @@ function referencedModels(settings) {
   const variables = settings.text_variables;
   if (variables === void 0) return void 0;
   if (!variables || typeof variables !== "object" || Array.isArray(variables))
-    return fail3("native text_variables must be an object.");
+    return fail5("native text_variables must be an object.");
   const value = variables[MODEL_VARIABLE];
   if (value === void 0) return void 0;
   if (typeof value !== "string")
-    return fail3("simulation model references must be a native text variable string.");
+    return fail5("simulation model references must be a native text variable string.");
   let files2;
   try {
     files2 = JSON.parse(value);
   } catch {
-    return fail3("simulation model references are invalid.");
+    return fail5("simulation model references are invalid.");
   }
   if (!Array.isArray(files2) || files2.length > 32 || files2.some((file) => typeof file !== "string"))
-    return fail3("simulation model references must list at most 32 pinned model files.");
+    return fail5("simulation model references must list at most 32 pinned model files.");
   const models3 = files2.map((file) => {
     const model = simulationModelReferenceForFile(file);
-    if (!model) return fail3(`unsupported simulation model file ${String(file)}.`);
+    if (!model) return fail5(`unsupported simulation model file ${String(file)}.`);
     return { ...model };
   });
   validateSimulationModels(models3);
@@ -9924,27 +12570,27 @@ function nativeProjectName(settings) {
   const variables = settings.text_variables;
   if (variables === void 0) return void 0;
   if (!variables || typeof variables !== "object" || Array.isArray(variables))
-    return fail3("native text_variables must be an object.");
+    return fail5("native text_variables must be an object.");
   const value = variables[PROJECT_NAME_VARIABLE];
   if (value === void 0) return void 0;
   if (typeof value !== "string" || !value.length || value.length > 4096)
-    return fail3("the project name must be a native text variable string of 1\u20134096 characters.");
+    return fail5("the project name must be a native text variable string of 1\u20134096 characters.");
   return value;
 }
 function nativeModelCad(settings) {
   const variables = settings.text_variables;
   if (variables === void 0) return void 0;
   if (!variables || typeof variables !== "object" || Array.isArray(variables))
-    return fail3("native text_variables must be an object.");
+    return fail5("native text_variables must be an object.");
   const value = variables[MODEL_CAD_NATIVE_VARIABLE];
   if (value === void 0) return void 0;
   if (typeof value !== "string" || value.length > 256e3)
-    return fail3("Model CAD parameters must be a bounded native text variable string.");
+    return fail5("Model CAD parameters must be a bounded native text variable string.");
   let input;
   try {
     input = JSON.parse(value);
   } catch {
-    return fail3("Model CAD parameters are invalid JSON.");
+    return fail5("Model CAD parameters are invalid JSON.");
   }
   return validateModelCad(input);
 }
@@ -9973,8 +12619,8 @@ function nativeFieldLayout(layout) {
 }
 function nativeSchematicFingerprint(project, circuit) {
   const owned = isOwnedProject(project) && isOwnedCircuit(circuit);
-  const cached = owned ? ownedNativeSchematicFingerprints.get(circuit) : void 0;
-  if (cached !== void 0) return cached;
+  const cached2 = owned ? ownedNativeSchematicFingerprints.get(circuit) : void 0;
+  if (cached2 !== void 0) return cached2;
   const { schematic, libraries: libraries2 } = toProjectDocument(
     { ...project, schematic: circuit, additionalSchematics: void 0, pcb: null },
     true
@@ -10000,14 +12646,14 @@ function nativeSchematicFingerprint(project, circuit) {
     components ? { ...schematic, components } : schematic,
     libraries2
   ]);
-  if (owned && fingerprint.length <= MAX_PROJECT_BYTES)
+  if (owned && fingerprint.length <= MAX_PROJECT_BYTES2)
     ownedNativeSchematicFingerprints.set(circuit, fingerprint);
   return fingerprint;
 }
 function parseFiles(bundle, owner) {
   const trustedOwner = owner && isOwnedProject(owner) && owner.nativeFiles === bundle ? owner : void 0;
-  const cached = trustedOwner ? ownedParsedFiles.get(bundle) : void 0;
-  if (cached) return cached;
+  const cached2 = trustedOwner ? ownedParsedFiles.get(bundle) : void 0;
+  if (cached2) return cached2;
   validateKiCadProjectFiles(bundle);
   const projectFile = bundle.files.find((file) => ext(file.name, ".kicad_pro"));
   if (projectFile) {
@@ -10015,7 +12661,7 @@ function parseFiles(bundle, owner) {
     readKiCadPCBDesignRuleLimits(settings);
     referencedModels(settings);
     if (settings.text_variables && typeof settings.text_variables === "object" && Object.hasOwn(settings.text_variables, "OPENPE_ENCLOSURE"))
-      fail3("unsupported retired enclosure data. Use current Model CAD objects.");
+      fail5("unsupported retired enclosure data. Use current Model CAD objects.");
     nativeModelCad(settings);
     nativeProjectName(settings);
   }
@@ -10032,8 +12678,8 @@ function parseFiles(bundle, owner) {
   const schematic = schematics[0]?.circuit ?? blankNativeSchematic(projectFile?.name ?? bundle.entry);
   const board = boardFile ? parseKiCadPCB(boardFile.source, schematic, schematic.id).board : null;
   if (projectFile && nativeModelCad(projectSettings(projectFile.source)) && !board)
-    fail3("Model CAD requires its PCB layout.");
-  if (!schematics.length && !board) fail3("no supported schematic or PCB file was found.");
+    fail5("Model CAD requires its PCB layout.");
+  if (!schematics.length && !board) fail5("no supported schematic or PCB file was found.");
   const parsed = { schematics, board, ...projectFile ? { projectFile } : {} };
   if (trustedOwner) ownedParsedFiles.set(bundle, parsed);
   return parsed;
@@ -10054,9 +12700,9 @@ function schematicProjectInstances(source, original, schematic, projectName, reu
     if (!part) continue;
     const reusable = reuseOwned && isOwnedProjectNode(part);
     const destinations = reusable ? ownedSchematicInstanceSymbols.get(part) : void 0;
-    const cached = destinations?.get(projectName);
-    if (cached && cached.original === original && cached.schematicId === schematic.id && cached.input.length === symbol.length && cached.input.every((node, index2) => node === symbol[index2])) {
-      root[root.indexOf(symbol)] = cached.symbol;
+    const cached2 = destinations?.get(projectName);
+    if (cached2 && cached2.original === original && cached2.schematicId === schematic.id && cached2.input.length === symbol.length && cached2.input.every((node, index2) => node === symbol[index2])) {
+      root[root.indexOf(symbol)] = cached2.symbol;
       continue;
     }
     const input = reusable ? symbol.slice() : void 0;
@@ -10135,30 +12781,91 @@ var boardMergeContext = (keepLayers, schematicId, schematic, board) => JSON.stri
   board.nets,
   schematic.parts.map((part) => [part.id, part.ref, part.value])
 ]);
-function mergeBoardSource(original, generated, keepLayers, schematicId, schematic, board, captureJson) {
-  const owned = isOwnedProjectNode(original);
-  let before = owned ? ownedBoardSourceTrees.get(original) : void 0;
-  if (!before) {
-    const expanded = expandNativeBoardZones(
-      owned ? parseOwnedSExpr(original.source) : parseSExpr(original.source)
-    );
-    before = owned ? ownProjectData(expanded) : expanded;
-    if (owned) {
-      ownedBoardSourceTrees.set(original, before);
+function retainNativePlacementLayers(container, placements) {
+  if (!placements.size) return;
+  const zones = new Map(children(container, "zone").map((zone) => [val(child(zone, "uuid")), zone]));
+  const replacements = /* @__PURE__ */ new Map();
+  const shared = (zone) => JSON.stringify(
+    zone.filter(
+      (field) => !Array.isArray(field) || !["layer", "uuid", "property"].includes(String(field[0]))
+    )
+  );
+  for (const [id, zone] of zones) {
+    const layers = placements.get(id);
+    if (!layers || replacements.has(zone)) continue;
+    const parts = layers.map((layer) => {
+      const part = zones.get(layer.id);
+      if (!part || val(child(part, "layer")) !== layer.layer)
+        return fail5("Edit multi-layer placement membership in Source.");
+      return part;
+    });
+    const primary = parts[0];
+    const signature = shared(primary);
+    const combined = primary.flatMap((field) => {
+      if (Array.isArray(field) && field[0] === "property") return [];
+      if (Array.isArray(field) && field[0] === "layer")
+        return [["layers", ...layers.map(({ layer }) => quote(layer))]];
+      return [field];
+    });
+    for (const part of parts) {
+      if (part !== primary && shared(part) !== signature)
+        return fail5("Edit differing layers of a native placement area in Source.");
+      combined.push(...children(part, "property"));
+      replacements.set(part, part === primary ? combined : null);
     }
   }
-  const after = isOwnedProjectNode(board) ? [...materializedPCBTree(board, schematic)] : parseSExpr(generated);
+  if (!replacements.size) return;
+  let write = 0;
+  for (const field of container) {
+    const next = Array.isArray(field) && replacements.has(field) ? replacements.get(field) : field;
+    if (next !== null && next !== void 0) container[write++] = next;
+  }
+  container.length = write;
+}
+function mergeBoardSource(original, generated, keepLayers, schematicId, schematic, board, captureJson) {
+  const owned = isOwnedProjectNode(original);
+  const cachedSource = owned ? ownedBoardSourceTrees.get(original) : void 0;
+  let retainedSource = cachedSource?.schematicId === schematicId ? cachedSource : void 0;
+  if (!retainedSource) {
+    const placements2 = /* @__PURE__ */ new Map();
+    const expanded = expandNativeBoardZones(
+      normalizeNativePCBIdentifiers(parseNativePCBSource(original.source, owned)),
+      schematicId,
+      (layers) => {
+        for (const { id } of layers) placements2.set(id, layers);
+      }
+    );
+    retainedSource = {
+      schematicId,
+      tree: owned ? ownProjectData(expanded, void 0, MAX_NATIVE_PCB_NODES) : expanded,
+      placements: placements2
+    };
+    if (owned) {
+      ownedBoardSourceTrees.set(original, retainedSource);
+    }
+  }
+  const { tree: before, placements } = retainedSource;
+  const after = isOwnedProjectNode(board) ? [...materializedPCBTree(board, schematic)] : parseNativePCBSource(generated);
   const reusable = owned && isOwnedProjectNode(board);
   const context = reusable ? boardMergeContext(keepLayers, schematicId, schematic, board) : "";
   const objects = reusable ? /* @__PURE__ */ new Map() : void 0;
   if (objects) {
     for (const item of board.footprints) objects.set(item.id, item);
     for (const item of board.tracks) objects.set(item.id, item);
+    for (const item of board.arcTracks ?? []) objects.set(item.id, item);
     for (const item of board.vias) objects.set(item.id, item);
     for (const item of board.graphics) objects.set(item.id, item);
     for (const item of board.zones) objects.set(item.id, item);
   }
-  const retained = ["setup", "paper", "title_block", "embedded_fonts"];
+  const retained = [
+    "setup",
+    "paper",
+    "title_block",
+    "embedded_fonts",
+    "embedded_files",
+    "property",
+    "variants"
+  ];
   if (keepLayers) retained.push("layers");
   for (const key2 of retained) {
     const source2 = children(before, key2);
@@ -10175,6 +12882,7 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
   if (oldGeneral && newGeneral)
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== "thickness"));
   const nativeLock = (node) => node.includes("locked") || val(child(node, "locked")) === "yes";
+  const inheritedGroupLocks = board.groupLocks?.length ? nativePCBGroupLocks(before) : void 0;
   const retain = (old, node, keys3, retainLocks = nativeLock(old) === nativeLock(node)) => {
     for (const key2 of /* @__PURE__ */ new Set([...keys3, ...retainLocks ? ["locked"] : []])) {
       const source2 = children(old, key2);
@@ -10205,9 +12913,9 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       scanFrom = position2 + 1;
       const uuid = val(child(candidate, "uuid"));
       const item = container === after ? objects?.get(uuid) : void 0;
-      const cached = item ? ownedMergedBoardNodes.get(item) : void 0;
-      if (cached?.original === original && cached.context === context) {
-        container[position2] = cached.tree;
+      const cached2 = item ? ownedMergedBoardNodes.get(item) : void 0;
+      if (cached2?.original === original && cached2.context === context) {
+        container[position2] = cached2.tree;
         continue;
       }
       const node = isOwnedProjectNode(candidate) ? [...candidate] : candidate;
@@ -10219,7 +12927,11 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
         ])
       );
       const previous = originals.get(uuid);
-      if (previous) apply(previous.node, node, previous.index);
+      if (previous) {
+        if (inheritedGroupLocks?.has(uuid.toLowerCase()) && !nativeLock(previous.node))
+          for (const flag2 of children(node, "locked")) node.splice(node.indexOf(flag2), 1);
+        apply(previous.node, node, previous.index);
+      }
       if (item) {
         const tree = ownProjectData(node);
         ownedMergedBoardNodes.set(item, { original, context, tree });
@@ -10228,21 +12940,31 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     }
   };
   const graphicNodes = (root, footprint = false) => root.filter(
-    (node) => Array.isArray(node) && (footprint ? [
+    (node) => Array.isArray(node) && (footprint ? !(node[0] === "property" && !child(node, "at") && !child(node, "effects")) && [
       "fp_line",
       "fp_rect",
       "fp_arc",
+      "fp_curve",
       "fp_circle",
       "fp_poly",
       "fp_text",
+      "fp_text_box",
       "property"
-    ].includes(String(node[0])) : String(node[0]).startsWith("gr_") || node[0] === "dimension")
+    ].includes(String(node[0])) : String(node[0]).startsWith("gr_") || node[0] === "dimension" || node[0] === "point")
   );
   const retainGraphic = (old, node) => {
     retain(old, node, []);
     if (old[0] !== "fp_text" && old[0] !== "property") return;
-    const original2 = footprintTextPlacement(old, fail3);
-    const generated2 = footprintTextPlacement(node, fail3);
+    if (isExplicitlyHiddenFootprintCaption(old) && !child(old, "effects") && isExplicitlyHiddenFootprintCaption(node) && !child(node, "render_cache") && !child(node, "layer")?.includes("knockout")) {
+      const effects = child(node, "effects");
+      const font = effects && child(effects, "font");
+      const size = font && child(font, "size");
+      const thickness = font && child(font, "thickness");
+      if (effects?.length === 2 && font?.length === 3 && Number(val(size)) === nativeFootprintCaptionDefaultSize && Number(val(size, 2)) === nativeFootprintCaptionDefaultSize && val(thickness) === "0")
+        node.splice(node.indexOf(effects), 1);
+    }
+    const original2 = footprintTextPlacement(old, fail5);
+    const generated2 = footprintTextPlacement(node, fail5);
     if (original2.unlocked !== generated2.unlocked) return;
     if (generated2.flag) node.splice(node.indexOf(generated2.flag), 1);
     if (original2.flag) node.push(original2.flag);
@@ -10250,7 +12972,7 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     if (original2.inPosition && generated2.at)
       node[node.indexOf(generated2.at)] = [...generated2.at, "unlocked"];
   };
-  const retainZone = (old, node) => retain(old, node, ["hatch", "placement", "name"]);
+  const retainZone = (old, node) => retain(old, node, ["hatch", "placement", "name", "filled_areas_thickness"]);
   matched(
     children(before, "segment"),
     children(after, "segment"),
@@ -10265,7 +12987,21 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     children(before, "via"),
     children(after, "via"),
     (i) => `via:${i}`,
-    (old, node) => retain(old, node, ["free", "remove_unused_layers"]),
+    (old, node) => retain(old, node, [
+      "free",
+      "remove_unused_layers",
+      "capping",
+      "covering",
+      "plugging",
+      "filling"
+    ]),
+    after
+  );
+  matched(
+    children(before, "arc"),
+    children(after, "arc"),
+    (i) => `arcTrack:${i}`,
+    (old, node) => retain(old, node, []),
     after
   );
   matched(children(before, "zone"), children(after, "zone"), (i) => `zone:${i}`, retainZone, after);
@@ -10275,14 +13011,25 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     children(after, "footprint"),
     (i) => `footprint:${i}`,
     (old, node, fi) => {
+      node.splice(
+        2,
+        0,
+        ...old.filter(
+          (record2) => Array.isArray(record2) && ["version", "generator", "generator_version"].includes(String(record2[0]))
+        )
+      );
       retain(old, node, [
         "attr",
+        "placed",
         "descr",
         "tags",
+        "variant",
         "sheetname",
         "sheetfile",
         "duplicate_pad_numbers_are_jumpers",
         "embedded_fonts",
+        "embedded_files",
+        "stackup",
         "units"
       ]);
       if (!child(node, "path") && child(old, "path")) node.push(child(old, "path"));
@@ -10295,7 +13042,17 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
         children(old, "pad"),
         children(node, "pad"),
         (pi) => `fp:${fi}:pad:${pi}`,
-        (oldPad, pad) => retain(oldPad, pad, ["pinfunction", "pintype"]),
+        (oldPad, pad) => {
+          retain(oldPad, pad, ["pinfunction", "pintype"]);
+          const cornerRatio = child(pad, "roundrect_rratio");
+          if (oldPad[3] === "roundrect" && pad[3] === "roundrect" && !child(oldPad, "roundrect_rratio") && cornerRatio && Number(val(cornerRatio)) === nativePCBPadRoundRectRatio)
+            pad.splice(pad.indexOf(cornerRatio), 1);
+          if (oldPad[3] !== "circle" || pad[3] !== "circle") return;
+          const oldSize = child(oldPad, "size");
+          const size = child(pad, "size");
+          if (oldSize && size && Number(val(oldSize)) === Number(val(size)) && Number(val(oldSize, 2)) !== Number(val(size, 2)))
+            pad[pad.indexOf(size)] = oldSize;
+        },
         node
       );
       matched(
@@ -10312,9 +13069,13 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
         retainGraphic,
         node
       );
+      retainNativePlacementLayers(node, placements);
+      retainNativeBoardGroups(old, node);
     },
     after
   );
+  retainNativePlacementLayers(after, placements);
+  retainNativeBoardGroups(before, after);
   const source = writeSExpr(after) + "\n";
   if (reusable) {
     if (captureJson) captureJson(() => '"' + writeSExprJsonPayload(after) + '\\n"');
@@ -10347,8 +13108,8 @@ function projectNativeFiles(project, entryName) {
 }
 function projectNativeFilesSnapshot(project, entryName) {
   const entries = ownedNativeFiles.get(project);
-  const cached = entries?.get(entryName) ?? (entryName === void 0 ? void 0 : [...entries?.values() ?? []].find((bundle2) => bundle2.entry === entryName));
-  if (cached) return cached;
+  const cached2 = entries?.get(entryName) ?? (entryName === void 0 ? void 0 : [...entries?.values() ?? []].find((bundle2) => bundle2.entry === entryName));
+  if (cached2) return cached2;
   validateProject2(project);
   const retained = project.nativeFiles;
   const parsed = retained ? parseFiles(retained, project) : void 0;
@@ -10359,7 +13120,7 @@ function projectNativeFilesSnapshot(project, entryName) {
   const defaultEntry = oldProject?.name ?? oldStem + ".kicad_pro";
   const entry = entryName ?? defaultEntry;
   if (!safeName(entry) || !ext(entry, ".kicad_pro"))
-    fail3("the save destination must be a .kicad_pro filename.");
+    fail5("the save destination must be a .kicad_pro filename.");
   const sameDestination = [...entries?.values() ?? []].find((bundle2) => bundle2.entry === entry);
   if (sameDestination) return sameDestination;
   const targetStem = stem(entry);
@@ -10482,8 +13243,8 @@ function projectNativeFilesSnapshot(project, entryName) {
     if (!unchanged || projectRenamed) {
       const projectName = targetStem.split("/").at(-1);
       const reusable = unchanged && isOwnedProject(project) && isOwnedProjectNode(previous2.file);
-      const cached2 = reusable ? ownedRenamedSchematicSources.get(schematic)?.get(projectName) : void 0;
-      if (cached2 && cached2.original === previous2?.file) source = cached2.source;
+      const cached3 = reusable ? ownedRenamedSchematicSources.get(schematic)?.get(projectName) : void 0;
+      if (cached3 && cached3.original === previous2?.file) source = cached3.source;
       else {
         source = schematicProjectInstances(
           source,
@@ -10545,8 +13306,8 @@ function projectNativeFilesSnapshot(project, entryName) {
         return file;
       if (original.name === file.name) return original;
       if (!isOwnedProjectNode(original)) return file;
-      const cached2 = ownedRenamedNativeFiles.get(original)?.get(file.name);
-      if (cached2) return cached2;
+      const cached3 = ownedRenamedNativeFiles.get(original)?.get(file.name);
+      if (cached3) return cached3;
       const renamed = ownProjectData(file);
       renamedFiles.push({ original, file: renamed });
       return renamed;
@@ -10584,8 +13345,50 @@ function projectNativeFilesSnapshot(project, entryName) {
 
 // lib/pcb-polygons.ts
 var import_clipper_lib2 = __toESM(require_clipper(), 1);
+
+// lib/pcb-clearance-sources.ts
+function nativeRuleTexts(files2) {
+  const settings = files2?.files.find(({ name }) => /\.kicad_pro$/i.test(name));
+  const ruleName = (settings?.name ?? files2?.entry)?.replace(/\.kicad_(?:pro|pcb|sch)$/i, ".kicad_dru").toLowerCase();
+  return {
+    projectSource: settings?.source,
+    rulesSource: files2?.files.find(({ name }) => name.toLowerCase() === ruleName)?.source
+  };
+}
+function pcbFillRuleContext(project) {
+  const { projectSource: source, rulesSource } = nativeRuleTexts(project.nativeFiles);
+  if (source === void 0) return { rulesSource };
+  const settings = JSON.parse(source);
+  const rules = settings.board?.design_settings?.rules;
+  const net = settings.net_settings;
+  const limits = Object.fromEntries(
+    ["min_clearance", "min_copper_edge_clearance", "min_hole_clearance"].filter((key2) => rules && Object.hasOwn(rules, key2)).map((key2) => [key2, rules[key2]])
+  );
+  if (net === void 0 && !Object.keys(limits).length) return { rulesSource };
+  const projectSource = JSON.stringify({
+    board: {
+      design_settings: {
+        rules: limits
+      }
+    },
+    net_settings: net && typeof net === "object" && !Array.isArray(net) ? {
+      classes: Array.isArray(net.classes) ? net.classes.map(
+        (entry) => entry && typeof entry === "object" && !Array.isArray(entry) ? {
+          name: entry.name,
+          clearance: entry.clearance
+        } : entry
+      ) : net.classes,
+      netclass_patterns: net.netclass_patterns,
+      netclass_assignments: net.netclass_assignments
+    } : net
+  });
+  return { projectSource, rulesSource };
+}
+
+// lib/pcb-polygons.ts
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
+var maxContourVertices = 2e4;
 var integer = (points2) => points2.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 var decimal = (points2) => points2.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
 function oriented(points2, positive = true) {
@@ -10593,6 +13396,17 @@ function oriented(points2, positive = true) {
   return import_clipper_lib2.default.Clipper.Orientation(path) === positive ? path : path.reverse();
 }
 var paths = (polygons) => polygons.flatMap((p) => [oriented(p.outer), ...p.holes.map((h) => oriented(h, false))]);
+function operation(subject, clip, type) {
+  if (!subject.length) return [];
+  const engine = new import_clipper_lib2.default.Clipper(), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(paths(subject), import_clipper_lib2.default.PolyType.ptSubject, true);
+  engine.AddPaths(paths(clip), import_clipper_lib2.default.PolyType.ptClip, true);
+  engine.Execute(type, tree, import_clipper_lib2.default.PolyFillType.pftNonZero, import_clipper_lib2.default.PolyFillType.pftNonZero);
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+    outer: decimal(p.outer),
+    holes: p.holes.map(decimal)
+  }));
+}
 function offset(polygons, amount, arcTolerance = 0.01) {
   if (!amount) return polygons;
   const engine = new import_clipper_lib2.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib2.default.PolyTree();
@@ -10607,55 +13421,218 @@ var offsetPolygons = offset;
 function circleSideCount(radius) {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
-function circlePolygon(at, radius) {
-  const count = circleSideCount(radius);
+function boundedArcSegments(sweep, radius, tolerance) {
+  if (!(radius > 0)) throw new Error("A circular contour has a degenerate radius.");
+  const segmentAngle = 4 * Math.asin(Math.sqrt(Math.min(0.5, tolerance / (2 * radius))));
+  const count = Math.ceil(Math.abs(sweep) / segmentAngle);
+  if (!Number.isSafeInteger(count) || count >= maxContourVertices)
+    throw new Error("Arc subdivision exceeds the contour vertex limit.");
+  return Math.max(1, count);
+}
+function circlePolygon(at, radius, tolerance) {
+  const count = tolerance === void 0 ? circleSideCount(radius) : Math.max(3, boundedArcSegments(2 * Math.PI, radius, tolerance));
   return Array.from({ length: count }, (_, i) => ({
     x: at.x + radius * Math.cos(i * Math.PI * 2 / count),
     y: at.y + radius * Math.sin(i * Math.PI * 2 / count)
   }));
 }
-function graphicVertices(g) {
+function strokedPath(points2, width, closed, arcTolerance = 0.01) {
+  if (points2.length < 2 || width <= 0) return [];
+  const engine = new import_clipper_lib2.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPath(
+    integer(points2),
+    import_clipper_lib2.default.JoinType.jtRound,
+    closed ? import_clipper_lib2.default.EndType.etClosedLine : import_clipper_lib2.default.EndType.etOpenRound
+  );
+  engine.Execute(tree, width * scale / 2);
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+    outer: decimal(p.outer),
+    holes: p.holes.map(decimal)
+  }));
+}
+function graphicVertices(g, curveTolerance) {
+  if (g.roundedRectRadius !== void 0) {
+    const radius = g.roundedRectRadius;
+    const count = curveTolerance === void 0 ? Math.min(512, Math.max(8, Math.ceil(Math.PI / 2 * Math.sqrt(radius / 0.01)))) : boundedArcSegments(Math.PI / 2, radius, curveTolerance);
+    if (count * 4 + 4 > maxContourVertices)
+      throw new Error("Rounded rectangle subdivision exceeds the contour vertex limit.");
+    return pcbRoundedRectArcs(g).flatMap((arc) => {
+      const angle3 = Math.atan2(arc.start.y - arc.center.y, arc.start.x - arc.center.x);
+      const step = (arc.clockwise ? 1 : -1) * Math.PI / (2 * count);
+      return [
+        arc.start,
+        ...Array.from({ length: count - 1 }, (_, index) => ({
+          x: arc.center.x + radius * Math.cos(angle3 + step * (index + 1)),
+          y: arc.center.y + radius * Math.sin(angle3 + step * (index + 1))
+        })),
+        arc.end
+      ];
+    });
+  }
   if (g.kind === "circle")
-    return circlePolygon(g.start, Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y));
-  if (g.kind === "arc") {
-    const arc = pcbArc(g);
-    if (!arc) throw new Error("The board outline contains a degenerate arc.");
-    const count = Math.min(
-      512,
-      Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01)))
+    return circlePolygon(
+      g.start,
+      Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y),
+      curveTolerance
     );
-    return Array.from({ length: count + 1 }, (_, i) => ({
-      x: arc.center.x + arc.radius * Math.cos(arc.start + arc.delta * i / count),
-      y: arc.center.y + arc.radius * Math.sin(arc.start + arc.delta * i / count)
-    }));
+  const arcVertices = (segment) => {
+    const arc = pcbArc(segment);
+    if (!arc) throw new Error("The board outline contains a degenerate arc.");
+    const count = curveTolerance === void 0 ? Math.min(512, Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01)))) : boundedArcSegments(arc.delta, arc.radius, curveTolerance);
+    return [
+      segment.start,
+      ...Array.from({ length: count - 1 }, (_, i) => ({
+        x: arc.center.x + arc.radius * Math.cos(arc.start + arc.delta * (i + 1) / count),
+        y: arc.center.y + arc.radius * Math.sin(arc.start + arc.delta * (i + 1) / count)
+      })),
+      segment.end
+    ];
+  };
+  if (g.kind === "arc") return arcVertices(g);
+  if (g.kind === "curve") return pcbBezierVertices(g, curveTolerance);
+  if (g.polygonArcs) {
+    const vertices = [g.start, ...g.points ?? [], g.end];
+    const arcs = new Map(g.polygonArcs.map(({ vertex, mid }) => [vertex, mid]));
+    const points2 = [];
+    for (let vertex = 0; vertex < vertices.length; vertex++) {
+      const start = vertices[vertex];
+      const mid = arcs.get(vertex);
+      points2.push(
+        ...mid ? arcVertices({ start, mid, end: vertices[vertex + 1] }).slice(0, -1) : [start]
+      );
+      if (curveTolerance !== void 0 && points2.length > maxContourVertices)
+        throw new Error("Arc subdivision exceeds the contour vertex limit.");
+    }
+    return points2;
   }
   return [g.start, ...g.points ?? [], g.end];
 }
-function boardPolygons(board) {
-  return prepareBoardOutline(board).polygons;
+function boundedGraphicPolygons(g, curveTolerance) {
+  if (g.text || g.dimension || g.kind === "point") return [];
+  if (curveTolerance !== void 0 && g.kind === "circle") {
+    const radius = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
+    const outer = circlePolygon(g.start, radius + g.width / 2, curveTolerance);
+    const holeRadius = radius - g.width / 2;
+    return [
+      {
+        outer,
+        holes: !g.fill && holeRadius > 0 ? [circlePolygon(g.start, holeRadius, curveTolerance)] : []
+      }
+    ];
+  }
+  const points2 = graphicVertices(g, curveTolerance);
+  const closed = g.kind === "circle" || g.kind === "polygon";
+  if (!closed || !g.fill) return strokedPath(points2, g.width, closed, curveTolerance);
+  const interior = [{ outer: points2.map((point3) => ({ ...point3 })), holes: [] }];
+  return g.width > 0 ? offset(interior, g.width / 2, curveTolerance) : interior;
 }
-function prepareBoardOutline(board) {
-  const edges = [
-    ...board.graphics.filter((g) => g.layer === "Edge.Cuts"),
+function pcbOutlineGraphics(board) {
+  return [
+    ...board.graphics.filter((graphic) => graphic.layer === "Edge.Cuts"),
     ...board.footprints.flatMap(
-      (f) => f.graphics.filter((g) => g.layer === "Edge.Cuts").map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p)))
+      (footprint) => footprint.graphics.filter((graphic) => graphic.layer === "Edge.Cuts").map(
+        (graphic) => transformPCBGraphic(graphic, (point3) => footprintPoint(footprint, point3))
+      )
     )
   ];
-  if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
-  const polygons = polygonsFromContours(closedGraphicContours(edges, "board outline"));
-  if (!polygons.length) throw new Error("The board outline does not enclose a positive area.");
-  return { edges, polygons };
 }
-function closedGraphicContours(edges, context) {
+function prepareBoardOutline(board, curveTolerance) {
+  const edges = pcbOutlineGraphics(board);
+  if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
+  const contours = closedGraphicContours(edges, "board outline", curveTolerance);
+  const polygons = polygonsFromContours(contours);
+  if (!polygons.length) throw new Error("The board outline does not enclose a positive area.");
+  return { edges, polygons, contours };
+}
+function prepareFabricationOutline(board, format2) {
+  const tolerance = 5e-4;
+  const outline = prepareBoardOutline(board, tolerance);
+  const edges = outline.edges.filter(
+    (edge) => edge.kind !== "curve" || !pcbBezierIsStationary(edge)
+  );
+  const endpointCounts = /* @__PURE__ */ new Map();
+  for (const edge of edges) {
+    if (edge.kind && edge.kind !== "arc" && edge.kind !== "curve") continue;
+    const { start, end } = edge;
+    if (!edge.kind && start.x === end.x && start.y === end.y)
+      throw new Error("The board outline contains a zero-length line.");
+    for (const { x, y } of [start, end]) {
+      const key2 = `${x},${y}`;
+      endpointCounts.set(key2, (endpointCounts.get(key2) ?? 0) + 1);
+    }
+  }
+  if ([...endpointCounts.values()].some((count) => count !== 2))
+    throw new Error(`${format2} export requires exact joins between board outline endpoints.`);
+  let operations = 0;
+  prepareBoardOutlineBoundary(outline, tolerance, () => {
+    if (++operations > 2e6)
+      throw new Error("The board outline exceeds the topology check limit.");
+  });
+  return edges;
+}
+function prepareBoardOutlineBoundary(outline, tolerance, spend) {
+  const epsilon2 = 1e-5;
+  const curved = outline.edges.some(
+    (edge) => edge.kind === "curve" || edge.kind === "arc" || edge.kind === "circle" || edge.roundedRectRadius !== void 0 || Boolean(edge.polygonArcs)
+  );
+  const precision = curved ? tolerance + polygonResolution : 0;
+  const margin = Math.max(epsilon2, 2 * precision);
+  let order = 0;
+  const edges = outline.contours.flatMap((contour, ring) => {
+    const points2 = contour.filter((point3, i) => !i || squaredDistance(point3, contour[i - 1]) > 0);
+    if (points2.length > 1 && squaredDistance(points2[0], points2.at(-1)) === 0) points2.pop();
+    if (points2.length < 3) throw new Error("The board outline contains a degenerate contour.");
+    return polygonEdges({ outer: points2, holes: [] }).map((line, position2) => ({
+      line,
+      ring,
+      position: position2,
+      order: order++,
+      size: points2.length,
+      ...edgeBounds(line)
+    }));
+  });
+  const index = makeBoundsIndex([...edges]);
+  const intersects2 = () => new Error("The board outline intersects itself or another Edge.Cuts contour.");
+  for (const edge of edges) {
+    queryBoundsIndex(
+      index,
+      edge,
+      margin,
+      (other) => {
+        if (other.order <= edge.order) return;
+        if (edge.ring === other.ring) {
+          const steps = other.position - edge.position;
+          if (steps === 1 || steps === edge.size - 1) {
+            const [previous, following] = steps === 1 ? [edge.line, other.line] : [other.line, edge.line];
+            if (pointSegmentDistance(previous[0], ...following) === 0 || pointSegmentDistance(following[1], ...previous) === 0)
+              throw intersects2();
+            return;
+          }
+        }
+        const distance = segmentDistance(...edge.line, ...other.line);
+        if (distance < epsilon2 ** 2) throw intersects2();
+        if (precision && distance < margin ** 2)
+          throw new Error(
+            "The separation of nearby board edges cannot be resolved at the curved outline precision."
+          );
+      },
+      spend
+    );
+  }
+  return { index, precision };
+}
+function closedGraphicContours(edges, context, curveTolerance) {
   if (edges.length > 5e3) throw new Error(`The ${context} exceeds the graphic limit.`);
   const loops = [], segments = [];
   let vertexCount = 0;
   for (const g of edges) {
     if (g.kind === "text" || g.kind === "dimension")
       throw new Error(`Unsupported ${context} geometry.`);
-    const pts = graphicVertices(g);
+    const pts = graphicVertices(g, curveTolerance);
+    if (g.kind === "curve" && pts.length === 2 && squaredDistance(pts[0], pts[1]) === 0) continue;
     vertexCount += pts.length;
-    if (vertexCount > 2e4) throw new Error(`The ${context} exceeds the geometry limit.`);
+    if (vertexCount > maxContourVertices)
+      throw new Error(`The ${context} exceeds the geometry limit.`);
     if (g.kind === "circle" || g.kind === "polygon") loops.push(pts);
     else segments.push(pts);
   }
@@ -10700,6 +13677,7 @@ function padPolygon(f, p) {
   const w = p.size.x, h = p.size.y;
   let local;
   if (p.outline) local = p.outline;
+  else if (p.shape === "trapezoid") local = pcbPadTrapezoid(p);
   else if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
@@ -10715,9 +13693,9 @@ function padPolygon(f, p) {
       }));
     });
     if (p.chamfer?.length)
-      local = local.filter((point2, i) => {
+      local = local.filter((point3, i) => {
         const previous = local[(i + local.length - 1) % local.length];
-        return point2.x !== previous.x || point2.y !== previous.y;
+        return point3.x !== previous.x || point3.y !== previous.y;
       });
   }
   const at = padPosition(f, p), radians = -padRotation(f, p) * Math.PI / 180;
@@ -10729,7 +13707,43 @@ function padPolygon(f, p) {
     holes: []
   };
 }
+function displayPadPolygons(footprint, pad) {
+  if (!pad.nativeCustomPad) return [padPolygon(footprint, pad)];
+  return nativePadPolygons(footprint, pad);
+}
+function nativePadPolygons(footprint, pad, curveTolerance) {
+  const anchor = nativeCustomPadAnchor(pad);
+  const placement = { ...padPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+  const geometry = [];
+  let vertices = 0;
+  for (const shape of nativeCustomPadGraphics(pad)) {
+    const polygons = boundedGraphicPolygons(
+      transformPCBGraphic(shape, (point3) => footprintPoint(placement, point3)),
+      curveTolerance
+    );
+    if (curveTolerance !== void 0 && !polygons.length)
+      throw new Error("A native custom pad primitive is below the DRC clipping resolution.");
+    for (const polygon of polygons) {
+      vertices += polygon.outer.length + polygon.holes.reduce((n, hole) => n + hole.length, 0);
+      if (curveTolerance !== void 0 && vertices > maxContourVertices)
+        throw new Error("Native custom pad exceeds the contour vertex limit.");
+      geometry.push(polygon);
+    }
+  }
+  if (anchor && anchor.shape === "circle" && curveTolerance !== void 0) {
+    geometry.push({
+      outer: circlePolygon(placement, anchor.size.x / 2, curveTolerance),
+      holes: []
+    });
+  } else if (anchor) geometry.push(padPolygon(footprint, anchor));
+  if (curveTolerance !== void 0 && geometry.some(({ outer }) => !import_clipper_lib2.default.Clipper.Area(integer(outer))))
+    throw new Error("A native custom pad contour is below the DRC clipping resolution.");
+  return operation(geometry, [], import_clipper_lib2.default.ClipType.ctUnion);
+}
+var nativePadChordTolerance = 5e-4;
+var nativeCustomPadCopperTolerance = 2 * (nativePadChordTolerance + polygonResolution);
 function offsetPadPolygons(f, pad, margin) {
+  if (pad.nativeCustomPad) return offsetPolygons(displayPadPolygons(f, pad), margin);
   if (pad.outline) {
     const polygon = padPolygon(f, pad);
     return margin ? offsetPolygons([polygon], margin, 5e-4) : [polygon];
@@ -10743,23 +13757,28 @@ function offsetPadPolygons(f, pad, margin) {
 }
 function worldZones(board) {
   return [
-    ...board.zones,
+    ...board.zones.filter((zone) => zone.outline.length),
     ...board.footprints.flatMap(
-      (f) => (f.zones ?? []).map((z) => transformPCBZone(z, (p) => footprintPoint(f, p)))
+      (f) => (f.zones ?? []).filter((zone) => zone.outline.length && pcbZoneLayerActive(board, zone.layer)).map((z) => transformPCBZone(z, (p) => footprintPoint(f, p)))
     )
   ];
 }
 var clearanceArcTolerance = 1e-3;
 var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 
+// lib/manufacturing-gerber.ts
+var import_clipper_lib3 = __toESM(require_clipper(), 1);
+
 // lib/manufacturing-font.json
 var manufacturing_font_default = ["JZ", "MWRYSZR[QZRYR[ RRSQGRFSGRSRF", "JZNFNJ RVFVJ", "H]LM[M RRDL_ RYVJV RS_YD", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RRCR^", "F^J[ZF RMFOGPIOKMLKKJIKGMF RYZZXYVWUUVTXUZW[YZ", "E_[[Z[XZUWPQNNMKMINGPFQFSGTITJSLRMLQKRJTJWKYLZN[Q[SZTYWUXRXP", "MWSFQJ", "KYVcUbS_R]QZPUPQQLRISGUDVC", "KYNcObQ_R]SZTUTQSLRIQGODNC", "JZRFRK RMIRKWI ROORKUO", "E_JSZS RR[RK", "MWSZS[R]Q^", "E_JSZS", "MWRYSZR[QZRYR[", "G][EI`", "H\\QFSFUGVHWJXNXSWWVYUZS[Q[OZNYMWLSLNMJNHOGQF", "H\\X[L[ RR[RFPINKLL", "H\\LHMGOFTFVGWHXJXLWOK[X[", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY", "H\\VMV[ RQELTYT", "H\\WFMFLPMOONTNVOWPXRXWWYVZT[O[MZLY", "H\\VFRFPGOHMKLOLWMYNZP[T[VZWYXWXRWPVOTNPNNOMPLR", "H\\KFYFP[", "H\\PONNMMLKLJMHNGPFTFVGWHXJXKWMVNTOPONPMQLSLWMYNZP[T[VZWYXWXSWQVPTO", "H\\N[R[TZUYWVXRXJWHVGTFPFNGMHLJLOMQNRPSTSVRWQXO", "MWRYSZR[QZRYR[ RRNSORPQORNRP", "MWSZS[R]Q^ RRNSORPQORNRP", "E_ZMJSZY", "E_JPZP RZVJV", "E_JMZSJY", "I[QYRZQ[PZQYQ[ RMGOFTFVGWIWKVMUNSORPQRQS", "D_VQUPSOQOOPNQMSMUNWOXQYSYUXVW RVOVWWXXXZW[U[PYMVKRJNKKMIPHTIXK[N]R^V]Y[", "I[MUWU RK[RFY[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[", "H[MPTP RW[M[MFWF", "HZTPMP RM[MFWF", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR", "G]L[LF RLPXP RX[XF", "MWR[RF", "JZUFUUTXRZO[M[", "G\\L[LF RX[OO RXFLR", "HYW[M[MF", "F^K[KFRUYFY[", "G]L[LFX[XF", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G\\L[LFTFVGWHXJXMWOVPTQLQ", "G]Z]X\\VZSWQVOV RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG", "JZLFXF RR[RF", "G]LFLWMYNZP[T[VZWYXWXF", "I[KFR[YF", "F^IFN[RLV[[F", "H\\KFY[ RYFK[", "I[RQR[ RKFRQYF", "H\\KFYFK[Y[", "KYVbQbQDVD", "KYID[_", "KYNbSbSDND", "LXNHREVH", "JZJ]Z]", "NVPESH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR", "H[M[MF RMNOMSMUNVOWQWWVYUZS[O[MZ", "HZVZT[P[NZMYLWLQMONNPMTMVN", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT", "MYOMWM RR[RISGUFWF", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN", "H[M[MF RV[VPUNSMPMNNMO", "MWR[RM RRFQGRHSGRFRH", "MWRMR_QaObNb RRFQGRHSGRFRH", "IZN[NF RPSV[ RVMNU", "MXU[SZRXRF", "D`I[IM RIOJNLMOMQNRPR[ RRPSNUMXMZN[P[[", "I\\NMN[ RNOONQMTMVNWPW[", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "H[MMMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "I\\WMWb RWZU[Q[OZNYMWMQNOONQMUMWN", "KXP[PM RPQQORNTMVM", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN", "MYOMWM RRFRXSZU[W[", "H[VMV[ RMMMXNZP[S[UZVY", "JZMMR[WM", "G]JMN[RQV[ZM", "IZL[WM RLMW[", "JZMMR[ RWMR[P`OaMb", "IZLMWML[W[", "KYVcUcSbR`RVQTOSQRRPRFSDUCVC", "H\\RbRD", "KYNcOcQbR`RVSTUSSRRPRFQDOCNC", "KZMSNRPQTSVRWQ", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "JZ", "MWROQNRMSNRORM RRUSaRbQaRURb", "HZVZT[P[NZMYLWLQMONNPMTMVN RRJR^", "H[LMTM RL[W[ RO[OIPGRFUFWG", "H]LYOV RLLOO RVVYY RVOYL RVVTWQWOVNTNQOOQNTNVOWQWTVV", "F^JTZT RJMZM RRQR[ RKFRQYF", "MWRbRW RRFRQ", "I[N]P^S^U]V[UYOSNQNPONQM RVGTFQFOGNIOKUQVSVTUVSW", "LXNFOGNHMGNFNH RVFWGVHUGVFVH", "@dVKTJPJNKLMKOKSLUNWPXTXVW RRCMDHGELDQEVH[M^R_W^\\[_V`Q_L\\GWDRC", "KZOEQDSDUEVGVN RVMTNQNOMNKOIQHVH", "H\\RMLSRY RXWTSXO", "E_JQZQZV", "RR", "@dWXRR RNXNJTJVKWMWOVQTRNR RRCMDHGELDQEVH[M^R_W^\\[_V`Q_L\\GWDRC", "LXMGWG", "JZRFPGOIPKRLTKUITGRF", "E_JOZO RRWRG RZ[J[", "JZNAP@S@UAVCVEUGNNVN", "JZN@V@RESEUFVHVKUMSNPNNM", "NVTEQH", "H^MMMb RWXXZZ[ RMXNZP[T[VZWXWM", "F]VMV[ ROMOXNZL[ RZMMMKNJP", "JZRRQSRTSSRRRT", "MWR\\T]U_TaRbOb", "JZVNNN RNCPBR@RN", "KYQNOMNKNGOEQDSDUEVGVKUMSNQN", "H\\RMXSRY RLWPSLO", "G]KQYQ RVNNN RNCPBR@RN RUYUa RQSN]W]", "G]KQYQ RVNNN RNCPBR@RN RNTPSSSUTVVVXUZNaVa", "G]KQYQ RN@V@RESEUFVHVKUMSNPNNM RUYUa RQSN]W]", "I[SORNSMTNSOSM RWaUbPbNaM_M]N[OZQYRXSVSU", "I[MUWU RK[RFY[ RP>SA", "I[MUWU RK[RFY[ RT>QA", "I[MUWU RK[RFY[ RNAR>VA", "I[MUWU RK[RFY[ RMAN@P?TAV@W?", "I[MUWU RK[RFY[ RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[MUWU RK[RFY[ RRFPEOCPAR@TAUCTERF", "F`JURU RRPYP RH[OF\\F RRFR[\\[", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RR\\T]U_TaRbOb", "H[MPTP RW[M[MFWF RP>SA", "H[MPTP RW[M[MFWF RT>QA", "H[MPTP RW[M[MFWF RNAR>VA", "H[MPTP RW[M[MFWF RN?O@NAM@N?NA RV?W@VAU@V?VA", "MWR[RF RP>SA", "MWR[RF RT>QA", "MWR[RF RNAR>VA", "MWR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "G]L[LFX[XF RMAN@P?TAV@W?", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RP>SA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RT>QA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RNAR>VA", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RMAN@P?TAV@W?", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN?O@NAM@N?NA RV?W@VAU@V?VA", "E_LMXY RXMLY", "G]ZFJ[ RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[", "G]LFLWMYNZP[T[VZWYXWXF RP>SA", "G]LFLWMYNZP[T[VZWYXWXF RT>QA", "G]LFLWMYNZP[T[VZWYXWXF RNAR>VA", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[RQR[ RKFRQYF RT>QA", "G\\LFL[ RLKTKVLWMXOXRWTVUTVLV", "F]K[KJLHMGOFRFTGUHVJVMSMQNPPPQQSSTVTXUYWYXXZV[R[PZ", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RPESH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RTEQH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNHREVH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RMHNGPFTHVGWF", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNFOGNHMGNFNH RVFWGVHUGVFVH", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRHPGOEPCRBTCUETGRH", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX", "HZVZT[P[NZMYLWLQMONNPMTMVN RR\\T]U_TaRbOb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RPESH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RTEQH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNHREVH", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNFOGNHMGNFNH RVFWGVHUGVFVH", "MWR[RM RPESH", "MWR[RM RTEQH", "LXNHREVH RR[RM", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RR[RM", "I\\SCQI RWNUMQMONNOMQMXNZP[T[VZWXWLVITGRFNE", "I\\NMN[ RNOONQMTMVNWPW[ RMHNGPFTHVGWF", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RPESH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNHREVH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMHNGPFTHVGWF", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNFOGNHMGNFNH RVFWGVHUGVFVH", "E_ZSJS RRXSYRZQYRXRZ RRLSMRNQMRLRN", "H[XMK[ RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "H[VMV[ RMMMXNZP[S[UZVY RPESH", "H[VMV[ RMMMXNZP[S[UZVY RTEQH", "H[VMV[ RMMMXNZP[S[UZVY RNHREVH", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH", "JZMMR[ RWMR[P`OaMb RTEQH", "H[MFMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "JZMMR[ RWMR[P`OaMb RNFOGNHMGNFNH RVFWGVHUGVFVH", "I[MUWU RK[RFY[ RM@W@", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RMGWG", "I[MUWU RK[RFY[ RN>O@QASAU@V>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNEOGQHSHUGVE", "I[MUWU RK[RFY[W]V_WaYb[b", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RW[U]T_UaWbYb", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RT>QA", "HZVZT[P[NZMYLWLQMONNPMTMVN RTEQH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RNAR>VA", "HZVZT[P[NZMYLWLQMONNPMTMVN RNHREVH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RR?Q@RAS@R?RA", "HZVZT[P[NZMYLWLQMONNPMTMVN RRFQGRHSGRFRH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RN>RAV>", "HZVZT[P[NZMYLWLQMONNPMTMVN RNERHVE", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RN>RAV>", "IfW[WF RWZU[Q[OZNYMWMQNOONQMUMWN RbF`J", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN RRHZH", "H[MPTP RW[M[MFWF RM@W@", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RMGWG", "H[MPTP RW[M[MFWF RN>O@QASAU@V>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNEOGQHSHUGVE", "H[MPTP RW[M[MFWF RR?Q@RAS@R?RA", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RRFQGRHSGRFRH", "H[MPTP RW[M[MFWF RR[P]O_PaRbTb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RR[P]O_PaRbTb", "H[MPTP RW[M[MFWF RN>RAV>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNERHVE", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RNAR>VA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNHREVH", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RN>O@QASAU@V>", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNEOGQHSHUGVE", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RR?Q@RAS@R?RA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RRFQGRHSGRFRH", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RR\\T]U_TaRbOb", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RRGPFODPBRAUA", "G]L[LF RLPXP RX[XF RNAR>VA", "H[M[MF RV[VPUNSMPMNNMO RIAM>QA", "G]IJ[J RL[LF RLPXP RX[XF", "H[M[MF RV[VPUNSMPMNNMO RJHRH", "MWR[RF RMAN@P?TAV@W?", "MWR[RM RMHNGPFTHVGWF", "MWR[RF RM@W@", "MWR[RM RMGWG", "MWR[RF RN>O@QASAU@V>", "MWR[RM RNEOGQHSHUGVE", "MWR[RF RR[P]O_PaRbTb", "MWR[RM RR[P]O_PaRbTb", "MWR[RF RR?Q@RAS@R?RA", "MWR[RM", "MgR[RF RbFbUaX_Z\\[Z[", "MaR[RM RRFQGRHSGRFRH R\\M\\_[aYbXb R\\F[G\\H]G\\F\\H", "JZUFUUTXRZO[M[ RQAU>YA", "MWRMR_QaObNb RNHREVH", "G\\L[LF RX[OO RXFLR RR\\T]U_TaRbOb", "IZN[NF RPSV[ RVMNU RR\\T]U_TaRbOb", "IZNMN[ RPSV[ RVMNU", "HYW[M[MF RO>LA", "MXU[SZRXRF RTEQH", "HYW[M[MF RR\\T]U_TaRbOb", "MXU[SZRXRF RR\\T]U_TaRbOb", "HYW[M[MF RVHSK", "M^U[SZRXRF RZFXJ", "HYW[M[MF RUNTOUPVOUNUP", "M\\U[SZRXRF RYOZPYQXPYOYQ", "HYW[M[MF RJQPM", "MXU[SZRXRF ROQUM", "G]L[LFX[XF RT>QA", "I\\NMN[ RNOONQMTMVNWPW[ RTEQH", "G]L[LFX[XF RR\\T]U_TaRbOb", "I\\NMN[ RNOONQMTMVNWPW[ RR\\T]U_TaRbOb", "G]L[LFX[XF RN>RAV>", "I\\NMN[ RNOONQMTMVNWPW[ RNERHVE", "MjSFQJ R\\M\\[ R\\O]N_MbMdNePe[", "G]LFL[ RLINGPFTFVGWHXJX^W`VaTbQb", "I\\NMN[ RNOONQMTMVNWPW_VaTbRb", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RM@W@", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMGWG", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN>O@QASAU@V>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNEOGQHSHUGVE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RQ>NA RX>UA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RQENH RXEUH", "E`RPYP RRFR[ R\\FNFLGJIIMITJXLZN[\\[", "C`[ZY[U[SZRXRPSNUMYM[N\\P\\RRT RRQQOPNNMKMINHOGQGWHYIZK[N[PZQYRW", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RT>QA", "KXP[PM RPQQORNTMVM RTEQH", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RR\\T]U_TaRbOb", "KXP[PM RPQQORNTMVM RR\\T]U_TaRbOb", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RN>RAV>", "KXP[PM RPQQORNTMVM RNERHVE", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RT>QA", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RTEQH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RNAR>VA", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RNHREVH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RR\\T]U_TaRbOb", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RR\\T]U_TaRbOb", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RN>RAV>", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RNERHVE", "JZLFXF RR[RF RR\\T]U_TaRbOb", "MYOMWM RRFRXSZU[W[ RR\\T]U_TaRbOb", "JZLFXF RR[RF RN>RAV>", "M[OMWM RYFXI RRFRXSZU[W[", "JZLFXF RR[RF RNQVQ", "MYOMWM RRFRXSZU[W[ ROSUS", "G]LFLWMYNZP[T[VZWYXWXF RMAN@P?TAV@W?", "H[VMV[ RMMMXNZP[S[UZVY RMHNGPFTHVGWF", "G]LFLWMYNZP[T[VZWYXWXF RM@W@", "H[VMV[ RMMMXNZP[S[UZVY RMGWG", "G]LFLWMYNZP[T[VZWYXWXF RN>O@QASAU@V>", "H[VMV[ RMMMXNZP[S[UZVY RNEOGQHSHUGVE", "G]LFLWMYNZP[T[VZWYXWXF RRAP@O>P<R;T<U>T@RA", "H[VMV[ RMMMXNZP[S[UZVY RRHPGOEPCRBTCUETGRH", "G]LFLWMYNZP[T[VZWYXWXF RQ>NA RX>UA", "H[VMV[ RMMMXNZP[S[UZVY RQENH RXEUH", "G]LFLWMYNZP[T[VZWYXWXF RR[P]O_PaRbTb", "H[VMV[ RMMMXNZP[S[UZVY RV[T]S_TaVbXb", "F^IFN[RLV[[F RNAR>VA", "G]JMN[RQV[ZM RNHREVH", "I[RQR[ RKFRQYF RNAR>VA", "JZMMR[ RWMR[P`OaMb RNHREVH", "JZLFXF RR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "H\\KFYFK[Y[ RT>QA", "IZLMWML[W[ RTEQH", "H\\KFYFK[Y[ RR?Q@RAS@R?RA", "IZLMWML[W[ RRFQGRHSGRFRH", "H\\KFYFK[Y[ RN>RAV>", "IZLMWML[W[ RNERHVE", "MYR[RISGUFWF", "H[M[MF RMNOMSMUNVOWQWWVYUZS[O[MZ RJHRH", "C\\LFL[T[VZWYXWXTWRVQSPLP RFKFIGGIFSFUGVHWJWLVNUOSP", "G\\VFLFL[R[UZWXXVXSWQUORNLN", "H[WFMFM[ RMNOMSMUNVOWQWWVYUZS[O[MZ", "H]MFM[S[VZXXYVYSXQVOSNMN", "IZNMN[S[UZVXVUUSSRNR", "I^MHNGQFSFVGXIYKZOZRYVXXVZS[Q[NZMY", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RMHKGJEKCLB", "HZVZT[P[NZMYLWLQMONNPMTMVN RTMTIUGWFYF", "G\\L[LFQFTGVIWKXOXRWVVXTZQ[L[ RIPQP", "C\\FKFIGGIFQFTGVIWKXOXRWVVXTZQ[L[LF", "H]NFXFX[R[OZMXLVLSMQOORNXN", "I\\MFWFW[ RWNUMQMONNOMQMWNYOZQ[U[WZ", "I\\Q[T[VZWYXWXQWOVNTMQMONNOMQMWNYOZQ[T\\V]W_VaTbPbNa", "I\\WPPP RM[W[WFMF", "F^MHNGQFSFVGXIYKZOZRYVXXVZS[Q[NZLXKVJRZP", "G[PPTP RWGUFPFNGMHLJLLMNNOPPMQLRKTKWLYMZO[U[WZ", "HZTPMP RM[MFWF RM[M_LaJbHb", "MYOMWM RR[RISGUFWF RR[R_QaObMb", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RMHKGJEKCLB", "I[KFU[U_TaRbPaO_O[YF", "D`I[IF RIOJNLMOMQNRPRXSZU[X[ZZ[Y\\W\\P[NZM", "MZRFRWSYTZV[X[", "MWR[RF RNPVP", "G_L[LF RX[OO RLRWGYF[G\\I\\K", "IZNMN[ RPSV[ RVMNU RNMNIOGQFSF", "MXU[SZRXRF RNOVO", "JZRMM[ RMFOFPGRMW[ RNLTH", "Ca\\F\\[ R\\XZZX[V[TZSYRWRF RRWQYPZN[L[JZIYHWHF", "G]L[LFX[XF RL[L_KaIbGb", "I\\NMN[ RNOONQMTMVNWPWb", "G]KPYP RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RVGXFYDXBWA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RUNWMXKWIVH", "DaSGQFMFKGIIHMHTIXKZM[Q[SZUXVTVMUISGUFYF[G\\I\\b", "E^RNPMMMKNJOIQIWJYKZM[P[RZSYTWTQSORNTMVMXNYPYb", "C\\LFL[ RFKFIGGIFTFVGWHXJXMWOVPTQLQ", "H[MMMb RMNOMSMUNVOWQWWVYUZS[O[MZ RRMRISGUFWF", "G\\LFL[ RQVXb RLKTKVLWMXOXRWTVUTVLV", "H\\XZU[P[NZMYLWLUMSNRPQTPVOWNXLXJWHVGTFOFLG", "IZVZT[P[NZMXMWNUPTSTUSVQVPUNSMPMNN", "H[W[L[SPLFWF", "JYWbUbSaR_RIQGOFMGLIMKOLQKRI", "MYOMWM RRFRXSZU[W[W_VaTbRb", "HZR[RF RKKKILGNFXF", "MYOMWM RWFUFSGRIRXSZU[W[", "JZLFXF RR[RF RR[R_SaUbWb", "G]LFLWMYNZP[T[VZWYXWXFZE[CZAY@", "H[VMV[ RMMMXNZP[S[UZVY RVMXLYJXHWG", "F^ZFUFUJWKYMZPZUYXWZT[P[MZKXJUJPKMMKOJOFJF", "G]LFLWMYNZP[T[VZXXYVYIXGWF", "I`RQR[ RKFRQXGZF\\G]I]K", "J^MMR[ RMbOaP`R[VNXMZN[P[R", "H\\KFYFK[Y[ RNPVP", "IZLMWML[W[ RNTVT", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY", "H\\YFLFSNPNNOMPLRLWMYNZP[V[XZYY", "JZWMNMUVRVPWOXNZN^O`PaRbUbWa", "JZMMVMOTSTUUVWVXUZS[Q[O\\N^N_OaQbVb", "H\\LHMGOFTFVGWHXJXLWOK[X[ RNSVS", "H\\WFMFLPMOONTNVOWPXRXWWYVZT[O[MZLY", "JZVMOMNSPRSRUSVUVXUZS[P[NZ", "J^MZP[T[WZYXZVZSYQWOTNPNPF RLITI", "H[MMMb RMONNPMTMVNWPWSVUM^", "MWRFRb", "JZOFOb RUFUb", "MWRFRb ROWUW ROQUQ", "MWRYSZR[QZRYR[ RRSQGRFSGRSRF", "GpL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_FmF_[m[ Rb>fAj>", "GmL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_MjM_[j[ RaEeHiE", "ImW[WF RWZU[Q[OZNYMWMQNOONQMUMWN R_MjM_[j[ RaEeHiE", "HiW[M[MF RdFdUcXaZ^[\\[", "HcW[M[MF R^M^_]a[bZb R^F]G^H_G^F^H", "MbU[SZRXRF R]M]_\\aZbYb R]F\\G]H^G]F]H", "GmL[LFX[XF RhFhUgXeZb[`[", "GgL[LFX[XF RbMb_aa_b^b RbFaGbHcGbFbH", "IfNMN[ RNOONQMTMVNWPW[ RaMa_`a^b]b RaF`GaHbGaFaH", "I[MUWU RK[RFY[ RN>RAV>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNERHVE", "MWR[RF RN>RAV>", "MWR[RM RNERHVE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN>RAV>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNERHVE", "G]LFLWMYNZP[T[VZWYXWXF RN>RAV>", "H[VMV[ RMMMXNZP[S[UZVY RNERHVE", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RT9Q<", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RN9R<V9", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RN>RAV>", "G]LFLWMYNZP[T[VZWYXWXF RN?O@NAM@N?NA RV?W@VAU@V?VA RP9S<", "H[VMV[ RMMMXNZP[S[UZVY RNFOGNHMGNFNH RVFWGVHUGVFVH RP>SA", "I[NNPMTMVNWPWXVZT[P[NZMXMVWT", "I[MUWU RK[RFY[ RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "I[MUWU RK[RFY[ RR?Q@RAS@R?RA RM;W;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRFQGRHSGRFRH RM@W@", "F`JURU RRPYP RH[OF\\F RRFR[\\[ RO@Y@", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX RMGWG", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RSV[V", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RS^[^", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RN>RAV>", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RNERHVE", "G\\L[LF RX[OO RXFLR RN>RAV>", "IZN[NF RPSV[ RVMNU RJANDRA", "G]R[P]O_PaRbTb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "H[R[P]O_PaRbTb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "G]R[P]O_PaRbTb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RM@W@", "H[R[P]O_PaRbTb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMGWG", "H\\KFXFQNTNVOWPXRXWWYVZT[N[LZKY RN>RAV>", "JZMMVMOVRVTWUXVZV^U`TaRbObMa RNERHVE", "MWRMR_QaObNb RNERHVE", "GpL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_FmF_[m[", "GmL[LFQFTGVIWKXOXRWVVXTZQ[L[ R_MjM_[j[", "ImW[WF RWZU[Q[OZNYMWMQNOONQMUMWN R_MjM_[j[", "F[VGTFQFNGLIKKJOJRKVLXNZQ[S[VZWYWRSR RT>QA", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RTEQH", "CaH[HF RHPTP RTFTXUZW[Z[\\Z]X]M", "G\\LFLb RLINGPFTFVGWHXJXOWRUUL^", "G]L[LFX[XF RP>SA", "I\\NMN[ RNOONQMTMVNWPW[ RPESH", "I[MUWU RK[RFY[ RZ9X< RR;P<O>P@RAT@U>T<R;", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RZ@XC RRBPCOEPGRHTGUETCRB", "F`JURU RRPYP RH[OF\\F RRFR[\\[ RV>SA", "D`INKMOMQNRP R[ZY[U[SZRXRPSNUMYM[N\\P\\RRSKSITHVHXIZK[O[QZRX RTEQH", "G]ZFJ[ RP[NZLXKTKMLINGPFTFVGXIYMYTXXVZT[P[ RT>QA", "H[XMK[ RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "I[MUWU RK[RFY[ ROAL> RVAS>", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR ROHLE RVHSE", "I[MUWU RK[RFY[ RNAO?Q>S>U?VA", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RNHOFQESEUFVH", "H[MPTP RW[M[MFWF ROAL> RVAS>", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT ROHLE RVHSE", "H[MPTP RW[M[MFWF RNAO?Q>S>U?VA", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RNHOFQESEUFVH", "MWR[RF ROAL> RVAS>", "MWR[RM ROHLE RVHSE", "MWR[RF RNAO?Q>S>U?VA", "MWR[RM RNHOFQESEUFVH", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF ROAL> RVAS>", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ ROHLE RVHSE", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RNAO?Q>S>U?VA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNHOFQESEUFVH", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ ROAL> RVAS>", "KXP[PM RPQQORNTMVM RPHME RWHTE", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RNAO?Q>S>U?VA", "KXP[PM RPQQORNTMVM ROHPFRETEVFWH", "G]LFLWMYNZP[T[VZWYXWXF ROAL> RVAS>", "H[VMV[ RMMMXNZP[S[UZVY ROHLE RVHSE", "G]LFLWMYNZP[T[VZWYXWXF RNAO?Q>S>U?VA", "H[VMV[ RMMMXNZP[S[UZVY RNHOFQESEUFVH", "H\\LZO[T[VZWYXWXUWSVRTQPPNOMNLLLJMHNGPFUFXG RS`SaRcQd", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RS`SaRcQd", "JZLFXF RR[RF RS`SaRcQd", "MYOMWM RRFRXSZU[W[ RU`UaTcSd", "I]VRXTYVY[X]V_T`Lb RLHMGOFUFWGXHYJYNXPVRTSNU", "J[UWVXWZW]V_U`SaMb RMNOMSMUNVOWQWTVVUWSXOY", "G]L[LF RLPXP RX[XF RN>RAV>", "H[M[MF RV[VPUNSMPMNNMO RI>MAQ>", "G]L[LFX[XF RX[Xb", "IbWFWXXZZ[\\[^Z_X^V\\UZVV^ RWNUMQMONNOMQMWNYOZQ[T[VZWX", "G]NFLGKIKKLMMNOO RVFXGYIYKXMWNUO ROOUOWPXQYSYWXYWZU[O[MZLYKWKSLQMPOO", "J[MJMMNORQVOWMWJ RPQTQVRWTWXVZT[P[NZMXMTNRPQ", "H\\KFYFK[Y[Y_XaVbTb", "IZLMWML[W[W_VaTbRb", "I[MUWU RK[RFY[ RR?Q@RAS@R?RA", "I\\W[WPVNTMPMNN RWZU[P[NZMXMVNTPSUSWR RRFQGRHSGRFRH", "H[MPTP RW[M[MFWF RR\\T]U_TaRbOb", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RR\\T]U_TaRbOb", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RN?O@NAM@N?NA RV?W@VAU@V?VA RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RNFOGNHMGNFNH RVFWGVHUGVFVH RM@W@", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RMAN@P?TAV@W? RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RMHNGPFTHVGWF RM@W@", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RR?Q@RAS@R?RA", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RRFQGRHSGRFRH", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RR?Q@RAS@R?RA RM;W;", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RRFQGRHSGRFRH RM@W@", "I[RQR[ RKFRQYF RM@W@", "JZMMR[ RWMR[P`OaMb RMGWG", "M]RFRXSZU[W[YZZXYVWUUVQ^", "IbNMN[ RNOONQMTMVNWPWXXZZ[\\[^Z_X^V\\UZVV^", "M]OMWM RRFRXSZU[W[YZZXYVWUUVQ^", "MWRMR_QaObNb", "D`R[RF RRZP[L[JZIYHWHQIOJNLMPMRNTMXMZN[O\\Q\\W[YZZX[T[RZ", "D`RMRb RRZP[L[JZIYHWHQIOJNLMPMRNTMXMZN[O\\Q\\W[YZZX[T[RZ", "I[MUWU RK[RFY[ RXCL`", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RXCL`", "HZVZT[P[NZMYLWLQMONNPMTMVN RWHM`", "HYW[M[MF RIOQO", "JZLFXF RR[RF RXCL`", "J[P[R^T_W_ RNZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN", "IZLMWML[N[P\\R^T_W_", "J^MGPFTFWGYIZKZNYPWRTSPSP[", "J^NNPMTMVNWOXQXSWUVVTWPWP[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP RIUOU", "G]IM[M RLFLWMYNZP[T[VZWYXWXF", "I[Y[RFK[", "H[MPTP RW[M[MFWF RXCL`", "I[VZT[P[NZMXMPNNPMTMVNWPWRMT RWHM`", "JZUFUUTXRZO[M[ RQPYP", "MWRMR_QaObNb ROTUT RRFQGRHSGRFRH", "G]XFX^Y`Za\\b^b RXIVGTFPFNGLIKMKTLXNZP[T[VZXX", "I\\WMW^X`Ya[b]b RWZU[Q[OZNYMWMQNOONQMUMWN", "G\\X[QQ RL[LFTFVGWHXJXMWOVPTQLQ RIQOQ", "KXP[PM RPQQORNTMVM RMTUT", "I[KIYI RRQR[ RKFRQYF", "JZLQXQ RMMR[ RWMR[P`OaMb", "H[MMMXNZP[T[VZ RMNOMTMVNWPWRVTTUOUMV", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[", "G\\K[NQOOPNRMTMVNWOXRXVWYVZT[R[PZOYNWMPLNJM", "H[RFPFNGMIM[ RMNOMSMUNVOWQWWVYUZS[O[MZ", "J\\NNPMTMVNWOXQXWWYVZT[P[NZ", "HZVNTMPMNNMOLQLWMYNZP[S[UZVXUVSUQVM^", "I\\W[WF RWZU[Q[OZNYMWMQNOONQMUMWN RW[W_XaZb\\b", "I\\\\FZFXGWIW[ RWZU[Q[OZNYMWMQNOONQMUMWN", "I[NZP[T[VZWXWPVNTMPMNNMPMRWT", "I[NNPMTMVNWPWXVZT[P[NZMXMVWT", "IbNNPMTMVNWPWXVZT[P[NZMXMV\\S\\U]W_X`X", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN", "J[TTVSWQWPVNTMPMNN RRTTTVUWWWXVZT[P[NZ", "JaRTTTVUWWWXVZT[P[NZ RNNPMTMVNWPWQVSTT[S[U\\W^X_X", "H[TTVSWQWPVNTMPMNNMOLRLVMYNZP[T[VZWXWWVUTTRT", "MWRMR_QaObNb ROTUT", "I\\WMW^V`UaSbPbNa RWZU[Q[OZNYMWMQNOONQMUMWN RWMWIXGZF\\F", "I\\WYVZT[P[NZMXMQNOONQMWMW^V`UaSbMb", "HZUNSMPMNNMOLQLWMYNZP[T[VZVUSU", "JZMMU[U_TaRbPaO_O[WM", "JZMMTVUXTZR[PZOXPVWM", "I\\WMWb RNMNXOZQ[T[VZWY", "H[RFPFNGMIM[ RV[VPUNSMPMNNMO", "H[RFPFNGMIM[ RV[VPUNSMPMNNMO RV[V_UaSbQb", "MWR[RM ROTUT RRFQGRHSGRFRH", "MXRMRXSZU[", "MWR[RM RU[O[ RUMOM", "MXU[SZRXRF RMONNPMTOVNWM", "IYU[SZRXRF RRQQOONMOLQMSOTWT", "MXRFR_SaUbWb", "GZLFLXMZO[ RLMVMOVRVTWUXVZV^U`TaRbObMa", "D`[M[[ R[YZZX[U[SZRXRM RRXQZO[L[JZIXIM", "D`[M[[ R[YZZX[U[SZRXRM RRXQZO[L[JZIXIM R[[[b", "D`I[IM RIOJNLMOMQNRPR[ RRPSNUMXMZN[P[[[_ZaXbVb", "I\\NMN[ RNOONQMTMVNWPW[ RN[N_MaKbIb", "I\\NMN[ RNOONQMTMVNWPW[W_XaZb\\b", "H[M[MMV[VM", "H[LTWT RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "E]RTXT RRMR[ RZMMMKNJOIQIWJYKZM[Z[", "G]RTRXSZU[V[XZYXYQXOWNUMOMMNLOKQKXLZN[O[QZRX", "G]RFRb RPMTMVNXPYRYVXXVZT[P[NZLXKVKRLPNNPM", "LYTMT[ RTWSYRZP[N[", "LYTMT[ RTWSYRZP[N[ RTMTF", "LYTMT[ RTWSYRZP[N[ RT[T_UaWbYb", "KXP[PM RPQQORNTMVM RP[Pb", "KXP[PM RPQQORNTMVM RP[P_QaSbUb", "KXM[S[ RVMTMRNQOPRP[", "LYW[Q[ RNMPMRNSOTRT[", "I[RUW[ RN[NMTMVNWPWRVTTUNU", "I[RSWM RNMN[T[VZWXWVVTTSNS", "J[NZP[T[VZWXWWVUTTQTOSNQNPONQMTMVN RN[N_OaQbSb", "KYWFUFSGRIR_QaObMb", "MWRMR_QaObNb ROTUT RRMRISGUFWF", "KYMFOFQGRIRXSZU[W[", "KYWFUFSGRIR_QaObMaL_M]O\\V\\", "KWU[M[ RRbRPQNOMMM", "MYOMWM RRFR_SaUbWb", "H[JRYR RVMV[ RMMMXNZP[S[UZVY", "I\\XMUMUPWRXTXWWYVZT[Q[OZNYMWMTNRPPPMMM", "H[MMMXNZP[S[UZVYWWWPVNUM", "JZW[RMM[", "G]Z[VMRWNMJ[", "JZW[RM RM[RMTHUGWF", "KYRTR[ RMMRTWM", "IZLMWML[W[W_XaZb\\b", "IZLMWML[T[VZWXVVTURVN^", "JZMMVMOVRVTWUXVZV^U`TaRbObMa", "JZMMVMOVRVTWUXVZV^U`TaRbPbNaM_N]P\\R]Uc", "J^MGPFTFWGYIZKZNYPWRTSPSP[", "FZWGTFPFMGKIJKJNKPMRPSTST[", "J^MZP[T[WZYXZVZSYQWOTNPNPF", "F[WHVGSFQFNGLIKKJOJYK]L_NaQbSbVaW`", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RROQPRQSPRORQ", "I[STVUWWWXVZT[N[NMSMUNVPVQUSSTNT", "I\\PTNUMWMXNZP[T[VZWYXVXRWOVNTMPMNNMPMQNSPTRT", "HZUNSMPMNNMOLQLWMYNZP[T[VZVUSU RUMUIVGXFZF", "H[MTVT RMMM[ RVMV[", "LXRMR_QaObMaL_M]O\\V\\ RRFQGRHSGRFRH", "J[VMVb RTUNM RN[VS", "JYOMO[V[", "I\\WMWb RWZU[Q[OZNYMWMQNOONQMUMWN RWMWIXGZF\\F", "J^MGPFTFWGYIZKZNYPWRTSPSP[ RLXTX", "FZWGTFPFMGKIJKJNKPMRPSTST[ RPXXX", "D`R[RF RRM]MR[][ RRZP[L[JZIYHWHQIOJNLMPMRN", "E`RFR[ RRNPMMMKNJOIQIWJYKZM[P[RZ RRM\\MUVXVZW[X\\Z\\^[`ZaXbUbSa", "D`R[RF RRM]MR[Z[\\Z]X\\VZUXVT^ RRZP[L[JZIYHWHQIOJNLMPMRN", "G^IMQM RLFLXMZO[QZS[W[YZZXZWYUWTTTRSQQQPRNTMWMYN", "I[KMTM RNFNXOZQ[T[ RYFWFUGTIT_SaQbOb", "F^HMPM RKFKXLZN[P[RZ RZNXMTMRNQOPQPWQYRZT[W[YZZXYVWUUVQ^", "F]HMPMP[ RK[KILGNFPF RPOQNSMVMXNYPY_XaVbTb", "G^LFLXMZO[QZS[W[YZZXZWYUWTTTRSQQQPRNTMWMYN", "H^MM[MP[ RMFMXNZP[[[", "G]JSN[RUV[ZS RJFNNRHVNZF", "G]XXXSLSLX RXKXFLFLK", "I\\WMWb RNMNXOZQ[T[VZWY RNMNIMGKFIF", "I\\\\bZbXaW_WM RNMNXOZQ[T[VZWY RNMNIMGKFIF", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "H[MFM[ RXPMP", "IZNTVT RNMN[", "G]R[RF RKOKFYFYO", "I[R[RF RMOMFWFWO", "MWSFQJ", "MWS[Q_", "G]LFL[XFX[", "H\\MMM[WMW[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "NVR`RcSdTd", "J\\NZP[T[VZWYXWXQWOVNTMPMNN", "HZVZT[P[NZMYLWLQMONNPMTMVN RRSQTRUSTRSRU", "J\\NZP[T[VZWYXWXQWOVNTMPMNN RRSQTRUSTRSRU", "MWSZS[R]Q^ RRNSORPQORNRP", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "F^K[KFYFY[K[", "NVTEQH", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "G[MUWU RK[RFY[ RMEJH", "JZRRQSRTSSRRRT", "B[MPTP RW[M[MFWF RHEEH", "A]L[LF RLPXP RX[XF RGEDH", "GWR[RF RMEJH", "RR", "B]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF RHEEH", "RR", "@[RQR[ RKFRQYF RFECH", "@^J[O[OWMVKTJQJLKIMGPFTFWGYIZLZQYTWVUWU[Z[ RFECH", "MXRMRXSZU[ RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "I[MUWU RK[RFY[", "G\\SPVQWRXTXWWYVZT[L[LFSFUGVHWJWLVNUOSPLP", "HZM[MFXF", "I[K[RFY[K[", "H[MPTP RW[M[MFWF", "H\\KFYFK[Y[", "G]L[LF RLPXP RX[XF", "F^OPUP RPFTFVGXIYKZNZSYVXXVZT[P[NZLXKVJSJNKKLINGPF", "MWR[RF", "G\\L[LF RX[OO RXFLR", "I[K[RFY[", "F^K[KFRUYFY[", "G]L[LFX[XF", "H[L[W[ RLFWF RUPNP", "G]PFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "G]L[LFXFX[", "G\\L[LFTFVGWHXJXMWOVPTQLQ", "RR", "H[W[L[SPLFWF", "JZLFXF RR[RF", "I[RQR[ RKFRQYF", "G]R[RF RPITIWJYLZNZRYTWVTWPWMVKTJRJNKLMJPI", "H\\KFY[ RYFK[", "G]R[RF RHFJGKIKNLQMROSUSWRXQYNYIZG\\F", "F^J[O[OWMVKTJQJLKIMGPFTFWGYIZLZQYTWVUWU[Z[", "MWR[RF RN?O@NAM@N?NA RV?W@VAU@V?VA", "I[RQR[ RKFRQYF RN?O@NAM@N?NA RV?W@VAU@V?VA", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[ RTEQH", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN RTEQH", "I\\NMN[ RNOONQMTMVNWPWb RTEQH", "MXRMRXSZU[ RTEQH", "H[MMMXNZP[S[UZVYWWWPVNUM RNFOGNHMGNFNH RVFWGVHUGVFVH RT>QA", "H]YMVWUYTZR[P[NZMYLVLRMONNPMRMTNUOVQWXXZZ[", "H[SOUPVQWSWWVYUZS[P[NZMY RKbLaM_MINGPFSFUGVIVLUNSOQO", "JZRYRb RLMMMNNRYWM", "H[SMPMNNMOLQLWMYNZP[S[UZVYWWWQVOUNSMPLNKMINGPFTFVG", "IZPTNUMWMXNZP[T[VZ RRTPTNSMQMPNNPMTMVN", "HZMFWFPMNPMSMWNYOZQ[S[U\\V^V_UaSbRb", "I\\NMN[ RNOONQMTMVNWPWb", "H[LPWP RPFSFUGVHWKWVVYUZS[P[NZMYLVLKMHNGPF", "MXRMRXSZU[", "IZNMN[ RPSV[ RVMNU", "JZRMM[ RMFOFPGRMW[", "H^MMMb RWXXZZ[ RMXNZP[T[VZWXWM", "J[MMR[WPWOVM", "HZMFWF RQFOGNINLONQOUO RQOOPNQMSMWNYOZQ[S[U\\V^V_UaSbRb", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "F]VMV[ ROMOXNZL[ RZMMMKNJP", "H\\MbMQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "HZVNTMPMNNMOLQLWMYNZP[S[U\\V^V_UaSb", "H\\YMPMNNMOLQLWMYNZP[S[UZVYWWWQVOUNSM", "H\\LPMNOMXM RRMRXSZU[", "H[MMMXNZP[S[UZVYWWWPVNUM", "G]MMLNKPKVLXNZP[T[VZXXYVYPXNVMUMSNRPRb", "IZWMLb RLMNNOPT_UaWb", "G]RMRb RKMKVLXNZP[T[VZXXYVYM", "G]RTRX RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "LXNFOGNHMGNFNH RVFWGVHUGVFVH RRMRXSZU[", "H[MMMXNZP[S[UZVYWWWPVNUM RNFOGNHMGNFNH RVFWGVHUGVFVH", "H[P[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[ RTEQH", "H[MMMXNZP[S[UZVYWWWPVNUM RTEQH", "G]RTRX RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM RTEQH", "G\\L[LF RXFLR ROOX[Qb", "H[SOUPVQWSWWVYUZS[P[NZMXMINGPFSFUGVIVLUNSOQO", "H[JPKQLSLVMYNZP[S[UZVYWVWKVHUGSFPFNGMHLJLLMNNOPPWP", "I\\KFMFOGQIRKR[ RRKSHTGVFWFYGZI", "NiTEQH RXFZF\\G^I_K_[ R_K`HaGcFdFfGgI", "I\\KFMFOGQIRKR[ RRKSHTGVFWFYGZI RN?O@NAM@N?NA RV?W@VAU@V?VA", "G]RFRb RPMTMVNXPYRYVXXVZT[P[NZLXKVKRLPNNPM", "F^RTRX R[MIM RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "IZLMNNOPOXNZM[LZLXMVVRWPWNVMUNTPTXUZW[V^U`TaRb", "G]R[Rb RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "H[R[Rb RP[NZMYLWLQMONNPMSMUNVOWQWWVYUZS[P[", "FZWFQFNGLIKKJOJRKVLXNZQ[R[T\\U^U_TaSbQb", "HZVMPMNNMOLQLWMYNZP[R[T\\U^U_TaRbPb", "HZTPMP RM[MFWF", "MZVPRP RWFUFSGRIR_QaOb", "H\\MFOGPILSXNTXUZW[", "I[RFMPWPR[", "H\\NGNL RXIULTNTW RKIMGPFTFVGXIYKZOZUYYX[", "H\\L[UR RR[WV RLMPNSPURWVXZXb", "CaRWRR R\\XY]V`SaMa RLFJGHIGLGUHXJZL[N[PZQYRWSYTZV[X[ZZ\\X]U]L\\IZGXF", "G]RTRX RXZW\\S`PaOa RMMLNKPKXLZN[O[QZRXSZU[V[XZYXYPXNWM", "G]XFXb RPFNGLIKMKTLXNZP[T[VZXX", "I\\WMWb RQMONNOMQMWNYOZQ[T[VZWY", "F]KFK[ RKQMOPNTNVOXQYTYWXZW\\U^R`Nb", "I[WLWMVPTRRSPSNRMPMONMPLRLTMVPWSWWVYUZS[M[", "F]KHLGOFTFWGXHYJYLXOVQJ[N^Q_V_Y^", "J[NNPMTMVNWPWRVTTVN[P]R^U^W]", "G]I[[[ RIFJFLGXZZ[ R[FZFXGLZJ[", "H[KMMNVZX[K[MZVNXM", "G\\XEVFOFMGLHKJKWLYMZO[T[VZWYXWXPWNVMTLNLLMKN", "H[WEVFTGPGNHMILKLWMYNZP[S[UZVYWWWQVOUNSMOMMNLO", "G]RFRb RKQKMYMYQ", "I[MMWM RRFRb", "IZLMNNOPOXNZM[LZLXMVVRWPWNVMUNTPTXUZW[", "H\\WbQbOaN`M^MQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "HZVZT[P[NZMYLWLQMONNPMTMVN", "MWRMR_QaObNb RRFQGRHSGRFRH", "G]KPYP RPFTFVGXIYMYTXXVZT[P[NZLXKTKMLINGPF", "HZLTST RVZT[P[NZMYLWLQMONNPMTMVN", "J\\XTQT RNZP[T[VZWYXWXQWOVNTMPMNN", "G\\LFL[ RLKTKVLWMXOXRWTVUTVLV", "H[MFMb RMNOMSMUNVOWQWWVYUZS[O[MZ", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH", "F^K[KFRMYFY[", "G]LbLMRSXMX[", "G\\J`S` RMbMQNOONQMTMVNWOXQXWWYVZT[Q[OZMX", "I^MYNZQ[S[VZXXYVZRZOYKXIVGSFQFNGMH", "F[WYVZS[Q[NZLXKVJRJOKKLINGQFSFVGWH RROQPRQSPRORQ", "I^MYNZQ[S[VZXXYVZRZOYKXIVGSFQFNGMH RROQPRQSPRORQ"];
 
 // lib/pcb-stroke-text.ts
 function pcbStrokeText(text2, origin) {
-  if (/\$\{|[~^_]\{/.test(text2.value)) return { unsupported: "unresolved or formatted text" };
+  if (text2.fontFace || text2.knockout) return { unsupported: "native font faces or knockout text" };
+  const value = pcbTextDisplayValue(text2);
+  if (/\$\{|[~^_]\{/.test(value)) return { unsupported: "unresolved or formatted text" };
   const lines = [];
-  for (const line of text2.value.split("\n")) {
+  for (const line of value.split("\n")) {
     const encoded = [];
     for (const char of line) {
       const code = char.codePointAt(0);
@@ -10774,7 +13793,7 @@ function pcbStrokeText(text2, origin) {
   const cos = Math.cos(angle3);
   const sin = Math.sin(angle3);
   const mirror = text2.justify?.includes("mirror") ? -1 : 1;
-  const spacing = 1.25 * text2.size.y;
+  const spacing = pcbTextLineAdvance(text2);
   const top = text2.justify?.includes("top") ? text2.size.y : text2.justify?.includes("bottom") ? -(lines.length - 1) * spacing : text2.size.y / 2 - (lines.length - 1) * spacing / 2;
   const advance = (glyph) => (glyph.charCodeAt(1) - glyph.charCodeAt(0)) * text2.size.x / 21;
   const paths2 = [];
@@ -10807,10 +13826,12 @@ function pcbStrokeText(text2, origin) {
 
 // lib/manufacturing-gerber.ts
 var decimal2 = (v) => String(Number(v.toFixed(6)));
+var coordinatesPerMillimetre = 1e6;
 var coordinate = (v) => {
-  if (!Number.isFinite(v) || Math.abs(v) >= 1e6)
+  const rounded = Math.round(v * coordinatesPerMillimetre);
+  if (!Number.isFinite(rounded) || Math.abs(rounded) >= coordinatesPerMillimetre ** 2)
     throw new Error("Gerber coordinates exceed the supported range.");
-  return String(Math.round(v * 1e6));
+  return rounded;
 };
 var xy = (p) => `X${coordinate(p.x)}Y${coordinate(-p.y)}`;
 var GerberLayer = class {
@@ -10858,11 +13879,72 @@ G01*`
     for (const ring of rings) {
       if (ring.length < 3) throw new Error("A Gerber region needs at least three vertices.");
       this.add(`${xy(ring[0])}D02*`);
-      for (const point2 of [...ring.slice(1), ring[0]]) this.add(`${xy(point2)}D01*`);
+      for (const point3 of [...ring.slice(1), ring[0]]) this.add(`${xy(point3)}D01*`);
     }
     this.add("G37*");
   }
+  zoneFills(polygons) {
+    if (!polygons.length) return;
+    const engine = new import_clipper_lib3.default.Clipper();
+    engine.StrictlySimple = true;
+    const tree = new import_clipper_lib3.default.PolyTree();
+    let vertices = 0;
+    for (const polygon of polygons) {
+      vertices += polygon.length;
+      if (vertices > 25e4) throw new Error("Gerber zone fills exceed the layer geometry limit.");
+      const path = polygon.map(({ x, y }) => ({ X: coordinate(x), Y: coordinate(-y) }));
+      if (!import_clipper_lib3.default.Clipper.Orientation(path)) path.reverse();
+      if (!engine.AddPath(path, import_clipper_lib3.default.PolyType.ptSubject, true))
+        throw new Error("A saved zone has no drawable contour at Gerber resolution.");
+    }
+    if (!engine.Execute(
+      import_clipper_lib3.default.ClipType.ctUnion,
+      tree,
+      import_clipper_lib3.default.PolyFillType.pftNonZero,
+      import_clipper_lib3.default.PolyFillType.pftNonZero
+    ) || !tree.ChildCount())
+      throw new Error("Saved zone contours do not enclose drawable Gerber area.");
+    let clear = false;
+    for (let node = tree.GetFirst(); node; node = node.GetNext()) {
+      if (node.IsHole() !== clear) {
+        clear = node.IsHole();
+        this.add(clear ? "%LPC*%" : "%LPD*%");
+      }
+      this.region([
+        node.Contour().map(({ X, Y }) => ({
+          x: X / coordinatesPerMillimetre,
+          y: -Y / coordinatesPerMillimetre
+        }))
+      ]);
+    }
+    if (clear) this.add("%LPD*%");
+  }
   pad(footprint, pad, marginX = 0, marginY = marginX) {
+    if (pad.nativeCustomPad) {
+      if (marginX !== 0 || marginY !== 0)
+        throw new Error(
+          "Gerber export requires zero mask and paste margins on native custom pads."
+        );
+      const placement = { ...padPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+      const graphics = nativeCustomPadPlotGraphics(
+        pad,
+        (point4) => footprintPoint(placement, point4)
+      );
+      const anchor = nativeCustomPadAnchor(pad);
+      if (anchor) this.pad(footprint, anchor);
+      for (const graphic of graphics) {
+        if (!graphic.kind && graphic.start.x === graphic.end.x && graphic.start.y === graphic.end.y)
+          this.circle(graphic.start, graphic.width);
+        else this.graphic(graphic);
+      }
+      return;
+    }
+    if (pad.shape === "trapezoid") {
+      if (marginX || marginY)
+        throw new Error("Gerber export supports trapezoid pads only with zero aperture margin.");
+      this.region([padPolygon(footprint, pad).outer]);
+      return;
+    }
     if (pad.outline) {
       if (marginX !== marginY)
         throw new Error("Gerber export requires uniform custom pad margins.");
@@ -10879,15 +13961,15 @@ G01*`
     if (pad.shape === "circle")
       throw new Error("Gerber export does not support elliptical pad apertures.");
     const at = padPosition(footprint, pad), angle3 = -padRotation(footprint, pad) * Math.PI / 180;
-    const point2 = (x, y) => ({
+    const point3 = (x, y) => ({
       x: at.x + x * Math.cos(angle3) - y * Math.sin(angle3),
       y: at.y + x * Math.sin(angle3) + y * Math.cos(angle3)
     });
     if (pad.shape === "oval") {
       const radius = Math.min(w, h) / 2;
       this.line(
-        point2(w > h ? -w / 2 + radius : 0, h > w ? -h / 2 + radius : 0),
-        point2(w > h ? w / 2 - radius : 0, h > w ? h / 2 - radius : 0),
+        point3(w > h ? -w / 2 + radius : 0, h > w ? -h / 2 + radius : 0),
+        point3(w > h ? w / 2 - radius : 0, h > w ? h / 2 - radius : 0),
         2 * radius
       );
       return;
@@ -10913,19 +13995,66 @@ G01*`
     for (const [i, corner] of corners.entries()) {
       const chamfer = pad.chamfer?.includes(corner.name);
       const cut = chamfer ? c : r;
-      const start = i % 2 === 0 ? point2(corner.x * (w / 2 - cut), corner.y * h / 2) : point2(corner.x * w / 2, corner.y * (h / 2 - cut));
-      const end = i % 2 === 0 ? point2(corner.x * w / 2, corner.y * (h / 2 - cut)) : point2(corner.x * (w / 2 - cut), corner.y * h / 2);
+      const start = i % 2 === 0 ? point3(corner.x * (w / 2 - cut), corner.y * h / 2) : point3(corner.x * w / 2, corner.y * (h / 2 - cut));
+      const end = i % 2 === 0 ? point3(corner.x * w / 2, corner.y * (h / 2 - cut)) : point3(corner.x * (w / 2 - cut), corner.y * h / 2);
       this.add(`${xy(start)}D${first ? "01" : "02"}*`);
       first ??= start;
       if (r && !chamfer)
-        this.arc(end, point2(corner.x * (w / 2 - r), corner.y * (h / 2 - r)), start, true);
+        this.arc(end, point3(corner.x * (w / 2 - r), corner.y * (h / 2 - r)), start, true);
       else this.add(`${xy(end)}D01*`);
     }
     this.add(`${xy(first)}D01*
 G37*`);
   }
+  maskGraphic(g, expansion, nativeRectangle) {
+    const nativeWidth = g.nativeNoStroke ? -1 : coordinate(g.width);
+    const width = (nativeWidth + 2 * coordinate(expansion)) / coordinatesPerMillimetre;
+    if (width > 0 || width === 0 && g.fill) {
+      this.graphic({ ...g, width });
+      return;
+    }
+    if (!g.fill) return;
+    if (g.kind === "circle") {
+      const diameter = 2 * Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y) + width;
+      if (diameter > 0) this.circle(g.start, diameter);
+      return;
+    }
+    if (g.kind !== "polygon" || g.polygonArcs)
+      throw new Error("Gerber export does not support shrinking this filled mask graphic.");
+    const vertices = [g.start, ...g.points ?? [], g.end];
+    if (nativeRectangle) {
+      if ([1, 3].some(
+        (i) => Math.hypot(vertices[i].x - g.start.x, vertices[i].y - g.start.y) <= -2 * width
+      ))
+        return;
+      const [start, first, second, end] = vertices.map((vertex, index) => {
+        const moveToward = (other) => {
+          const scale2 = -width / Math.hypot(other.x - vertex.x, other.y - vertex.y);
+          return { x: scale2 * (other.x - vertex.x), y: scale2 * (other.y - vertex.y) };
+        };
+        const previous = moveToward(vertices[(index + 3) % 4]);
+        const next = moveToward(vertices[(index + 1) % 4]);
+        return { x: vertex.x + previous.x + next.x, y: vertex.y + previous.y + next.y };
+      });
+      const radius = (g.roundedRectRadius ?? 0) + width;
+      this.graphic({
+        ...g,
+        start,
+        end,
+        points: [first, second],
+        width: 0,
+        roundedRectRadius: radius > 0 ? radius : void 0
+      });
+    } else {
+      for (const outline of offsetPolygons([{ outer: vertices, holes: [] }], width / 2, 5e-4)) {
+        if (outline.holes.length)
+          throw new Error("Gerber export does not support holes in a contracted mask graphic.");
+        this.region([outline.outer]);
+      }
+    }
+  }
   graphic(g) {
-    if (g.text?.hidden) return;
+    if (g.text?.hidden || g.kind === "point") return;
     if (g.kind === "dimension")
       throw new Error("Gerber export does not support dimensions on manufacturing layers.");
     if (g.stroke && !["solid", "default"].includes(g.stroke))
@@ -10934,9 +14063,32 @@ G37*`);
       this.text(g);
       return;
     }
+    if (g.kind === "curve") {
+      if (g.width > 0 || g.layer === "Edge.Cuts") {
+        const [start, ...ends] = pcbBezierVertices(g, 5e-4).map(xy);
+        let previous = start;
+        let started = false;
+        for (const end of ends) {
+          if (end === previous) continue;
+          if (!started) {
+            this.aperture(g.width || 0.05);
+            this.add(`G01*
+${start}D02*`);
+            started = true;
+          }
+          this.add(`${end}D01*`);
+          previous = end;
+        }
+      }
+      return;
+    }
+    if (g.roundedRectRadius !== void 0 || g.polygonArcs) {
+      this.curvedContour(g);
+      return;
+    }
     if (g.kind === "circle") {
       const radius = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
-      if (g.fill) this.circle(g.start, 2 * radius + g.width);
+      if (g.fill && g.layer !== "Edge.Cuts") this.circle(g.start, 2 * radius + g.width);
       else {
         this.aperture(g.width || 0.05);
         const start = { x: g.start.x + radius, y: g.start.y }, opposite = { x: g.start.x - radius, y: g.start.y };
@@ -10953,13 +14105,51 @@ G37*`);
     } else {
       const points2 = [g.start, ...g.points ?? [], g.end];
       if (g.kind === "polygon") {
-        if (g.fill) this.region([points2]);
+        if (g.fill && g.layer !== "Edge.Cuts") this.region([points2]);
         points2.push(g.start);
       }
       if (g.width > 0 || g.layer === "Edge.Cuts")
         for (let i = 1; i < points2.length; i++)
           this.line(points2[i - 1], points2[i], g.width || 0.05);
     }
+  }
+  curvedContour(g) {
+    const edges = [];
+    if (g.roundedRectRadius !== void 0) {
+      const corners = pcbRoundedRectArcs(g);
+      for (const [index, corner] of corners.entries())
+        edges.push(corner, { start: corner.end, end: corners[(index + 1) % corners.length].start });
+    } else {
+      const vertices = [g.start, ...g.points ?? [], g.end];
+      const mids = new Map(g.polygonArcs.map(({ vertex, mid }) => [vertex, mid]));
+      for (const [index, start] of vertices.entries()) {
+        const end = vertices[(index + 1) % vertices.length];
+        const mid = mids.get(index);
+        if (!mid) {
+          edges.push({ start, end });
+          continue;
+        }
+        const arc = pcbArc({ start, mid, end });
+        if (!arc) throw new Error("Gerber export contains a degenerate polygon arc.");
+        edges.push({ start, end, center: arc.center, clockwise: arc.delta > 0 });
+      }
+    }
+    const draw = (region) => {
+      this.aperture(region ? 1e-3 : g.width || 0.05);
+      this.add(region ? "G01*\nG36*" : "G01*");
+      this.add(`${xy(edges[0].start)}D02*`);
+      for (const { start, end, center, clockwise } of edges) {
+        const encoded = xy(end);
+        if (center) {
+          if (encoded === xy(start))
+            throw new Error("A Gerber contour arc collapses at the output resolution.");
+          this.arc(end, center, start, clockwise);
+        } else if (encoded !== xy(start)) this.add(`${encoded}D01*`);
+      }
+      if (region) this.add("G37*");
+    };
+    if (g.fill && g.layer !== "Edge.Cuts") draw(true);
+    if (g.width > 0 || g.layer === "Edge.Cuts") draw(false);
   }
   text(g) {
     const ink = pcbStrokeText(g.text, g.start);
@@ -10986,11 +14176,11 @@ G37*`);
 };
 
 // lib/model-cad-scad.ts
-var fail4 = (message) => {
+var fail6 = (message) => {
   throw new Error(`OpenSCAD export: ${message}`);
 };
-var number3 = (value) => String(value);
-var list = (values) => `[${values.map(number3).join(", ")}]`;
+var number4 = (value) => String(value);
+var list = (values) => `[${values.map(number4).join(", ")}]`;
 var indent = (lines) => lines.map((line) => "  " + line);
 var nest = (statement, body) => [statement, ...indent(body)];
 function posed(position2, rotation, body) {
@@ -11005,21 +14195,21 @@ function posed(position2, rotation, body) {
 }
 function solid(shape, name) {
   if (shape.edgeTreatment)
-    return fail4(`${name} has chamfered or filleted edges, which OpenSCAD cannot represent.`);
+    return fail6(`${name} has chamfered or filleted edges, which OpenSCAD cannot represent.`);
   const { size } = shape;
   let body;
   if (shape.kind === "box") body = [`cube(${list([size.x, size.y, size.z])}, center = true);`];
   else if (shape.kind === "cylinder")
-    body = [`cylinder(h = ${number3(size.z)}, d = ${number3(size.x)}, center = true);`];
+    body = [`cylinder(h = ${number4(size.z)}, d = ${number4(size.x)}, center = true);`];
   else if (shape.kind === "extrusion") {
     const profile = shape.profile;
-    body = nest(`linear_extrude(height = ${number3(size.z)}, center = true)`, [
-      profile.kind === "rectangle" ? `square(${list([size.x, size.y])}, center = true);` : profile.kind === "circle" ? `circle(d = ${number3(size.x)});` : `polygon([${profile.points.map((point2) => list([point2.x, point2.y])).join(", ")}]);`
+    body = nest(`linear_extrude(height = ${number4(size.z)}, center = true)`, [
+      profile.kind === "rectangle" ? `square(${list([size.x, size.y])}, center = true);` : profile.kind === "circle" ? `circle(d = ${number4(size.x)});` : `polygon([${profile.points.map((point3) => list([point3.x, point3.y])).join(", ")}]);`
     ]);
   } else {
-    const { operation, operands } = shape.boolean;
+    const { operation: operation2, operands } = shape.boolean;
     body = [
-      `${operation}() {`,
+      `${operation2}() {`,
       ...operands.flatMap(
         (operand) => indent(posed(operand.position, operand.rotation, solid(operand.shape, name)))
       ),
@@ -11030,7 +14220,7 @@ function solid(shape, name) {
 }
 function exportModelCadScad(input) {
   const model = validateModelCad(input);
-  if (!model.objects.length) return fail4("Create a CAD solid before exporting OpenSCAD.");
+  if (!model.objects.length) return fail6("Create a CAD solid before exporting OpenSCAD.");
   const shapes = model.objects.map((object2) => modelCadShape(object2));
   const bodies = model.objects.flatMap((object2, index) => {
     const color = [16, 8, 0].map(
@@ -11255,7 +14445,9 @@ function dxfAngle(nativeRadians) {
   return degrees < 0 ? degrees + 360 : degrees;
 }
 function exportBoardOutlineDxf(board) {
-  const { edges } = prepareBoardOutline(board);
+  if (pcbBarcodes(board.barcodes).some(({ layer }) => layer === "Edge.Cuts"))
+    throw new Error("DXF export of native barcodes on Edge.Cuts requires KiCad.");
+  const edges = prepareFabricationOutline(board, "DXF");
   const pairs = [];
   pairs.push(0, "SECTION", 2, "HEADER");
   pairs.push(9, "$ACADVER", 1, "AC1015", 9, "$INSUNITS", 70, 4, 9, "$MEASUREMENT", 70, 1);
@@ -11268,28 +14460,43 @@ function exportBoardOutlineDxf(board) {
     pairs.push(0, name, 5, (handle++).toString(16).toUpperCase(), 330, modelSpace.record);
     pairs.push(100, "AcDbEntity", 8, outlineLayer, 100, subclass);
   };
-  const point2 = ({ x, y }, offset2 = 0) => {
+  const point3 = ({ x, y }, offset2 = 0) => {
     pairs.push(10 + offset2, x, 20 + offset2, -y, 30 + offset2, 0);
   };
-  const endpointCounts = /* @__PURE__ */ new Map();
+  const closedPolyline = (vertices) => {
+    const retained = vertices.filter(({ at, bulge }, index) => {
+      const next = vertices[(index + 1) % vertices.length].at;
+      return bulge !== void 0 || at.x !== next.x || at.y !== next.y;
+    });
+    if (retained.length + retained.filter(({ bulge }) => bulge !== void 0).length < 3)
+      throw new Error("The board outline contains a degenerate polygon.");
+    entity("LWPOLYLINE", "AcDbPolyline");
+    pairs.push(90, retained.length, 70, 1);
+    for (const { at, bulge } of retained) {
+      pairs.push(10, at.x, 20, -at.y);
+      if (bulge !== void 0) pairs.push(42, bulge);
+    }
+  };
   for (const edge of edges) {
     if (edge.stroke && edge.stroke !== "solid" && edge.stroke !== "default")
       throw new Error("DXF export requires solid board outline graphics.");
     const { start, end } = edge;
-    if (!edge.kind || edge.kind === "arc") {
-      for (const { x, y } of [start, end]) {
-        const key2 = `${x},${y}`;
-        endpointCounts.set(key2, (endpointCounts.get(key2) ?? 0) + 1);
-      }
-    }
     switch (edge.kind) {
+      case "curve": {
+        entity("SPLINE", "AcDbSpline");
+        const planar = 8, closed = start.x === end.x && start.y === end.y ? 1 : 0;
+        pairs.push(210, 0, 220, 0, 230, 1, 70, planar | closed, 71, 3, 72, 8, 73, 4, 74, 0);
+        for (const knot of [0, 0, 0, 0, 1, 1, 1, 1]) pairs.push(40, knot);
+        for (const control of [start, ...edge.points, end]) point3(control);
+        break;
+      }
       case "arc": {
         const arc = pcbArc(edge);
         if (!arc) throw new Error("The board outline contains a degenerate arc.");
         const first = dxfAngle(arc.start);
         const last = dxfAngle(arc.start + arc.delta);
         entity("ARC", "AcDbCircle");
-        point2(arc.center);
+        point3(arc.center);
         pairs.push(40, arc.radius, 100, "AcDbArc");
         pairs.push(50, arc.delta > 0 ? last : first, 51, arc.delta > 0 ? first : last);
         break;
@@ -11298,33 +14505,42 @@ function exportBoardOutlineDxf(board) {
         const radius = Math.hypot(end.x - start.x, end.y - start.y);
         if (!radius) throw new Error("The board outline contains a degenerate circle.");
         entity("CIRCLE", "AcDbCircle");
-        point2(start);
+        point3(start);
         pairs.push(40, radius);
         break;
       }
       case "polygon": {
+        if (edge.roundedRectRadius !== void 0) {
+          closedPolyline(
+            pcbRoundedRectArcs(edge).flatMap(({ start: start2, end: end2, clockwise }) => [
+              { at: start2, bulge: Math.tan((clockwise ? -1 : 1) * Math.PI / 8) },
+              { at: end2 }
+            ])
+          );
+          break;
+        }
         const vertices = [start, ...edge.points ?? [], end];
-        if (start.x === end.x && start.y === end.y) vertices.pop();
-        if (vertices.length < 3)
-          throw new Error("The board outline contains a degenerate polygon.");
-        entity("LWPOLYLINE", "AcDbPolyline");
-        pairs.push(90, vertices.length, 70, 1);
-        for (const { x, y } of vertices) pairs.push(10, x, 20, -y);
+        const mids = new Map(edge.polygonArcs?.map(({ vertex, mid }) => [vertex, mid]));
+        closedPolyline(
+          vertices.map((at, index) => {
+            const mid = mids.get(index);
+            if (!mid) return { at };
+            const arc = pcbArc({ start: at, mid, end: vertices[index + 1] });
+            if (!arc) throw new Error("The board outline contains a degenerate arc.");
+            return { at, bulge: Math.tan(-arc.delta / 4) };
+          })
+        );
         break;
       }
       case void 0:
-        if (start.x === end.x && start.y === end.y)
-          throw new Error("The board outline contains a zero-length line.");
         entity("LINE", "AcDbLine");
-        point2(start);
-        point2(end, 1);
+        point3(start);
+        point3(end, 1);
         break;
       default:
         throw new Error("Unsupported board outline geometry.");
     }
   }
-  if ([...endpointCounts.values()].some((count) => count !== 2))
-    throw new Error("DXF export requires exact joins between board outline lines and arcs.");
   pairs.push(0, "ENDSEC");
   writeDxfObjects(pairs);
   return pairs.join("\r\n");
@@ -16064,8 +19280,8 @@ var reference_simulation_default = {
 var definitions = reference_simulation_default.profiles.flatMap((profile) => profile.parts);
 
 // lib/pcb-sync.ts
-var pcbPinKey = (ref, number5) => JSON.stringify([ref, number5]);
-function fail5(message) {
+var pcbPinKey = (ref, number6) => JSON.stringify([ref, number6]);
+function fail7(message) {
   throw new Error(message);
 }
 var key = (p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
@@ -16073,8 +19289,8 @@ var ownedSchematicNets = /* @__PURE__ */ new WeakMap();
 var copyNets = (nets) => nets.map((net) => ({ name: net.name, pins: [...net.pins] }));
 function schematicPCBNets(circuit) {
   const owned = isOwnedCircuit(circuit);
-  const cached = owned ? ownedSchematicNets.get(circuit) : void 0;
-  if (cached) return copyNets(cached);
+  const cached2 = owned ? ownedSchematicNets.get(circuit) : void 0;
+  if (cached2) return copyNets(cached2);
   const nets = computeSchematicPCBNets(circuit);
   if (owned) {
     ownedSchematicNets.set(circuit, nets);
@@ -16084,10 +19300,10 @@ function schematicPCBNets(circuit) {
 }
 function computeSchematicPCBNets(circuit, conductorModels = []) {
   if (circuit.parts.length > 2e3 || circuit.wires.length > 1e4)
-    fail5("PCB update supports at most 2,000 symbols and 10,000 wires.");
+    fail7("PCB update supports at most 2,000 symbols and 10,000 wires.");
   const points2 = [], parents = [];
   const add = (p) => {
-    if (points2.length >= 3e4) fail5("This schematic exceeds the PCB connectivity update limit.");
+    if (points2.length >= 3e4) fail7("This schematic exceeds the PCB connectivity update limit.");
     points2.push(p);
     parents.push(parents.length);
     return parents.length - 1;
@@ -16121,13 +19337,13 @@ function computeSchematicPCBNets(circuit, conductorModels = []) {
     const power = Boolean(child(library, "power"));
     const modelPins = [];
     definitions2.forEach((pin, i) => {
-      const index = add(positions[i]), number5 = val(child(pin, "number"));
-      const pinKey = pcbPinKey(part.ref, number5);
+      const index = add(positions[i]), number6 = val(child(pin, "number"));
+      const pinKey = pcbPinKey(part.ref, number6);
       const previous = physical.get(pinKey);
       if (previous !== void 0) join(index, previous);
       physical.set(pinKey, index);
       if (conductorParts.has(part.id)) modelPins.push(index);
-      else pins.push({ key: pinKey, ref: part.ref, number: number5, index });
+      else pins.push({ key: pinKey, ref: part.ref, number: number6, index });
       if (power && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
       else if (!power && val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
@@ -16138,7 +19354,7 @@ function computeSchematicPCBNets(circuit, conductorModels = []) {
   circuit.labels.forEach((l) => names.push({ name: l.text, index: add(l) }));
   circuit.junctions.forEach(add);
   if (points2.length > 3e4 || points2.length * circuit.wires.length > 5e6)
-    fail5(
+    fail7(
       "This schematic exceeds the PCB connectivity update limit. Reduce its size before updating."
     );
   const cell = 10;
@@ -16209,14 +19425,14 @@ function computeSchematicPCBNets(circuit, conductorModels = []) {
   for (const [r, members] of groups) {
     const labels = [...groupNames.get(r) || []].sort();
     if (labels.length > 1)
-      fail5(
+      fail7(
         `Connected net has conflicting names: ${labels.join(", ")}. Use one net name before updating PCB.`
       );
     const unique = [...new Set(members.map((p) => p.key))].sort();
     const connected = unique.length > 1 || wireRoots.has(r) || labels.length > 0;
     if (members.some((p) => noConnects.has(key(points2[p.index])))) {
       if (connected)
-        fail5(
+        fail7(
           `${members[0].ref} pin ${members[0].number} has both a connection and a no-connect marker.`
         );
       continue;
@@ -16226,7 +19442,7 @@ function computeSchematicPCBNets(circuit, conductorModels = []) {
     result.push({ name: labels[0] || `Net-(${first.ref}-Pad${first.number})`, pins: unique });
   }
   if (new Set(result.map((n) => n.name)).size !== result.length)
-    fail5(
+    fail7(
       "Generated PCB net names conflict with schematic labels. Add distinct labels before updating."
     );
   return result.sort((a, b) => a.name.localeCompare(b.name));
@@ -16266,12 +19482,12 @@ var assemblyFlags = [
 ];
 function componentData(part) {
   const raw = part.raw ?? [];
-  const fields = partFields(part);
+  const fields4 = partFields(part);
   for (const field of children(raw, "property")) {
-    if (child(field, "private") || field.includes("private")) delete fields[val(field)];
+    if (child(field, "private") || field.includes("private")) delete fields4[val(field)];
   }
   return {
-    fields: Object.entries(fields).sort(([a], [b]) => a.localeCompare(b, "en")),
+    fields: Object.entries(fields4).sort(([a], [b]) => a.localeCompare(b, "en")),
     flags: [
       ...assemblyFlags.filter(([native, excluded]) => val(child(raw, native)) === excluded).map(([, , exported]) => exported),
       ...participatesInSimulation(part) ? [] : ["exclude_from_sim"]
@@ -16279,11 +19495,11 @@ function componentData(part) {
   };
 }
 function pinData(definition) {
-  const number5 = val(child(definition, "number"));
-  if (!number5.trim() || /^\[.*\]$/s.test(number5))
+  const number6 = val(child(definition, "number"));
+  if (!number6.trim() || /^\[.*\]$/s.test(number6))
     throw new Error("Schematic netlist requires explicit individual symbol pin numbers.");
   return {
-    number: number5,
+    number: number6,
     name: val(child(definition, "name")),
     type: val(definition)
   };
@@ -16348,8 +19564,8 @@ function exportSchematicNetlist(project) {
     units.sort((a, b) => (a.unit ?? 1) - (b.unit ?? 1));
     const first = units[0];
     const { lib, name, definition } = libraries2.get(first.libId);
-    const { fields, flags } = componentData(first);
-    const metadata = JSON.stringify({ fields, flags });
+    const { fields: fields4, flags } = componentData(first);
+    const metadata = JSON.stringify({ fields: fields4, flags });
     if (new Set(units.map((part) => part.unit ?? 1)).size !== units.length || units.slice(1).some(
       (part) => part.libId !== first.libId || part.value !== first.value || JSON.stringify(componentData(part)) !== metadata
     ))
@@ -16362,13 +19578,13 @@ function exportSchematicNetlist(project) {
       if (children(part.raw ?? [], "pin").some((pin) => child(pin, "alternate")))
         throw new Error(`${ref}: schematic netlist does not support alternate pin functions.`);
       for (const pin of pins) {
-        const { number: number5, name: pinName, type } = pinData(pin);
+        const { number: number6, name: pinName, type } = pinData(pin);
         if (marker) continue;
-        const pinKey = pcbPinKey(ref, number5);
-        const element = `      <node ref="${xml(ref)}" pin="${xml(number5)}" pinfunction="${xml(pinName)}" pintype="${xml(type)}"/>`;
+        const pinKey = pcbPinKey(ref, number6);
+        const element = `      <node ref="${xml(ref)}" pin="${xml(number6)}" pinfunction="${xml(pinName)}" pintype="${xml(type)}"/>`;
         const old = nodeElements.get(pinKey);
         if (old !== void 0 && old !== element)
-          throw new Error(`${ref} pin ${number5}: schematic netlist has conflicting pin metadata.`);
+          throw new Error(`${ref} pin ${number6}: schematic netlist has conflicting pin metadata.`);
         nodeElements.set(pinKey, element);
       }
     }
@@ -16378,23 +19594,23 @@ function exportSchematicNetlist(project) {
     usedLibraries.add(first.libId);
     write(`    <comp ref="${xml(ref)}">`);
     write(`      <value>${xml(first.value || "~")}</value>`);
-    const byField = new Map(fields);
+    const byField = new Map(fields4);
     for (const field of ["Footprint", "Datasheet", "Description"]) {
       const value = byField.get(field);
       if (value) write(`      <${field.toLowerCase()}>${xml(value)}</${field.toLowerCase()}>`);
     }
     write("      <fields>");
-    for (const [field, value] of fields)
+    for (const [field, value] of fields4)
       write(`        <field name="${xml(field)}">${xml(value)}</field>`);
     write("      </fields>");
     write(
       `      <libsource lib="${xml(lib)}" part="${xml(name)}" description="${xml(byField.get("Description") ?? "")}"/>`
     );
-    for (const [name2, value] of fields) {
+    for (const [name2, value] of fields4) {
       if (!mandatoryFields.includes(name2) && name2 !== "exclude_from_sim" && !assemblyFlags.some(([, , exported]) => exported === name2))
         write(`      <property name="${xml(name2)}" value="${xml(value)}"/>`);
     }
-    for (const flag of flags) write(`      <property name="${flag}"/>`);
+    for (const flag2 of flags) write(`      <property name="${flag2}"/>`);
     write('      <sheetpath names="/" tstamps="/"/>');
     write(`      <tstamps>${units.map((part) => part.id).join(" ")}</tstamps>`);
     write("    </comp>");
@@ -16413,10 +19629,10 @@ function exportSchematicNetlist(project) {
     for (const unit of children(definition, "symbol")) {
       if (/_\d+_2$/.test(val(unit))) continue;
       for (const pin of children(unit, "pin")) {
-        const { number: number5, name: name2, type } = pinData(pin);
-        if (exported.has(number5)) continue;
-        exported.add(number5);
-        write(`        <pin num="${xml(number5)}" name="${xml(name2)}" type="${xml(type)}"/>`);
+        const { number: number6, name: name2, type } = pinData(pin);
+        if (exported.has(number6)) continue;
+        exported.add(number6);
+        write(`        <pin num="${xml(number6)}" name="${xml(name2)}" type="${xml(type)}"/>`);
       }
     }
     write("      </pins>");
@@ -16452,11 +19668,11 @@ var projectExportFormats = [
 ];
 
 // lib/manufacturing-export.ts
-var number4 = (n) => String(Number(n.toFixed(6)));
+var number5 = (n) => String(Number(n.toFixed(6)));
 var csv = (rows) => rows.map((row) => row.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\r\n") + "\r\n";
 var exportStem = (name) => name.replace(/\.kicad_(?:pro|sch|pcb)$/i, "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 120) || "project";
-function exportFileName(stem2, format) {
-  const definition = projectExportFormats.find((entry) => entry.id === format);
+function exportFileName(stem2, format2) {
+  const definition = projectExportFormats.find((entry) => entry.id === format2);
   if (!definition) throw new Error("Unsupported export format.");
   return `${stem2}${definition.suffix}.${definition.extension}`;
 }
@@ -16464,13 +19680,18 @@ function boardData(project) {
   if (!project.pcb) throw new Error("Create a PCB layout before exporting manufacturing files.");
   const file = projectNativeFiles(project).files.find((file2) => /\.kicad_pcb$/i.test(file2.name));
   if (!file) throw new Error("The project has no native PCB file.");
-  const root = parseSExpr(file.source);
-  const { board } = parseKiCadPCBTree(root, project.schematic, project.id);
-  return { board, root };
+  const {
+    board,
+    nativeRectangleIds,
+    normalized: root
+  } = parseKiCadPCB(file.source, project.schematic, project.id);
+  return { board, nativeRectangleIds, root };
 }
-function assemblyFiles(project, board, root, stem2, format) {
-  const includeBom = format !== "placement";
-  const includePosition = format !== "bom";
+function assemblyFiles(project, board, root, stem2, format2) {
+  if (children(child(root, "variants") ?? [], "variant").length || children(root, "footprint").some((footprint) => child(footprint, "variant")))
+    throw new Error("Assembly export for native KiCad variants is unavailable in OpenPE.");
+  const includeBom = format2 !== "placement";
+  const includePosition = format2 !== "bom";
   const native = new Map(children(root, "footprint").map((f) => [val(child(f, "uuid")), f]));
   const parts = new Map(project.schematic.parts.map((p) => [p.id, p]));
   const rows = [];
@@ -16491,11 +19712,11 @@ function assemblyFiles(project, board, root, stem2, format) {
     references.add(reference.toUpperCase());
     let lcsc = "";
     if (bom) {
-      const fields = {
+      const fields4 = {
         ...Object.fromEntries(children(source ?? [], "property").map((p) => [val(p), val(p, 2)])),
         ...part?.fields
       };
-      lcsc = ["LCSC Part #", "LCSC", "LCSC Part", "JLCPCB Part #"].map((key2) => fields[key2]?.trim()).find(Boolean) ?? "";
+      lcsc = ["LCSC Part #", "LCSC", "LCSC Part", "JLCPCB Part #"].map((key2) => fields4[key2]?.trim()).find(Boolean) ?? "";
       if (lcsc && !/^C\d+$/i.test(lcsc))
         throw new Error(`Invalid LCSC part number for ${reference}.`);
     }
@@ -16539,36 +19760,55 @@ function assemblyFiles(project, board, root, stem2, format) {
         ["Designator", "Mid X", "Mid Y", "Layer", "Rotation"],
         ...rows.filter((row) => row.pos).map(({ reference, f }) => [
           reference,
-          number4(f.x) + "mm",
-          number4(-f.y) + "mm",
+          number5(f.x) + "mm",
+          number5(-f.y) + "mm",
           f.side === "front" ? "Top" : "Bottom",
-          number4((f.rotation % 360 + 360) % 360)
+          number5((f.rotation % 360 + 360) % 360)
         ])
       ])
     });
   return files2;
 }
-function contours(points2) {
-  const result = [], path = [], indices = /* @__PURE__ */ new Map();
-  for (const p of [...points2, points2[0]]) {
-    const key2 = `${p.x},${p.y}`, prior = indices.get(key2);
-    if (prior !== void 0) {
-      const ring = path.slice(prior);
-      if (ring.length >= 3) result.push(ring);
-      for (const removed of path.splice(prior + 1)) indices.delete(`${removed.x},${removed.y}`);
-    } else {
-      indices.set(key2, path.length);
-      path.push(p);
-    }
-  }
-  return result;
-}
-function gerberFiles(project, board, root, stem2, stencil = false) {
-  boardPolygons(board);
+function gerberFiles(project, { board, nativeRectangleIds, root }, stem2, stencil = false) {
+  if (hasNativePCBPadMachining(board))
+    throw new Error("Gerber export for native pad machining or press-fit settings requires KiCad.");
+  if (!stencil && board.barcodes?.length)
+    throw new Error("Gerber plotting of native barcodes requires KiCad.");
+  if (!stencil) requireSupportedViaManufacturing(board);
+  if (hasNativePCBTableOutput(board))
+    throw new Error("Gerber plotting of native tables on fabrication layers requires KiCad.");
+  const outline = prepareFabricationOutline(board, "Gerber");
   const setup = child(root, "setup") ?? [];
   const setting = (key2) => Number(val(child(setup, key2)) || 0);
+  const boardMaskMargin = setting("pad_to_mask_clearance");
+  if (!stencil && !Number.isFinite(boardMaskMargin))
+    throw new Error("The native board solder-mask margin must be finite.");
+  const pairedMask = !stencil && (hasPCBGraphicMask(board) || hasPCBTrackMask(board));
+  const customPads = hasNativeCustomPads(board);
+  if (pairedMask || customPads) {
+    const { rulesSource } = pcbFillRuleContext(project);
+    if (rulesSource && /solder_(?:mask_expansion|paste_(?:abs|rel)_margin)/.test(rulesSource)) {
+      const rules = parseSExpr(`(${rulesSource.replace(/^\s*#[^\r\n]*/gm, "")})`, 131072);
+      const constraints = new Set(
+        children(rules, "rule").flatMap((rule) => children(rule, "constraint").map((c) => val(c)))
+      );
+      if (!stencil && constraints.has("solder_mask_expansion"))
+        throw new Error("Gerber export does not support custom solder-mask expansion rules.");
+      if (customPads && (constraints.has("solder_paste_abs_margin") || constraints.has("solder_paste_rel_margin")))
+        throw new Error(
+          "Gerber export does not support solder-paste margin rules on native custom pads."
+        );
+    }
+  }
   const zones = stencil ? [] : worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
   if (!stencil) {
+    const plotSettings = child(setup, "pcbplotparams") ?? [];
+    if (val(child(plotSettings, "subtractmaskfromsilk")) === "yes" && board.footprints.some(
+      (footprint) => footprint.pads.some((pad) => padSilkscreenLayers(pad).length)
+    ))
+      throw new Error(
+        "Gerber plotting of native pad silkscreen with solder-mask subtraction requires KiCad."
+      );
     for (const key2 of ["covering", "plugging"])
       if (["front", "back"].some((side) => val(child(child(setup, key2) ?? [], side)) === "yes"))
         throw new Error(`Gerber export does not support enabled via ${key2}.`);
@@ -16576,13 +19816,13 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
       throw new Error("Gerber export does not support capped or filled vias.");
     if (setting("solder_mask_min_width"))
       throw new Error("Gerber export does not support a nonzero minimum solder-mask web.");
-    if (zones.some((z) => z.filledPolygons === void 0))
-      throw new Error("Fill all enabled zones in Layout before exporting Gerber files.");
-    if (board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) || children(root, "via").some((v) => val(child(v, "remove_unused_layers")) === "yes"))
+    if (board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) || board.vias.some((via) => via.removeUnusedLayers))
       throw new Error("Gerber export does not support removing unused pad or via copper layers.");
   }
   const textLayers = stencil ? /^[FB]\.Paste$/ : /\.(?:Cu|Mask|Paste|SilkS)$/;
   const checkText = (node) => {
+    if ((node[0] === "gr_text_box" || node[0] === "fp_text_box") && textLayers.test(val(child(node, "layer"))))
+      throw new Error("Gerber export does not support native PCB text boxes on plotted layers.");
     if ((node[0] === "gr_text" || node[0] === "fp_text" || node[0] === "property") && textLayers.test(val(child(node, "layer"))) && val(child(node, "hide")) !== "yes" && val(child(child(node, "effects") ?? [], "hide")) !== "yes" && !child(node, "effects")?.includes("hide") && !node.includes("hide")) {
       if (child(child(child(node, "effects") ?? [], "font") ?? [], "face") || child(node, "layer")?.includes("knockout"))
         throw new Error("Gerber export supports only the native stroke font without knockout.");
@@ -16592,6 +19832,7 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
   checkText(root);
   const files2 = [];
   const parts = new Map(project.schematic.parts.map((part) => [part.id, part]));
+  const viaLayers = new Map(board.vias.map((via) => [via, pcbViaCopperLayers(board.layers, via)]));
   const layers = [
     ...board.layers.map((layer, i) => [
       layer,
@@ -16609,16 +19850,46 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
   for (const [layer, fileFunction, extension] of layers) {
     if (stencil && layer !== "Edge.Cuts" && !layer.endsWith(".Paste")) continue;
     const plot = new GerberLayer(fileFunction);
-    for (const zone of zones.filter((z) => z.layer === layer))
-      for (const polygon of zone.filledPolygons) {
-        const rings = contours(polygon.points);
-        if (rings.length) plot.region(rings);
+    if (layer === "Edge.Cuts") {
+      for (const edge of outline) plot.graphic(edge);
+      files2.push({ name: `${stem2}.${extension}`, source: plot.finish() });
+      continue;
+    }
+    const layerZones = zones.filter((zone) => zone.layer === layer);
+    if (layerZones.some((zone) => zone.filledPolygons === void 0))
+      throw new Error("Fill all enabled zones in Layout before exporting Gerber files.");
+    plot.zoneFills(layerZones.flatMap((zone) => zone.filledPolygons.map((p) => p.points)));
+    const trackWidth = (track) => track.layer === layer ? track.width : track.maskLayer === layer ? pcbTrackMaskOpeningWidth({
+      ...track,
+      solderMaskMargin: track.solderMaskMargin ?? boardMaskMargin
+    }) : 0;
+    for (const track of board.tracks) {
+      const width = trackWidth(track);
+      if (width >= 5e-7) plot.line(track.start, track.end, width);
+    }
+    for (const track of board.arcTracks ?? []) {
+      const width = trackWidth(track);
+      if (width >= 5e-7) plot.graphic({ ...track, kind: "arc", width });
+    }
+    const copperLayer = board.layers.find((candidate) => candidate === layer);
+    if (copperLayer)
+      for (const via of board.vias) {
+        if (!viaLayers.get(via).includes(copperLayer)) continue;
+        const diameter = pcbViaDiameter(via, copperLayer);
+        if (diameter) plot.circle(via, diameter);
       }
-    for (const track of board.tracks.filter((t) => t.layer === layer))
-      plot.line(track.start, track.end, track.width);
-    if (layer.endsWith(".Cu")) for (const via of board.vias) plot.circle(via, via.diameter);
-    if (layer.endsWith(".Mask") && val(child(child(setup, "tenting") ?? [], layer === "F.Mask" ? "front" : "back")) !== "yes")
-      for (const via of board.vias) plot.circle(via, via.diameter);
+    if (layer.endsWith(".Mask")) {
+      const side = layer === "F.Mask" ? "front" : "back";
+      const outerLayer = side === "front" ? "F.Cu" : "B.Cu";
+      const defaults = val(child(child(setup, "tenting") ?? [], side)) === "yes";
+      for (const via of board.vias) {
+        if (!viaLayers.get(via).includes(outerLayer) || (via.tenting?.[side] ?? defaults))
+          continue;
+        const diameter = pcbViaDiameter(via, outerLayer);
+        if (diameter && diameter + 2 * boardMaskMargin >= 5e-7)
+          plot.circle(via, diameter + 2 * boardMaskMargin);
+      }
+    }
     for (const f of board.footprints) {
       for (const p of f.pads) {
         if (layer.endsWith(".Cu") && p.type === "np_thru_hole" && p.shape === "circle" && p.drill === p.size.x && !p.drillOffset && !p.drillSlot)
@@ -16629,86 +19900,169 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
           f.side === "front" ? "F.Paste" : "B.Paste"
         ] : ["*.Cu", "*.Mask"]);
         if (!padLayers.some(
-          (l) => l === layer || l === "*.Cu" && layer.endsWith(".Cu") || l === "*.Mask" && layer.endsWith(".Mask")
-        ))
+          (l) => l === layer || l === "*.Cu" && layer.endsWith(".Cu") || l === "F&B.Cu" && (layer === "F.Cu" || layer === "B.Cu") || l === "*.Mask" && layer.endsWith(".Mask")
+        ) && !(layer.endsWith(".SilkS") && padSilkscreenLayers(p).some((silk) => silk === layer)))
           continue;
+        const layerPad = pcbPadOnLayer(p, layer);
         if (padApertureLayers(p)) {
-          plot.pad(f, p);
+          plot.pad(f, layerPad);
         } else if (layer.endsWith(".Mask")) {
-          const margin = p.solderMaskMargin ?? f.solderMaskMargin ?? setting("pad_to_mask_clearance");
-          plot.pad(f, p, margin);
+          const margin = p.solderMaskMargin ?? f.solderMaskMargin ?? boardMaskMargin;
+          plot.pad(f, layerPad, margin);
         } else if (layer.endsWith(".Paste")) {
           const margin = p.solderPasteMargin ?? f.solderPasteMargin ?? setting("pad_to_paste_clearance");
           const ratio = p.solderPasteMarginRatio ?? f.solderPasteMarginRatio ?? setting("pad_to_paste_clearance_ratio");
-          plot.pad(f, p, margin + p.size.x * ratio, margin + p.size.y * ratio);
-        } else plot.pad(f, p);
+          plot.pad(f, layerPad, margin + layerPad.size.x * ratio, margin + layerPad.size.y * ratio);
+        } else plot.pad(f, layerPad);
       }
       const part = f.symbolId ? parts.get(f.symbolId) : void 0;
-      for (const g of f.graphics.filter((g2) => g2.layer === layer))
-        plot.graphic(
-          transformPCBGraphic(
-            resolvePCBGraphic(g, part?.ref ?? f.reference ?? "", part?.value ?? f.value ?? ""),
-            (p) => footprintPoint(f, p),
-            (a) => a + f.rotation
-          )
+      const graphics = f.graphics.filter(
+        (graphic) => graphic.layer === layer || graphic.maskLayer === layer
+      );
+      for (const g of graphics) {
+        const placed = transformPCBGraphic(
+          resolvePCBGraphic(g, part?.ref ?? f.reference ?? "", part?.value ?? f.value ?? ""),
+          (p) => footprintPoint(f, p),
+          (a) => a + f.rotation
         );
+        if (g.layer === layer) plot.graphic(placed);
+        else
+          plot.maskGraphic(
+            placed,
+            g.solderMaskMargin ?? boardMaskMargin,
+            nativeRectangleIds.has(g.id)
+          );
+      }
     }
-    for (const g of board.graphics.filter((g2) => g2.layer === layer)) plot.graphic(g);
+    for (const g of board.graphics) {
+      if (g.layer === layer) plot.graphic(g);
+      else if (g.maskLayer === layer)
+        plot.maskGraphic(g, g.solderMaskMargin ?? boardMaskMargin, nativeRectangleIds.has(g.id));
+    }
     files2.push({ name: `${stem2}.${extension}`, source: plot.finish() });
   }
-  return files2;
-}
-var fabricationNotes = "OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes and outline before ordering.\n";
-var assemblyNotes = "\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred. Review assembly orientation before ordering.\n";
-function drillFiles(board, stem2) {
-  const files2 = [];
-  for (const plated of [true, false]) {
-    const coordinate2 = (point2) => `X${point2.x.toFixed(6)}Y${(-point2.y).toFixed(6)}`;
-    const holes = board.footprints.flatMap(
-      (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ line: padDrillLine(f, p), diameter: p.drill, slot: !!p.drillSlot }))
-    );
-    if (plated)
-      for (const via of board.vias)
-        holes.push({ line: [via, via], diameter: via.drill, slot: false });
-    const diameters = [...new Set(holes.map((h) => number4(h.diameter)))].sort(
-      (a, b) => Number(a) - Number(b)
-    );
-    const commands = [
-      "M48",
-      "; OpenPE metric Excellon; absolute XY; explicit decimals",
-      `; ${plated ? "Plated" : "Non-plated"} through holes`,
-      "METRIC,TZ",
-      ...diameters.map((d, i) => `T${i + 1}C${d}`),
-      "%",
-      "G90",
-      "G05"
-    ];
-    for (const [i, d] of diameters.entries()) {
-      commands.push(`T${i + 1}`);
-      for (const {
-        line: [start, end],
-        slot
-      } of holes.filter((h) => number4(h.diameter) === d))
-        if (slot) commands.push(`${coordinate2(start)}G85${coordinate2(end)}`, "G05");
-        else commands.push(coordinate2(start));
-    }
-    files2.push({
-      name: `${stem2}-${plated ? "PTH" : "NPTH"}.drl`,
-      source: [...commands, "M30", ""].join("\n")
-    });
+  const edgeCutFills = zones.filter(isNativePCBEdgeCutFill);
+  if (edgeCutFills.length) {
+    const drawing = new GerberLayer("OtherDrawing,EdgeCutsFill");
+    drawing.zoneFills(edgeCutFills.flatMap((zone) => zone.filledPolygons.map((p) => p.points)));
+    files2.push({ name: `${stem2}-edge-cuts-fill.gbr`, source: drawing.finish() });
   }
   return files2;
 }
-function exportProjectFile(project, format, name) {
+var fabricationNotes = "OpenPE manufacturing export\n\nGerber X2 and metric Excellon drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes and outline before ordering.\n";
+var backdrillNotes = "\nBackdrill files are separate after-plating operations. File names and headers give the physical entry and inclusive must-cut layers, numbered from the front copper layer. The fabricator determines machine depths and tolerances from the actual stackup.\n";
+var assemblyNotes = "\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred. Review assembly orientation before ordering.\n";
+function requireSupportedViaManufacturing(board) {
+  for (const via of board.vias) {
+    if (pcbViaHasTreatment(via.treatment))
+      throw new Error("Manufacturing output for native via treatments is unsupported.");
+    if (via.backdrills && Object.values(via.backdrills).some((cut) => cut.diameter <= via.drill))
+      throw new Error("A backdrill cutter must be larger than its primary drill.");
+  }
+}
+function drillProgram(holes, description, fileFunction) {
+  const hitsByTool = /* @__PURE__ */ new Map();
+  for (const hole of holes) {
+    const diameter = number5(hole.diameter);
+    const hits = hitsByTool.get(diameter);
+    if (hits) hits.push(hole);
+    else hitsByTool.set(diameter, [hole]);
+  }
+  const diameters = [...hitsByTool.keys()].sort((a, b) => Number(a) - Number(b));
+  const commands = [
+    "M48",
+    "; OpenPE metric Excellon; absolute XY; explicit decimals",
+    `; ${description}`,
+    `; #@! TF.FileFunction,${fileFunction}`,
+    "METRIC,TZ",
+    ...diameters.map((diameter, i) => `T${i + 1}C${diameter}`),
+    "%",
+    "G90",
+    "G05"
+  ];
+  const coordinate2 = (point3) => `X${point3.x.toFixed(6)}Y${(-point3.y).toFixed(6)}`;
+  for (const [i, diameter] of diameters.entries()) {
+    commands.push(`T${i + 1}`);
+    for (const {
+      line: [start, end],
+      slot
+    } of hitsByTool.get(diameter))
+      if (slot) commands.push(`${coordinate2(start)}G85${coordinate2(end)}`, "G05");
+      else commands.push(coordinate2(start));
+  }
+  return [...commands, "M30", ""].join("\n");
+}
+function drillFiles(board, stem2) {
+  if (hasNativePCBPadMachining(board))
+    throw new Error("Drill export for native pad machining or press-fit settings requires KiCad.");
+  requireSupportedViaManufacturing(board);
+  const programs = /* @__PURE__ */ new Map();
+  const throughPads = (plated) => board.footprints.flatMap(
+    (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ line: padDrillLine(f, p), diameter: p.drill, slot: !!p.drillSlot }))
+  );
+  const lastLayer = board.layers.length;
+  const platedThrough = throughPads(true);
+  programs.set(`${stem2}-PTH.drl`, {
+    description: "Plated through holes",
+    fileFunction: `Plated,1,${lastLayer},PTH`,
+    holes: platedThrough
+  });
+  programs.set(`${stem2}-NPTH.drl`, {
+    description: "Non-plated through holes",
+    fileFunction: `NonPlated,1,${lastLayer},NPTH`,
+    holes: throughPads(false)
+  });
+  const append = (name, description, fileFunction, at, diameter) => {
+    const hit = { line: [at, at], diameter, slot: false };
+    const program = programs.get(name);
+    if (program) program.holes.push(hit);
+    else programs.set(name, { description, fileFunction, holes: [hit] });
+  };
+  for (const via of board.vias) {
+    if (!via.span || via.span.kind !== "micro" && via.span.start === "F.Cu" && via.span.end === "B.Cu") {
+      platedThrough.push({ line: [via, via], diameter: via.drill, slot: false });
+    } else {
+      const { start, end, kind } = via.span;
+      const first = board.layers.indexOf(start) + 1;
+      const last = board.layers.indexOf(end) + 1;
+      const type = first === 1 && last === lastLayer ? "PTH" : first === 1 || last === lastLayer ? "Blind" : "Buried";
+      const program = kind === "micro" ? "Microvia" : type;
+      append(
+        `${stem2}-${program}-L${first}-L${last}.drl`,
+        `Plated ${program.toLowerCase()} holes from L${first} (${start}) to L${last} (${end})`,
+        `Plated,${first},${last},${type}`,
+        via,
+        via.drill
+      );
+    }
+    if (!via.backdrills) continue;
+    for (const { start, end, diameter } of Object.values(via.backdrills)) {
+      const entry = board.layers.indexOf(start) + 1;
+      const mustCut = board.layers.indexOf(end) + 1;
+      append(
+        `${stem2}-Backdrill-L${entry}-L${mustCut}.drl`,
+        `After-plating backdrill from L${entry} (${start}) through must-cut L${mustCut} (${end})`,
+        `NonPlated,${entry},${mustCut},Blind`,
+        via,
+        diameter
+      );
+    }
+  }
+  return Array.from(programs, ([name, { description, fileFunction, holes }]) => ({
+    name,
+    source: drillProgram(holes, description, fileFunction)
+  }));
+}
+function exportProjectFile(project, format2, name) {
   validateProject3(project);
-  const stem2 = exportStem(name), filename = exportFileName(stem2, format);
-  if (format === "netlist")
+  const stem2 = exportStem(name), filename = exportFileName(stem2, format2);
+  if (format2 === "netlist")
     return {
       name: filename,
       bytes: new TextEncoder().encode(exportSchematicNetlist(project)),
       mime: "application/xml;charset=utf-8"
     };
-  if (format === "scad") {
+  if (format2 === "scad") {
     const model = project.pcb ? modelCadFromProject(project) : null;
     if (!model?.objects.length) throw new Error("Create a CAD solid before exporting OpenSCAD.");
     return {
@@ -16717,15 +20071,16 @@ function exportProjectFile(project, format, name) {
       mime: "text/plain"
     };
   }
-  const { board, root } = boardData(project);
-  if (format === "dxf")
+  const native = boardData(project);
+  const { board, root } = native;
+  if (format2 === "dxf")
     return {
       name: filename,
       bytes: new TextEncoder().encode(exportBoardOutlineDxf(board)),
       mime: "application/dxf"
     };
-  if (format === "bom" || format === "placement") {
-    const [file] = assemblyFiles(project, board, root, stem2, format);
+  if (format2 === "bom" || format2 === "placement") {
+    const [file] = assemblyFiles(project, board, root, stem2, format2);
     return {
       name: filename,
       bytes: new TextEncoder().encode(file.source),
@@ -16733,20 +20088,24 @@ function exportProjectFile(project, format, name) {
     };
   }
   let files2;
-  if (format === "drill") {
+  if (format2 === "drill") {
     files2 = drillFiles(board, stem2);
-  } else if (format === "stencil") {
-    files2 = gerberFiles(project, board, root, stem2, true);
+  } else if (format2 === "stencil") {
+    files2 = gerberFiles(project, native, stem2, true);
   } else {
+    const gerbers = gerberFiles(project, native, stem2);
+    const drawing = `${stem2}-edge-cuts-fill.gbr`;
     files2 = [
-      ...gerberFiles(project, board, root, stem2),
+      ...gerbers,
       ...drillFiles(board, stem2),
       {
         name: "README.txt",
-        source: format === "jlcpcb" ? fabricationNotes + assemblyNotes : fabricationNotes
+        source: fabricationNotes + (gerbers.some(({ name: name2 }) => name2 === drawing) ? `
+${drawing} contains saved technical artwork. Use ${stem2}.gko as the routed board profile.
+` : "") + (board.vias.some((via) => via.backdrills) ? backdrillNotes : "") + (format2 === "jlcpcb" ? assemblyNotes : "")
       }
     ];
-    if (format === "jlcpcb") files2.push(...assemblyFiles(project, board, root, stem2, format));
+    if (format2 === "jlcpcb") files2.push(...assemblyFiles(project, board, root, stem2, format2));
   }
   return { name: filename, bytes: exportZip(files2), mime: "application/zip" };
 }

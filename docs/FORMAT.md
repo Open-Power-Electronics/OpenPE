@@ -1,14 +1,113 @@
-# KiCad native projects and Source
+# Native KiCad 10 projects and Source
 
-OpenPE opens and saves `.kicad_pro` settings, `.kicad_sch` schematics, an optional
-`.kicad_pcb` board and supporting text files, targeting KiCad 10. Structured
-snapshots are private IPC, recovery, fixture and history data; never publish them
-as a design format or give them a KiCad extension. See the
-[KiCad file documentation](https://dev-docs.kicad.org/en/file-formats/).
+KiCad 10's native file formats are OpenPE's design storage. A project uses JSON
+settings (`.kicad_pro`), S-expression schematics (`.kicad_sch`), an optional
+S-expression PCB (`.kicad_pcb`) and supporting files. Source edits those files
+directly. Structured snapshots serve private IPC, recovery, fixtures and history.
+[KiCad file format reference](https://dev-docs.kicad.org/en/file-formats/)
 
-Desktop **Open project** selects one `.kicad_pro` file. The host loads its bounded
-schematic, PCB and supporting native file set automatically; those files do not
-need to be selected separately.
+Desktop **Open project** accepts a `.kicad_pro` or `.kicad_pcb` file. The host
+resolves a matching project when present and loads its bounded schematic, PCB and
+supporting native file set automatically. A PCB without a matching project opens
+without a save destination. Its first Save asks for a `.kicad_pro` destination.
+
+PCB admission accepts the stable KiCad 10 board stamp (`20260206`) or another
+date stamp with unambiguous KiCad 10 release metadata from `pcbnew`. Both paths
+validate the same geometry and nets. The writer uses KiCad 10's stable board
+stamp when compiling board edits. Schematic and supporting files have separate
+format checks. [KiCad 10 board format version](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pcb_io/kicad_sexpr/pcb_io_kicad_sexpr.h)
+
+Opening a supported board starts clean and retains its original bytes in Source.
+Board edits use the native merge. Save and Save as preserve unchanged PCB bytes.
+The native reader and writer run without an installed KiCad application.
+
+Board and footprint groups and board text properties remain native metadata.
+PCB captions resolve direct board property references for display while retaining
+their native expressions. OpenPE edits individual board items. If a member is
+listed in several declarations, its last declared group determines locks and
+ownership. Save retains the original living declarations. Deletion removes
+their group memberships and removes groups that lose their last owned member.
+When a PCB edit splits a multi-layer zone, its group receives the per-layer
+instances. Group locks apply to members and protect their owning footprint.
+Native Source owns group locks.
+Groups with missing or unsupported members reject before admission.
+Compact `0-0-0-0-…` PCB UUIDs receive deterministic editor identities, including
+their group and route-generator member references. Separately named board zones
+with a reused UUID receive independent identities when no member reference is
+ambiguous. Copied footprint caption IDs receive the same treatment across
+distinct footprint scopes. Zone UUIDs reused across board and footprint scopes
+receive distinct editor identities when their kind and ownership are unambiguous.
+Clean Save retains the original native IDs and spelling.
+
+Boards retain ordered two- to 32-layer even copper stacks and technical
+`User.1` through `User.45` artwork, including native layer names and types.
+Native board and footprint reference points display on their recorded layer
+and carry no copper. Embedded worksheet, font, model and other file records
+retain their native bytes.
+Layout does not extract those payloads from the board.
+
+Native compound custom pads retain their anchor, clearance mode and geometric
+primitives, including line, arc, circle, rectangle and polygon strokes and fills.
+A custom pad with an empty `primitives` record retains its anchor as the pad shape.
+Embedded footprint format and generator fields retain their native spelling.
+Pad layer membership retains `*.SilkS` for both front and back silkscreen.
+Native edge-connector pad type, anonymous footprint identity and absent board-only
+captions survive edits and Save. A missing board thickness uses KiCad's 1.6 mm default.
+Native SMD offset records shift the land without creating a hole. Round drills
+retain a second native dimension when supplied and use the first for the diameter.
+Rounded rectangular pads use KiCad's 0.25 corner ratio when the ratio is omitted.
+Save preserves the omission while the native default still applies.
+
+PCB text boxes retain their boundary, margins, border, text and font data.
+Stored PCB text line spacing scales the baseline advance, including zero spacing.
+Explicitly hidden standard footprint captions can use KiCad's default stroke
+font without an effects record. Native merge preserves that omission.
+Named PCB fonts retain the original face and text. Outline-font caches preserve
+their native polygons and coordinate tokens. Each text accepts up to 4,096
+polygons with up to 4,096 vertices each and the board allows 200,000 cached
+vertices in total. Cache and pose changes use native Source.
+
+Board-level reference images retain their embedded PNG and native placement,
+scale, layer, UUID and lock through Source and Save. The reader accepts up to 16
+images, each with up to 1,000,000 base64 characters and 4,096 pixels per side.
+The board may contain up to 16 million image pixels in total. [Layout](LAYOUT.md)
+owns their canvas visibility.
+
+Board-level tables retain their native cells, borders and separators. The
+reader accepts up to 32 rectangular-grid tables with up to 256 unmerged cells
+each. Supported cells keep their native positions, orientation and text.
+
+Board and placed footprint Bézier artwork (`gr_curve` and `fp_curve`) retains
+its two endpoints and two control points in native order, along with its stroke,
+layer and identity. [Layout](LAYOUT.md#imported-routing) owns the operation bounds.
+
+QR and Data Matrix records support printable ASCII payloads on the outer
+copper, silkscreen and Edge.Cuts layers. Layout shows the encoded payload and
+its native size, rotation, layer and knockout. The preview encoder can choose a
+different symbol matrix for the same payload. KiCad owns exact barcode
+fabrication. Edit native images, tables and barcodes through Source.
+
+Native routed arcs retain their start, midpoint, end, width, copper layer, net,
+UUID and lock. Blind, buried and microvia records preserve their layer span.
+Via backdrill and tertiary drill records preserve their separate diameters,
+entry sides and must-cut copper layers.
+Straight and curved tracks retain same-side mask membership and explicit
+mask margins, including tracks without a net.
+Per-via tenting records retain independent front and back settings. Native
+pad/via teardrop options and generated teardrop zones
+retain their settings, kind and saved copper. Native length-tuning patterns
+retain their bounded parameters and routed member IDs. [Layout](LAYOUT.md#imported-routing)
+owns editing, checking and export coverage for these records.
+Plated padstacks retain front/inner/back shapes and custom copper-layer shapes
+with offsets from the shared drill. Layout uses the recorded shape on each
+layer. Circular pads use their native X diameter and retain the stored second
+axis in the source. Pad and via layer pruning, end-only via rings and
+post-machining retain their native settings. Operations that need unsupported
+connectivity or machining require native KiCad.
+
+Board assembly variants and footprint overrides remain native metadata.
+Layout displays the base board, and variant-specific assembly export uses
+KiCad.
 
 Component simulation data retains optional `initialVoltage` and `initialCurrent` strings in the canonical component record, represented natively by `OpenPE.InitialVoltage` and `OpenPE.InitialCurrent`. Unset values remain absent; inspection does not write defaults.
 
@@ -108,19 +207,43 @@ the canonical lock state with retained native text. Properties and `layout.lock`
 share lock/unlock transactions; locked objects reject ordinary property/geometry
 edits and removal. Source remains explicit native editing. See
 [object locking](LAYOUT.md#object-locking) for ownership and selection rules.
-Pad pin-function/type metadata, non-rendered footprint properties and unit records
-survive edits. Footprint
+Pad pin-function/type metadata, native test-point and castellation properties,
+non-rendered footprint properties, placement state and unit records survive
+edits. Pad and footprint copper clearances and zone-connection modes,
+pad thermal gap and spoke width, and zone island area thresholds retain their
+native fields. A pad's explicit zero copper clearance stays distinct from an
+unset override. Footprint
 mask/paste margins are retained; pad mask overrides take precedence over the
-footprint default. Up to 256 native `point` records on `F.Fab` or `B.Fab` per
-footprint are retained with their native identifiers and sizes. They follow
-footprint movement, rotation and side changes. Source edits their native values.
-OpenPE leaves these reference points out of canvas artwork and manufacturing output.
+footprint default. Up to 256 native `point` records per footprint are retained
+with their native identifiers and sizes. They follow footprint movement,
+rotation and side changes. Source edits their native values. Manufacturing
+output excludes these reference markers.
 An unlinked footprint retains an explicitly blank native Reference or Value.
-Multi-layer zones have one editable instance per layer;
-the first retains the native UUID and later instances use deterministic UUIDs.
-Clean files retain their exact original bytes; a PCB edit writes equivalent
-single-layer zones with their original per-layer fills and rules. Disabled
-placement-rule metadata is preserved; enabled placement rules remain unsupported.
+Multi-layer zones have one instance per layer. The first retains the native
+UUID when supplied. Instances without a native UUID receive deterministic
+editor identities. Clean files retain their exact bytes. A PCB edit writes
+per-layer fills and rules with the areas that own them.
+Footprint rule areas retain dormant inner-layer membership. Physical views and
+checks apply those areas only on active layers in the board stack.
+Enabled placement areas retain their sheet, component class or group source.
+Layout shows the area and its source on each layer. Edited files keep one
+native channel record with its original layer set, UUID and group membership.
+Per-layer changes must agree on shared placement geometry and settings.
+Use Source for layer membership, differing per-layer changes and placement
+assignments. KiCad performs multichannel repeat. [KiCad placement areas](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#_multichannel_design_procedure_board)
+Native hatch settings, per-layer hatch position and corner smoothing retain
+their parameters and saved native contours. A smoothing style can omit its
+radius. An explicit unstroked contour declaration is preserved. Native empty
+zones retain their metadata and have no drawable or electrical area. Single
+contour native rule areas can have circular outlines or arc edges. Layout
+draws their exact arcs. Checked copper operations on boards with curved rule
+areas require native Source. Imported boards support up to 400,000 saved fill
+vertices. Layout displays large fills directly from the stored contours.
+Copper recomputation and analysis retain their separate work
+bounds. Solder-mask zones display their saved apertures on the mask layers.
+Filled `Edge.Cuts` zones display their saved polygons as technical artwork.
+Board outlines and electrical analysis use their own geometry. Edit this
+artwork in Source and plot it in KiCad.
 OpenPE stores the rule area's pour margin in its native `connect_pads`
 clearance. KiCad displays the saved contours and uses the rule area's
 unexpanded outline when refilling.
@@ -246,7 +369,9 @@ volume also folds a missing final component, and a case-sensitive volume does no
 Validation rejects
 traversal, links, nonregular/oversized files, case-insensitive duplicate names,
 file/directory overlap and invalid entry membership. The aggregate file-set
-limit is 96 MB. Cached local validation applies only to exact internally owned
+limit is 96 MB. A native PCB file supports up to 20 MB of UTF-8 text and three
+million syntax nodes or atoms. Other native files are limited to 8 MB each.
+Cached local validation applies only to exact internally owned
 immutable records; every file set still receives global checks.
 
 Private PCB snapshot encoding reuses JSON-escaped chunks only from exact owned
@@ -257,8 +382,8 @@ bytes. These derivations never replace project, native-file or size validation.
 
 Save validates the complete project and preflights the native destinations before
 preparing verified model and footprint assets. Its private snapshot carries the
-current native texts. The host writes that same backing, retaining explicit
-simulation flags and native order.
+native texts prepared for the selected destination. The host writes that backing,
+retaining explicit simulation flags and native order.
 Equivalent supported hidden-field defaults do not rewrite custom positions,
 styles, unknown attributes or duplicate records.
 
@@ -305,11 +430,15 @@ Archives contain generated files only.
   [KiCad netlist documentation](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#_intermediate_netlist_file)
 - Board outline exports native `Edge.Cuts` centerlines, including footprint
   cutouts, as ASCII AutoCAD 2000 DXF in millimetres. It retains native X and
-  negates native Y to align with Gerber and drill. Lines, circular arcs, circles
-  and closed polylines retain their geometry. The outline must enclose a positive
-  area and line and arc endpoints must meet exactly. Copper, drill hits and
-  other layer artwork are outside the outline file.
+  negates native Y to align with Gerber and drill. Lines, circular arcs, circles,
+  closed polylines and cubic `SPLINE` entities retain their geometry. Cubic
+  splines retain the four native Bézier control points. Curved polygons and
+  rounded rectangles use closed polylines with circular segments. The outline
+  must enclose a positive area, with exact joins between endpoints. Copper,
+  drill hits and other layer artwork are outside the outline file.
   [AutoCAD DXF header reference](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-A85E8E67-27CD-4C59-BE61-4DC9FADBE74A.htm)
+  [AutoCAD DXF polyline reference](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-748FC305-F3F2-4F74-825A-61F04D757A50.htm)
+  [AutoCAD DXF spline reference](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-DXF/files/GUID-E1F884F8-AA90-4864-A215-3182D47A9C74.htm)
 - OpenSCAD exports Model CAD solids from a project with a PCB. Its millimetre
   text uses native PCB X/Y with Z = 0 at the PCB mid-plane. It retains poses,
   Boolean cutouts and recipes, per-body color overrides or material colors, and
@@ -322,10 +451,13 @@ Archives contain generated files only.
 including retained assembly flags and setup. It does not run a solver, refill
 zones, perform DRC, change geometry or acquire a project destination.
 
-- Gerber X2 uses metric 6.6 coordinates for two/four copper layers, front/back
+- Gerber X2 uses metric 6.6 coordinates for the ordered copper stack, front/back
   mask, paste and silk, and Edge.Cuts. Lines, arcs, circular/oval/rectangular/
   rounded/chamfered pads, custom polygon pads and saved zone contours are plotted independently of
-  view visibility. Arc direction follows the upward-Y output plane. Separate
+  view visibility. Circular segments in native polygons and rounded rectangles
+  use circular interpolation. Arc direction follows the upward-Y output plane.
+  Native cubic Bézier strokes use line segments with a 0.0005 mm chord error
+  bound before Gerber coordinate rounding. Separate
   metric Excellon files contain plated and non-plated round through drills and
   straight slots. Slots use a G85 command between the two tool centreline
   endpoints with the slot width as the tool diameter. The coordinates retain
@@ -336,17 +468,49 @@ zones, perform DRC, change geometry or acquire a project destination.
   reopen. KiCad 10 clears those numbers when it reads a pad.
   [KiCad pad numbering](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pad.cpp#L288-L299)
   [KiCad pad parser](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pcb_io/kicad_sexpr/pcb_io_kicad_sexpr_parser.cpp#L6110-L6115)
-- Full Gerber requires a closed unambiguous board outline and saved fills for every enabled
-  non-keepout zone. Keepouts and disabled fills contribute no plotted area.
-  Native board-level via tenting and pad/footprint/board mask/paste margins apply.
+- Blind and buried holes and microvias have separate plated Excellon programs
+  per layer span, numbered from front copper as L1. Via copper uses its
+  declared span, saved per-layer diameters and end-only setting.
+  Backdrill and tertiary cuts use separate after-plating Excellon programs with
+  native cutter diameters. The file name and header identify each entry and
+  inclusive must-cut layer. Copper flashes retain the original lands.
+  The fabricator determines machine depths and tolerances from the actual
+  stackup. [KiCad Excellon layer attributes](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/exporters/gendrill_writer_base.cpp#L576-L641)
+- Full Gerber requires a closed unambiguous board outline with exact endpoint joins and saved fills for
+  enabled non-keepout zones on plotted layers. Keepouts and disabled fills
+  contribute no plotted area. Saved fills on each layer are combined at the
+  Gerber coordinate resolution. Clear regions preserve holes before pads and
+  routed copper are plotted. Saved fills on `Edge.Cuts` appear in the separate
+  `-edge-cuts-fill.gbr` technical drawing (`OtherDrawing,EdgeCutsFill`). The
+  `.gko` profile contains the routed board and footprint outlines.
+  Per-via tenting overrides the native board default for the selected side.
+  Supported native plated padstacks use their individual layer lands and offsets.
+  Mask and paste apertures derive from their matching outer lands. Drill
+  programs keep the shared native drill anchors.
+  Native compound pads plot their independent anchor and simple primitives as
+  dark artwork, including strokes and ring openings. Their plotted mask and
+  paste apertures require zero effective margin and supported aperture rules.
+  [KiCad 10 custom-pad geometry](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pad.cpp#L3062-L3100)
+  Untented via openings use the board mask margin. Paired copper/mask
+  tracks, arcs and board or footprint shapes plot on their matching side using
+  the local `solder_mask_margin` or the board `pad_to_mask_clearance`.
+  Track openings with zero resulting width are omitted. Contracted filled
+  circles and rectangles retain their native plot geometry. Straight polygon
+  contraction uses rounded offsets with a 0.0005 mm arc tolerance and a
+  0.0001 mm clipping grid. Paired artwork with custom mask-expansion rules is
+  outside this export subset. Pad, footprint and board mask/paste margins apply.
+  [KiCad native shape plotting](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/plot_brditems_plotter.cpp#L844-L1055)
+  [KiCad native track and via mask margins](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pcb_track.cpp#L1398-L1433)
   Mask- and paste-only apertures plot their native pad geometry without expansion.
+  Pad artwork joins its declared silkscreen layers. Solder-mask subtraction
+  from native pad artwork uses KiCad plotting.
   Footprint-owned routed cutouts appear in the Edge.Cuts profile. The
   Excellon files carry pad and via drill operations.
   Straight-chamfered pads support uniform mask and paste margins. Positive
   margins use round polygon offsets with a 0.0005 mm arc tolerance and
   0.0001 mm clipping grid. Negative margins resize the pad dimensions and
   retain the chamfer ratio.
-  Custom pads use outline clearance and the single outline defined in [Layout](LAYOUT.md).
+  Simple custom pads use outline clearance and the single outline defined in [Layout](LAYOUT.md).
   Gerber uses the whole outline for
   copper and applies uniform mask or paste expansion or contraction using the
   same tolerance and grid. A relative paste margin uses the native anchor size.
@@ -357,8 +521,8 @@ zones, perform DRC, change geometry or acquire a project destination.
   and characters outside the pinned U+0020–U+03FF stroke glyph subset on
   manufacturing layers. Unsupported output never silently omits geometry.
   Empty mask/paste apertures from negative margins are omitted.
-- Excellon drill ZIP contains the same separate plated and non-plated drill
-  files as full Gerber. It can be exported before completing the outline or
+- Excellon drill ZIP contains the same separate drill programs as full
+  Gerber. It can be exported before completing the outline or
   filling copper zones. [KiCad drill documentation](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#_drill_files)
 - Stencil Gerber ZIP contains front paste (`.gtp`), back paste (`.gbp`) and
   the board profile (`.gko`), byte-identical to those files in the full Gerber
@@ -383,8 +547,9 @@ The [Gerber specification](https://www.ucamco.com/en/guest/downloads/gerber-form
 [JLCPCB BOM](https://jlcpcb.com/help/article/bill-of-materials-for-pcb-assembly)
 and [placement requirements](https://jlcpcb.com/help/article/pick-place-file-for-pcb-assembly)
 define the external syntax/column meanings. `lib/export-zip.ts` emits deterministic
-UTF-8, uncompressed ZIP entries with CRC-32, bounded to 128 leaf names and 96 MiB;
-each Gerber layer is bounded to 32 MiB. No archive paths or imported ZIP contents
+UTF-8, uncompressed ZIP entries with CRC-32, bounded to 128 leaf names and 96 MiB.
+Each Gerber layer caps saved fill processing at 250,000 input vertices and
+output at 32 MiB. No archive paths or imported ZIP contents
 are accepted. Browser downloads compile the same output as the desktop adapter.
 
 Newstroke glyph data is derived from the pinned KiCad 10.0.0 source under
@@ -401,13 +566,16 @@ S-expressions. Helpers retain encoding/selection and edit existing files only.
 | Check                                                                                                        | Scope                                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/native-project-files.test.ts`, `tests/native-save.test.ts`, `tests/native-save-participation.test.ts` | File-set bounds, writes, exact backing and simulation flags                                                                       |
+| `tests/kicad-pcb-version.test.ts`, `tests/kicad-pcb-metadata.test.ts`                                        | KiCad 10 admission, group membership and locks across edits                                                                       |
+| `tests/kicad-pcb-native-pads.test.ts`, `tests/kicad-pcb-native-text.test.ts`                                 | Native custom pad primitives, absent captions, outline-font caches and edit barriers                                              |
+| `tests/kicad-pcb-arc.test.ts`, `tests/kicad-pcb-teardrops.test.ts`                                           | Native copper round trips, tuning-pattern membership, analytical Gerber arcs and edit barriers                                    |
 | `tests/manufacturing-export.test.ts`, `tests/native-export.test.ts`                                          | Gerber/drill/CSV/ZIP geometry and syntax, standalone archive parity, output bounds, format pickers and source protection          |
 | `tests/pcb-dxf.test.ts`, `tests/schematic-netlist-export.test.ts`                                            | DXF outline entities and closure, XML metadata and connectivity                                                                   |
 | `tests/example-native-libraries.test.ts`                                                                     | Home custom-library Source, project naming, Save as references and edited package preservation                                    |
 | `tests/project-directory.test.ts`, `node scripts/check-project-directory-ui.mjs`                             | Grant-bound directory observations, read limits, stale/linked files, empty folders, read-only previews and native draft retention |
 | `node scripts/check-native-source-ui.mjs`                                                                    | Isolated native file selection, per-file history, Apply/validation/undo                                                           |
 | `node scripts/e2e-project.mjs`, `node scripts/e2e-workspace.mjs`                                             | Desktop native writes, recovery and independent projects                                                                          |
-| `node scripts/e2e-schematic-files.mjs`, `node scripts/e2e-history.mjs`                                       | Desktop multiple files and single-file version restore                                                                        |
+| `node scripts/e2e-schematic-files.mjs`, `node scripts/e2e-history.mjs`                                       | Desktop multiple files and single-file version restore                                                                            |
 
 Desktop checks require explicit authorization and isolated profiles; see
 [AGENTS.md](../AGENTS.md). Documentation changes need static checks only.

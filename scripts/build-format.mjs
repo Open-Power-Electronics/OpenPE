@@ -5,10 +5,28 @@ import { build as compile } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { customPadVertexLimit } from '../lib/pcb-custom-pad-limits.ts';
+import {
+  maxPCBTextCachePolygons,
+  maxPCBTextCachePolygonVertices,
+  pcbTextCachePolygonPattern,
+} from '../lib/pcb-text-cache-format.ts';
+import {
+  maxPCBZonePriority,
+  pcbPlacementSourceKinds,
+  pcbZoneHatchBorderAlgorithms,
+} from '../lib/pcb-zone-settings.ts';
+import { pcbBoardLayers, pcbCopperLayers, pcbCopperStacks } from '../lib/pcb-layer-stack.ts';
+import { maxPCBPadstackSize, pcbPadstackShapes } from '../lib/pcb-padstack-format.ts';
+import {
+  maxPCBTeardropParameter,
+  pcbTeardropDimensionFields,
+  pcbTeardropOptionFields,
+} from '../lib/pcb-teardrop-settings.ts';
 import { ownedValidatorSource } from './owned-validator-source.mjs';
 import { optimizeStaticMaxLength } from './ajv-length-guard.mjs';
 import { pruneValidatorSchemaSource } from './prune-validator-schema-source.mjs';
 import { writeGeneratedFile } from './write-generated-file.mjs';
+import { MAX_BOARD_ZONES, MAX_NATIVE_PCB_BYTES } from '../lib/project-size-limits.ts';
 
 // Schema/identity validation only: runtime bundles need no PDFs or network.
 await loadDatasheetCatalog();
@@ -88,7 +106,7 @@ const nativeFiles = object({
     object(
       {
         name: { type: 'string', minLength: 1, maxLength: 256 },
-        source: { type: 'string', maxLength: 8000000 },
+        source: { type: 'string', maxLength: MAX_NATIVE_PCB_BYTES },
         encoding: { const: 'latin1' },
       },
       ['encoding'],
@@ -97,45 +115,52 @@ const nativeFiles = object({
   ),
 });
 const pcbNumber = { type: 'number', minimum: -100000, maximum: 100000, multipleOf: 0.000001 };
+const pcbModelNumber = { type: 'number', minimum: -100000, maximum: 100000 };
 const pcbPositive = { ...pcbNumber, minimum: 0.000001, maximum: 1000 };
 const pcbNonnegative = { ...pcbPositive, minimum: 0 };
+const pcbFootprintZoneOverrides = {
+  copperClearance: pcbNonnegative,
+  zoneConnect: { type: 'integer', minimum: -1, maximum: 3 },
+};
+const pcbPadZoneOverrides = {
+  ...pcbFootprintZoneOverrides,
+  thermalGap: pcbNonnegative,
+  thermalBridge: pcbNonnegative,
+};
+const padMachiningSide = object(
+  {
+    mode: { enum: ['counterbore', 'countersink'] },
+    size: pcbPositive,
+    depth: pcbPositive,
+    angle: { type: 'number', exclusiveMinimum: 0, maximum: 180, multipleOf: 0.1 },
+  },
+  ['size', 'depth', 'angle'],
+);
 const pcbXY = { x: pcbNumber, y: pcbNumber };
 const pcbPoint = object(pcbXY);
 const footprintPointCoordinate = { type: 'number', minimum: -100000, maximum: 100000 };
 const pcbAngle = { ...pcbNumber, minimum: -360, maximum: 360 };
-const copper = { enum: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] };
-const graphicLayer = {
-  enum: [
-    ...copper.enum,
-    'F.SilkS',
-    'B.SilkS',
-    'F.Fab',
-    'B.Fab',
-    'F.CrtYd',
-    'B.CrtYd',
-    'Edge.Cuts',
-    'F.Mask',
-    'B.Mask',
-    'F.Paste',
-    'B.Paste',
-    'F.Adhes',
-    'B.Adhes',
-    'Dwgs.User',
-    'Cmts.User',
-    'Eco1.User',
-    'Eco2.User',
-    'Margin',
-    'User.1',
-    'User.2',
-    'User.3',
-    'User.4',
-  ],
+const copper = { enum: pcbCopperLayers };
+const trackRecord = {
+  id: uuid,
+  start: pcbPoint,
+  end: pcbPoint,
+  width: pcbPositive,
+  layer: copper,
+  netId: { anyOf: [uuid, { const: '' }] },
+  maskLayer: { enum: ['F.Mask', 'B.Mask'] },
+  solderMaskMargin: pcbNumber,
+  locked: { const: true },
 };
+const trackOptionalFields = ['locked', 'maskLayer', 'solderMaskMargin'];
+const graphicLayer = { enum: pcbBoardLayers };
 const pcbTextProperties = {
   value: text,
+  nativeExpansion: object({ source: text, value: text }),
   rotation: pcbAngle,
   size: object({ x: pcbPositive, y: pcbPositive }),
   thickness: pcbNonnegative,
+  lineSpacing: { type: 'number', minimum: 0, maximum: 1000 },
   justify: {
     ...array({ enum: ['left', 'right', 'top', 'bottom', 'mirror'] }, 3),
     uniqueItems: true,
@@ -144,8 +169,33 @@ const pcbTextProperties = {
   italic: { type: 'boolean' },
   bold: { type: 'boolean' },
   property: text,
+  fontFace: { type: 'string', minLength: 1, maxLength: 256, pattern: '^[^\\x00-\\x1f]+$' },
+  knockout: { const: true },
+  renderCache: object({
+    value: text,
+    rotation: pcbAngle,
+    polygons: array(
+      {
+        type: 'string',
+        maxLength: maxPCBTextCachePolygonVertices * 32,
+        pattern: pcbTextCachePolygonPattern,
+      },
+      maxPCBTextCachePolygons,
+    ),
+  }),
 };
-const pcbTextOptional = ['justify', 'hidden', 'italic', 'bold', 'property'];
+const pcbTextOptional = [
+  'nativeExpansion',
+  'lineSpacing',
+  'justify',
+  'hidden',
+  'italic',
+  'bold',
+  'property',
+  'fontFace',
+  'knockout',
+  'renderCache',
+];
 const line = object(
   {
     locked: { const: true },
@@ -154,17 +204,39 @@ const line = object(
     end: pcbPoint,
     width: pcbNonnegative,
     layer: graphicLayer,
-    kind: { enum: ['arc', 'circle', 'polygon', 'text', 'dimension'] },
+    netId: uuid,
+    maskLayer: { enum: ['F.Mask', 'B.Mask'] },
+    solderMaskMargin: pcbNumber,
+    kind: { enum: ['arc', 'circle', 'curve', 'polygon', 'text', 'dimension', 'point'] },
     mid: pcbPoint,
     points: array(pcbPoint),
+    roundedRectRadius: pcbPositive,
+    polygonArcs: {
+      ...array(
+        object({ vertex: { type: 'integer', minimum: 0, maximum: 10000 }, mid: pcbPoint }),
+        1024,
+      ),
+      minItems: 1,
+    },
+    nativeNoStroke: { const: true },
     fill: { type: 'boolean' },
     stroke: { enum: ['default', 'solid', 'dash', 'dot', 'dash_dot', 'dash_dot_dot'] },
     text: object(pcbTextProperties, pcbTextOptional),
+    textBox: object(
+      {
+        outline: { ...array(pcbPoint, 256), minItems: 3 },
+        margins: { ...array(pcbNumber, 4), minItems: 4 },
+        border: { type: 'boolean' },
+        strokeWidth: pcbNumber,
+      },
+      ['outline'],
+    ),
     keepUpright: { const: false },
     dimension: object(
       {
-        type: { enum: ['aligned', 'radial', 'leader'] },
+        type: { enum: ['aligned', 'orthogonal', 'radial', 'leader', 'center'] },
         height: pcbNumber,
+        orientation: { enum: [0, 1] },
         leaderLength: pcbNumber,
         format: object(
           {
@@ -174,8 +246,9 @@ const line = object(
             unitsFormat: { type: 'integer', minimum: 0, maximum: 3 },
             precision: { type: 'integer', minimum: 0, maximum: 6 },
             overrideValue: text,
+            suppressZeroes: { type: 'boolean' },
           },
-          ['overrideValue'],
+          ['overrideValue', 'suppressZeroes'],
         ),
         style: object(
           {
@@ -189,21 +262,83 @@ const line = object(
           },
           ['arrowDirection', 'extensionHeight', 'keepTextAligned', 'textFrame'],
         ),
-        caption: object({ ...pcbXY, ...pcbTextProperties }, pcbTextOptional),
+        caption: object(
+          {
+            ...pcbXY,
+            ...pcbTextProperties,
+            rotation: { type: 'number', minimum: -360, maximum: 360 },
+          },
+          pcbTextOptional,
+        ),
       },
-      ['height', 'leaderLength'],
+      ['height', 'leaderLength', 'orientation', 'format', 'caption'],
     ),
   },
-  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'keepUpright', 'dimension', 'locked'],
+  [
+    'kind',
+    'mid',
+    'points',
+    'roundedRectRadius',
+    'polygonArcs',
+    'nativeNoStroke',
+    'fill',
+    'stroke',
+    'text',
+    'textBox',
+    'keepUpright',
+    'dimension',
+    'locked',
+    'netId',
+    'maskLayer',
+    'solderMaskMargin',
+  ],
 );
+const teardropParameterFields = {
+  ...Object.fromEntries(
+    Object.keys(pcbTeardropDimensionFields).map((key) => [
+      key,
+      { type: 'number', minimum: 0, maximum: maxPCBTeardropParameter },
+    ]),
+  ),
+  ...Object.fromEntries(
+    Object.keys(pcbTeardropOptionFields).map((key) => [key, { type: 'boolean' }]),
+  ),
+};
+const teardropSettings = {
+  ...object(teardropParameterFields, Object.keys(teardropParameterFields)),
+  minProperties: 1,
+};
+const viaTenting = {
+  ...object({ front: { type: 'boolean' }, back: { type: 'boolean' } }, ['front', 'back']),
+  minProperties: 1,
+};
+const padstackGeometry = {
+  shape: { enum: pcbPadstackShapes },
+  size: object({ x: pcbPositive, y: pcbPositive }),
+  zoneConnect: pcbPadZoneOverrides.zoneConnect,
+  offset: object({
+    x: { minimum: -maxPCBPadstackSize, maximum: maxPCBPadstackSize, type: 'number' },
+    y: { minimum: -maxPCBPadstackSize, maximum: maxPCBPadstackSize, type: 'number' },
+  }),
+};
+const padstackLayer = object(padstackGeometry, ['zoneConnect', 'offset']);
+const viaPadstackDiameter = { type: 'number', minimum: 0, maximum: maxPCBPadstackSize };
+const viaBackdrill = object({
+  diameter: pcbPositive,
+  start: { enum: ['F.Cu', 'B.Cu'] },
+  end: { enum: pcbCopperLayers },
+});
 const zone = object(
   {
     locked: { const: true },
     id: uuid,
     netId: { anyOf: [uuid, { type: 'null' }] },
     layer: graphicLayer,
-    outline: { ...array(pcbPoint), minItems: 3 },
+    outline: array(pcbPoint),
+    nativeCircularOutline: { const: true },
+    nativeOutlineArcs: line.properties.polygonArcs,
     holes: array({ ...array(pcbPoint), minItems: 3 }, 100),
+    nativeUnassignedFill: { const: true },
     filledPolygons: array(
       object(
         {
@@ -215,12 +350,34 @@ const zone = object(
       2000,
     ),
     clearance: pcbNonnegative,
-    minThickness: pcbPositive,
+    minThickness: pcbNonnegative,
     thermalGap: pcbNonnegative,
     thermalBridge: pcbNonnegative,
-    priority: { type: 'integer', minimum: 0, maximum: 10000 },
+    priority: { type: 'integer', minimum: 0, maximum: maxPCBZonePriority },
+    teardrop: { enum: ['padvia', 'track_end'] },
     padConnection: { enum: ['yes', 'no', 'thru_hole_only'] },
     islandRemovalMode: { type: 'integer', minimum: 0, maximum: 2 },
+    islandAreaMin: { ...pcbNonnegative, maximum: maxPCBZonePriority / 1_000_000 },
+    cornerSmoothing: object({ style: { enum: ['chamfer', 'fillet'] }, radius: pcbNonnegative }, [
+      'radius',
+    ]),
+    hatchPosition: pcbPoint,
+    hatchFill: object(
+      {
+        thickness: pcbNonnegative,
+        gap: pcbNonnegative,
+        orientation: pcbAngle,
+        minHoleArea: pcbNonnegative,
+        borderAlgorithm: { enum: pcbZoneHatchBorderAlgorithms },
+        smoothingLevel: pcbNonnegative,
+        smoothingValue: pcbNonnegative,
+      },
+      ['smoothingLevel', 'smoothingValue'],
+    ),
+    nativePlacement: object({
+      sourceKind: { enum: pcbPlacementSourceKinds },
+      sourceName: { type: 'string', minLength: 1, maxLength: 4096 },
+    }),
     fillEnabled: { type: 'boolean' },
     keepout: object(
       Object.fromEntries(
@@ -230,11 +387,20 @@ const zone = object(
   },
   [
     'locked',
+    'nativeCircularOutline',
+    'nativeOutlineArcs',
     'holes',
     'filledPolygons',
+    'nativeUnassignedFill',
     'priority',
+    'teardrop',
     'padConnection',
     'islandRemovalMode',
+    'islandAreaMin',
+    'cornerSmoothing',
+    'hatchPosition',
+    'hatchFill',
+    'nativePlacement',
     'fillEnabled',
     'keepout',
   ],
@@ -323,56 +489,93 @@ const schema = {
       },
       ['original', 'noConnects'],
     ),
-    pcb: object({
-      id: uuid,
-      thickness: pcbPositive,
-      layers: {
-        enum: [
-          ['F.Cu', 'B.Cu'],
-          ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'],
-        ],
+    pcb: object(
+      {
+        id: uuid,
+        thickness: pcbPositive,
+        layers: { enum: pcbCopperStacks },
+        nets: array(object({ id: uuid, name }), 5000),
+        footprints: array(ref('footprint'), 2000),
+        tracks: array(object(trackRecord, trackOptionalFields)),
+        arcTracks: array(object({ ...trackRecord, mid: pcbPoint }, trackOptionalFields)),
+        tuningPatterns: array(raw, 256),
+        referenceImages: array(raw, 16),
+        barcodes: array(raw, 32),
+        nativeTables: array(raw, 32),
+        groupLocks: array(uuid, 30000),
+        vias: array(
+          object(
+            {
+              id: uuid,
+              ...pcbXY,
+              diameter: pcbPositive,
+              drill: pcbPositive,
+              netId: { anyOf: [uuid, { const: '' }] },
+              locked: { const: true },
+              teardrops: teardropSettings,
+              tenting: viaTenting,
+              span: object({
+                kind: { enum: ['blind', 'buried', 'micro'] },
+                start: { enum: pcbCopperLayers },
+                end: { enum: pcbCopperLayers },
+              }),
+              backdrills: {
+                ...object({ secondary: viaBackdrill, tertiary: viaBackdrill }, [
+                  'secondary',
+                  'tertiary',
+                ]),
+                minProperties: 1,
+              },
+              treatment: {
+                ...object(
+                  {
+                    capping: { type: 'boolean' },
+                    covering: viaTenting,
+                    plugging: viaTenting,
+                    filling: { type: 'boolean' },
+                  },
+                  ['capping', 'covering', 'plugging', 'filling'],
+                ),
+                minProperties: 1,
+              },
+              free: { type: 'boolean' },
+              padstack: object({ inner: viaPadstackDiameter, back: viaPadstackDiameter }),
+              removeUnusedLayers: { type: 'boolean' },
+              keepEndLayers: { type: 'boolean' },
+              startEndOnly: { type: 'boolean' },
+              zoneLayerConnections: { ...array({ enum: pcbCopperLayers }, 32), uniqueItems: true },
+            },
+            [
+              'locked',
+              'teardrops',
+              'tenting',
+              'span',
+              'backdrills',
+              'treatment',
+              'free',
+              'padstack',
+              'removeUnusedLayers',
+              'keepEndLayers',
+              'startEndOnly',
+              'zoneLayerConnections',
+            ],
+          ),
+        ),
+        graphics: array(line),
+        zones: array(zone, MAX_BOARD_ZONES),
       },
-      nets: array(object({ id: uuid, name }), 5000),
-      footprints: array(ref('footprint'), 2000),
-      tracks: array(
-        object(
-          {
-            id: uuid,
-            start: pcbPoint,
-            end: pcbPoint,
-            width: pcbPositive,
-            layer: copper,
-            netId: uuid,
-            locked: { const: true },
-          },
-          ['locked'],
-        ),
-      ),
-      vias: array(
-        object(
-          {
-            id: uuid,
-            ...pcbXY,
-            diameter: pcbPositive,
-            drill: pcbPositive,
-            netId: uuid,
-            locked: { const: true },
-          },
-          ['locked'],
-        ),
-      ),
-      graphics: array(line),
-      zones: array(zone, 1000),
-    }),
+      ['arcTracks', 'tuningPatterns', 'groupLocks', 'referenceImages', 'barcodes', 'nativeTables'],
+    ),
     footprint: object(
       {
         id: uuid,
         symbolId: { anyOf: [uuid, { type: 'null' }] },
-        libraryId: name,
+        libraryId: text,
         locked: { const: true },
         solderMaskMargin: pcbNumber,
         solderPasteMargin: pcbNumber,
         solderPasteMarginRatio: pcbNumber,
+        ...pcbFootprintZoneOverrides,
         ...pcbXY,
         rotation: pcbAngle,
         side: { enum: ['front', 'back'] },
@@ -384,12 +587,16 @@ const schema = {
             x: footprintPointCoordinate,
             y: footprintPointCoordinate,
             size: pcbPositive,
-            layer: { enum: ['F.Fab', 'B.Fab'] },
+            layer: graphicLayer,
           }),
           256,
         ),
         reference: text,
         value: text,
+        nativeMissingReference: { const: true },
+        nativeMissingValue: { const: true },
+        netTiePadGroups: array(text, 128),
+        jumperPadGroups: array(array(text, 128), 128),
         zones: array(zone, 1000),
         models: array(
           object(
@@ -400,13 +607,13 @@ const schema = {
                 maxLength: 4096,
                 pattern: '^[^\\u0000-\\u001f]+$',
               },
-              offset: object({ ...pcbXY, z: pcbNumber }),
+              offset: object({ x: pcbModelNumber, y: pcbModelNumber, z: pcbModelNumber }),
               scale: object({
                 x: { type: 'number', exclusiveMinimum: 0, maximum: 1000 },
                 y: { type: 'number', exclusiveMinimum: 0, maximum: 1000 },
                 z: { type: 'number', exclusiveMinimum: 0, maximum: 1000 },
               }),
-              rotation: object({ ...pcbXY, z: pcbNumber }),
+              rotation: object({ x: pcbModelNumber, y: pcbModelNumber, z: pcbModelNumber }),
               hidden: { type: 'boolean' },
               opacity: { type: 'number', minimum: 0, maximum: 1 },
             },
@@ -418,6 +625,10 @@ const schema = {
       [
         'reference',
         'value',
+        'nativeMissingReference',
+        'nativeMissingValue',
+        'netTiePadGroups',
+        'jumperPadGroups',
         'referencePoints',
         'zones',
         'models',
@@ -425,6 +636,7 @@ const schema = {
         'solderMaskMargin',
         'solderPasteMargin',
         'solderPasteMarginRatio',
+        ...Object.keys(pcbFootprintZoneOverrides),
       ],
     ),
     pad: object(
@@ -435,19 +647,43 @@ const schema = {
         ...pcbXY,
         rotation: pcbAngle,
         type: { enum: ['smd', 'thru_hole', 'np_thru_hole'] },
-        shape: { enum: ['rect', 'circle', 'oval', 'roundrect', 'custom'] },
+        shape: { enum: ['rect', 'circle', 'oval', 'roundrect', 'trapezoid', 'custom'] },
         size: object({ x: pcbPositive, y: pcbPositive }),
+        trapezoidDelta: pcbPoint,
+        padstack: object(
+          {
+            inner: padstackLayer,
+            back: padstackLayer,
+            mode: { const: 'custom' },
+            layers: {
+              ...array(
+                object({ layer: { enum: pcbCopperLayers }, ...padstackGeometry }, [
+                  'zoneConnect',
+                  'offset',
+                ]),
+                32,
+              ),
+              minItems: 1,
+            },
+          },
+          ['inner', 'back', 'mode', 'layers'],
+        ),
         customAnchor: { const: 'circle' },
+        nativeCustomPad: object({
+          clearance: { enum: ['outline', 'convexhull'] },
+          primitives: array(raw, 64),
+        }),
+        nativeConnect: { const: true },
         outline: { ...array(pcbPoint, customPadVertexLimit), minItems: 3 },
         drill: pcbPositive,
         netId: { anyOf: [uuid, { type: 'null' }] },
         layers: {
-          ...array({ enum: [...graphicLayer.enum, '*.Cu', 'F&B.Cu', '*.Mask'] }, 8),
-          minItems: 1,
+          ...array({ enum: [...graphicLayer.enum, '*.Cu', 'F&B.Cu', '*.Mask', '*.SilkS'] }, 8),
           uniqueItems: true,
         },
         drillOffset: pcbPoint,
         drillSlot: object({ length: pcbPositive, axis: { enum: ['x', 'y'] } }),
+        nativeRoundDrillY: pcbPositive,
         roundrectRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamferRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamfer: {
@@ -459,19 +695,44 @@ const schema = {
         solderPasteMargin: pcbNumber,
         solderPasteMarginRatio: { type: 'number', minimum: -1, maximum: 1 },
         thermalBridgeAngle: pcbAngle,
-        zoneConnect: { type: 'integer', minimum: 0, maximum: 3 },
+        teardrops: teardropSettings,
+        ...pcbPadZoneOverrides,
         removeUnusedLayers: { type: 'boolean' },
+        keepEndLayers: { type: 'boolean' },
+        zoneLayerConnections: { ...array({ enum: pcbCopperLayers }, 32), uniqueItems: true },
+        postMachining: object({ front: padMachiningSide, back: padMachiningSide }, [
+          'front',
+          'back',
+        ]),
+        dieLength: pcbNumber,
+        dieDelay: pcbNumber,
         heatsink: { const: true },
+        fabricationProperty: {
+          enum: [
+            'pad_prop_bga',
+            'pad_prop_mechanical',
+            'pad_prop_pressfit',
+            'pad_prop_fiducial_glob',
+            'pad_prop_fiducial_loc',
+            'pad_prop_castellated',
+            'pad_prop_testpoint',
+          ],
+        },
         unconnected: { const: true },
       },
       [
         'locked',
         'customAnchor',
+        'nativeCustomPad',
+        'nativeConnect',
         'outline',
+        'trapezoidDelta',
+        'padstack',
         'drill',
         'layers',
         'drillOffset',
         'drillSlot',
+        'nativeRoundDrillY',
         'roundrectRatio',
         'chamferRatio',
         'chamfer',
@@ -479,9 +740,16 @@ const schema = {
         'solderPasteMargin',
         'solderPasteMarginRatio',
         'thermalBridgeAngle',
-        'zoneConnect',
+        'teardrops',
+        ...Object.keys(pcbPadZoneOverrides),
         'removeUnusedLayers',
+        'keepEndLayers',
+        'zoneLayerConnections',
+        'postMachining',
+        'dieLength',
+        'dieDelay',
         'heatsink',
+        'fabricationProperty',
         'unconnected',
       ],
     ),
@@ -490,9 +758,22 @@ const schema = {
 // Command property schemas share the canonical definitions. These records have
 // no recursive/native S-expressions; resolve their local refs for the bounded
 // capability interpreter instead of maintaining another set of PCB shapes.
+const {
+  nativeCustomPad: _nativeCustomPad,
+  padstack: _padstack,
+  keepEndLayers: _keepEndLayers,
+  zoneLayerConnections: _zoneLayerConnections,
+  postMachining: _postMachining,
+  nativeRoundDrillY: _nativeRoundDrillY,
+  dieLength: _dieLength,
+  dieDelay: _dieDelay,
+  ...padCommandFields
+} = schema.$defs.pad.properties;
+const padCommandShape = { ...schema.$defs.pad, properties: padCommandFields };
 function capabilityShape(value) {
   if (Array.isArray(value)) return value.map(capabilityShape);
   if (!value || typeof value !== 'object') return value;
+  if (value === schema.$defs.pad) return capabilityShape(padCommandShape);
   if (value.$ref) {
     const key = value.$ref.replace(/^#\/\$defs\//, '');
     if (!schema.$defs[key] || Object.keys(value).length !== 1)
@@ -765,10 +1046,11 @@ const netBoard = object(
   {
     order,
     tracks: array(ordered(schema.$defs.pcb.properties.tracks.items, ['netId'])),
+    arcTracks: array(ordered(schema.$defs.pcb.properties.arcTracks.items, ['netId'])),
     vias: array(ordered(schema.$defs.pcb.properties.vias.items, ['netId'])),
-    zones: array(ordered(zone, ['netId']), 1000),
+    zones: array(ordered(zone, ['netId']), MAX_BOARD_ZONES),
   },
-  ['tracks', 'vias', 'zones'],
+  ['tracks', 'arcTracks', 'vias', 'zones'],
 );
 docDefs.netBoard = netBoard;
 const objectNet = object(
@@ -801,9 +1083,32 @@ docDefs.pcb = object(
     layers: schema.$defs.pcb.properties.layers,
     footprints: array(ref('footprint'), 2000),
     graphics: array(line),
-    zones: array(ordered(zone, ['netId']), 1000),
+    tracks: { ...array(ordered(schema.$defs.pcb.properties.tracks.items, ['netId'])), minItems: 1 },
+    arcTracks: {
+      ...array(ordered(schema.$defs.pcb.properties.arcTracks.items, ['netId'])),
+      minItems: 1,
+    },
+    tuningPatterns: array(raw, 256),
+    referenceImages: array(raw, 16),
+    barcodes: array(raw, 32),
+    nativeTables: array(raw, 32),
+    groupLocks: array(uuid, 30000),
+    vias: array(ordered(schema.$defs.pcb.properties.vias.items, ['netId'])),
+    zones: array(ordered(zone, ['netId']), MAX_BOARD_ZONES),
   },
-  ['footprints', 'graphics', 'zones'],
+  [
+    'footprints',
+    'graphics',
+    'tracks',
+    'arcTracks',
+    'tuningPatterns',
+    'groupLocks',
+    'vias',
+    'zones',
+    'referenceImages',
+    'barcodes',
+    'nativeTables',
+  ],
 );
 const documentSchema = {
   $schema: schema.$schema,

@@ -3,12 +3,31 @@ import type { Point } from './circuit';
 import type { BoardLine, BoardZone, CopperLayer, Footprint, Pad, PCB } from './pcb';
 import {
   pcbArc,
+  pcbBezierIsStationary,
+  pcbBezierVertices,
   pcbPadChamferEndpoints,
   pcbPadCorners,
+  pcbPadTrapezoid,
+  pcbRoundedRectArcs,
   transformPCBGraphic,
   transformPCBZone,
+  pcbZoneCircle,
+  pcbCurvedPolygonPath,
 } from './pcb-geometry';
-import { invalidatePCBFill, pcbFillInputsChanged, samePCBTrackCopper } from './pcb';
+import {
+  hasNativePCBTeardrops,
+  invalidatePCBFill,
+  isUnassignedSavedCopperZone,
+  pcbFillInputsChanged,
+  requireSupportedPCBCopper,
+  samePCBTrackCopper,
+} from './pcb';
+import {
+  defaultPCBIslandAreaMin,
+  pcbPadCopperClearance,
+  pcbPadZoneConnection,
+  pcbZoneLayerActive,
+} from './pcb-zone-settings';
 import {
   footprintPoint,
   padDrillLine,
@@ -28,13 +47,24 @@ import {
   type PCBRuleOperand,
 } from './pcb-clearance-sources';
 import { loadKiCadPCBDesignRuleLimits, workbenchPCBDesignRules } from './design-rule-checks';
-import { insidePolygon, polygonEdges, segmentDistance } from './pcb-collision';
+import {
+  edgeBounds,
+  insidePolygon,
+  makeBoundsIndex,
+  pointSegmentDistance,
+  polygonEdges,
+  queryBoundsIndex,
+  segmentDistance,
+  squaredDistance,
+} from './pcb-collision';
 import { padReach } from './pcb-custom-pad';
+import { nativeCustomPadAnchor, nativeCustomPadGraphics } from './pcb-native-custom-pad';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
 type CopperFillPolygon = Polygon & { island?: true };
 export const polygonResolution = 0.0001; // Millimetres per integer clipping coordinate.
 const scale = 1 / polygonResolution;
+const maxContourVertices = 20_000;
 const integer = (points: Point[]) =>
   points.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 const decimal = (points: Clipper.Path) => points.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
@@ -75,8 +105,20 @@ export const offsetPolygons = offset;
 function circleSideCount(radius: number): number {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
-export function circlePolygon(at: Point, radius: number): Point[] {
-  const count = circleSideCount(radius);
+function boundedArcSegments(sweep: number, radius: number, tolerance: number): number {
+  // The sagitta of one chord is 2r sin²(sweep / 4).
+  if (!(radius > 0)) throw new Error('A circular contour has a degenerate radius.');
+  const segmentAngle = 4 * Math.asin(Math.sqrt(Math.min(0.5, tolerance / (2 * radius))));
+  const count = Math.ceil(Math.abs(sweep) / segmentAngle);
+  if (!Number.isSafeInteger(count) || count >= maxContourVertices)
+    throw new Error('Arc subdivision exceeds the contour vertex limit.');
+  return Math.max(1, count);
+}
+export function circlePolygon(at: Point, radius: number, tolerance?: number): Point[] {
+  const count =
+    tolerance === undefined
+      ? circleSideCount(radius)
+      : Math.max(3, boundedArcSegments(2 * Math.PI, radius, tolerance));
   return Array.from({ length: count }, (_, i) => ({
     x: at.x + radius * Math.cos((i * Math.PI * 2) / count),
     y: at.y + radius * Math.sin((i * Math.PI * 2) / count),
@@ -118,20 +160,66 @@ function strokedPath(
 export function strokePolygon(points: Point[], width: number): Polygon[] {
   return strokedPath(points, width, false);
 }
-export function graphicVertices(g: BoardLine): Point[] {
+export function graphicVertices(g: BoardLine, curveTolerance?: number): Point[] {
+  if (g.roundedRectRadius !== undefined) {
+    const radius = g.roundedRectRadius;
+    const count =
+      curveTolerance === undefined
+        ? Math.min(512, Math.max(8, Math.ceil((Math.PI / 2) * Math.sqrt(radius / 0.01))))
+        : boundedArcSegments(Math.PI / 2, radius, curveTolerance);
+    if (count * 4 + 4 > maxContourVertices)
+      throw new Error('Rounded rectangle subdivision exceeds the contour vertex limit.');
+    return pcbRoundedRectArcs(g).flatMap((arc) => {
+      const angle = Math.atan2(arc.start.y - arc.center.y, arc.start.x - arc.center.x);
+      const step = ((arc.clockwise ? 1 : -1) * Math.PI) / (2 * count);
+      return [
+        arc.start,
+        ...Array.from({ length: count - 1 }, (_, index) => ({
+          x: arc.center.x + radius * Math.cos(angle + step * (index + 1)),
+          y: arc.center.y + radius * Math.sin(angle + step * (index + 1)),
+        })),
+        arc.end,
+      ];
+    });
+  }
   if (g.kind === 'circle')
-    return circlePolygon(g.start, Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y));
-  if (g.kind === 'arc') {
-    const arc = pcbArc(g);
-    if (!arc) throw new Error('The board outline contains a degenerate arc.');
-    const count = Math.min(
-      512,
-      Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01))),
+    return circlePolygon(
+      g.start,
+      Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y),
+      curveTolerance,
     );
-    return Array.from({ length: count + 1 }, (_, i) => ({
-      x: arc.center.x + arc.radius * Math.cos(arc.start + (arc.delta * i) / count),
-      y: arc.center.y + arc.radius * Math.sin(arc.start + (arc.delta * i) / count),
-    }));
+  const arcVertices = (segment: Pick<BoardLine, 'start' | 'mid' | 'end'>) => {
+    const arc = pcbArc(segment);
+    if (!arc) throw new Error('The board outline contains a degenerate arc.');
+    const count =
+      curveTolerance === undefined
+        ? Math.min(512, Math.max(8, Math.ceil(Math.abs(arc.delta) * Math.sqrt(arc.radius / 0.01))))
+        : boundedArcSegments(arc.delta, arc.radius, curveTolerance);
+    return [
+      segment.start,
+      ...Array.from({ length: count - 1 }, (_, i) => ({
+        x: arc.center.x + arc.radius * Math.cos(arc.start + (arc.delta * (i + 1)) / count),
+        y: arc.center.y + arc.radius * Math.sin(arc.start + (arc.delta * (i + 1)) / count),
+      })),
+      segment.end,
+    ];
+  };
+  if (g.kind === 'arc') return arcVertices(g);
+  if (g.kind === 'curve') return pcbBezierVertices(g, curveTolerance);
+  if (g.polygonArcs) {
+    const vertices = [g.start, ...(g.points ?? []), g.end];
+    const arcs = new Map(g.polygonArcs.map(({ vertex, mid }) => [vertex, mid]));
+    const points: Point[] = [];
+    for (let vertex = 0; vertex < vertices.length; vertex++) {
+      const start = vertices[vertex];
+      const mid = arcs.get(vertex);
+      points.push(
+        ...(mid ? arcVertices({ start, mid, end: vertices[vertex + 1] }).slice(0, -1) : [start]),
+      );
+      if (curveTolerance !== undefined && points.length > maxContourVertices)
+        throw new Error('Arc subdivision exceeds the contour vertex limit.');
+    }
+    return points;
   }
   return [g.start, ...(g.points ?? []), g.end];
 }
@@ -140,18 +228,35 @@ export function graphicVertices(g: BoardLine): Point[] {
  * contributes no physical area. Returned points never alias native records.
  */
 export function graphicPolygons(g: BoardLine): Polygon[] {
-  if (g.text || g.dimension) return [];
-  const points = graphicVertices(g);
+  return boundedGraphicPolygons(g);
+}
+
+function boundedGraphicPolygons(g: BoardLine, curveTolerance?: number): Polygon[] {
+  if (g.text || g.dimension || g.kind === 'point') return [];
+  if (curveTolerance !== undefined && g.kind === 'circle') {
+    const radius = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
+    const outer = circlePolygon(g.start, radius + g.width / 2, curveTolerance);
+    const holeRadius = radius - g.width / 2;
+    return [
+      {
+        outer,
+        holes:
+          !g.fill && holeRadius > 0 ? [circlePolygon(g.start, holeRadius, curveTolerance)] : [],
+      },
+    ];
+  }
+  const points = graphicVertices(g, curveTolerance);
   const closed = g.kind === 'circle' || g.kind === 'polygon';
-  if (!closed || !g.fill) return strokedPath(points, g.width, closed);
+  if (!closed || !g.fill) return strokedPath(points, g.width, closed, curveTolerance);
   const interior = [{ outer: points.map((point) => ({ ...point })), holes: [] }];
-  return g.width > 0 ? offset(interior, g.width / 2) : interior;
+  return g.width > 0 ? offset(interior, g.width / 2, curveTolerance) : interior;
 }
 /** An empty Model canvas has no board surface; actual artwork still requires a valid outline. */
 export function modelBoardPolygons(board: PCB): Polygon[] {
   if (
     !board.footprints.length &&
     !board.tracks.length &&
+    !board.arcTracks?.length &&
     !board.vias.length &&
     !board.graphics.length &&
     !board.zones.length
@@ -165,27 +270,137 @@ export function boardPolygons(board: PCB): Polygon[] {
   return prepareBoardOutline(board).polygons;
 }
 
-/** Keep exact world-space primitives beside the validated polygon approximation. */
-export function prepareBoardOutline(board: PCB): {
-  edges: readonly Readonly<BoardLine>[];
-  polygons: Polygon[];
-} {
-  const edges = [
-    ...board.graphics.filter((g) => g.layer === 'Edge.Cuts'),
-    ...board.footprints.flatMap((f) =>
-      f.graphics
-        .filter((g) => g.layer === 'Edge.Cuts')
-        .map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
+export function pcbOutlineGraphics(board: PCB): BoardLine[] {
+  return [
+    ...board.graphics.filter((graphic) => graphic.layer === 'Edge.Cuts'),
+    ...board.footprints.flatMap((footprint) =>
+      footprint.graphics
+        .filter((graphic) => graphic.layer === 'Edge.Cuts')
+        .map((graphic) =>
+          transformPCBGraphic(graphic, (point) => footprintPoint(footprint, point)),
+        ),
     ),
   ];
-  if (!edges.length) throw new Error('Draw a closed board outline before previewing copper or 3D.');
-  const polygons = polygonsFromContours(closedGraphicContours(edges, 'board outline'));
-  if (!polygons.length) throw new Error('The board outline does not enclose a positive area.');
-  return { edges, polygons };
 }
 
-/** Join line and arc endpoints; native circles and polygons are already closed. */
-export function closedGraphicContours(edges: BoardLine[], context: string): Point[][] {
+/** Keep exact world-space primitives beside the validated polygon approximation. */
+export function prepareBoardOutline(
+  board: PCB,
+  curveTolerance?: number,
+): {
+  edges: readonly Readonly<BoardLine>[];
+  polygons: Polygon[];
+  contours: Point[][];
+} {
+  const edges = pcbOutlineGraphics(board);
+  if (!edges.length) throw new Error('Draw a closed board outline before previewing copper or 3D.');
+  const contours = closedGraphicContours(edges, 'board outline', curveTolerance);
+  const polygons = polygonsFromContours(contours);
+  if (!polygons.length) throw new Error('The board outline does not enclose a positive area.');
+  return { edges, polygons, contours };
+}
+
+/** CAM centre lines must form closed loops at the exported coordinates. */
+export function prepareFabricationOutline(board: PCB, format: 'DXF' | 'Gerber') {
+  const tolerance = 0.0005;
+  const outline = prepareBoardOutline(board, tolerance);
+  const edges = outline.edges.filter(
+    (edge) => edge.kind !== 'curve' || !pcbBezierIsStationary(edge),
+  );
+  const endpointCounts = new Map<string, number>();
+  for (const edge of edges) {
+    if (edge.kind && edge.kind !== 'arc' && edge.kind !== 'curve') continue;
+    const { start, end } = edge;
+    if (!edge.kind && start.x === end.x && start.y === end.y)
+      throw new Error('The board outline contains a zero-length line.');
+    for (const { x, y } of [start, end]) {
+      const key = `${x},${y}`;
+      endpointCounts.set(key, (endpointCounts.get(key) ?? 0) + 1);
+    }
+  }
+  if ([...endpointCounts.values()].some((count) => count !== 2))
+    throw new Error(`${format} export requires exact joins between board outline endpoints.`);
+  let operations = 0;
+  prepareBoardOutlineBoundary(outline, tolerance, () => {
+    if (++operations > 2_000_000)
+      throw new Error('The board outline exceeds the topology check limit.');
+  });
+  return edges;
+}
+
+/** Check original contours independently of polygon repair and return their boundary for DRC. */
+export function prepareBoardOutlineBoundary(
+  outline: ReturnType<typeof prepareBoardOutline>,
+  tolerance: number,
+  spend: () => void,
+) {
+  const epsilon = 0.00001;
+  const curved = outline.edges.some(
+    (edge) =>
+      edge.kind === 'curve' ||
+      edge.kind === 'arc' ||
+      edge.kind === 'circle' ||
+      edge.roundedRectRadius !== undefined ||
+      Boolean(edge.polygonArcs),
+  );
+  const precision = curved ? tolerance + polygonResolution : 0;
+  const margin = Math.max(epsilon, 2 * precision);
+  let order = 0;
+  const edges = outline.contours.flatMap((contour, ring) => {
+    const points = contour.filter((point, i) => !i || squaredDistance(point, contour[i - 1]) > 0);
+    if (points.length > 1 && squaredDistance(points[0], points.at(-1)!) === 0) points.pop();
+    if (points.length < 3) throw new Error('The board outline contains a degenerate contour.');
+    return polygonEdges({ outer: points, holes: [] }).map((line, position) => ({
+      line,
+      ring,
+      position,
+      order: order++,
+      size: points.length,
+      ...edgeBounds(line),
+    }));
+  });
+  const index = makeBoundsIndex([...edges]);
+  const intersects = () =>
+    new Error('The board outline intersects itself or another Edge.Cuts contour.');
+  for (const edge of edges) {
+    queryBoundsIndex(
+      index,
+      edge,
+      margin,
+      (other) => {
+        if (other.order <= edge.order) return;
+        if (edge.ring === other.ring) {
+          const steps = other.position - edge.position;
+          if (steps === 1 || steps === edge.size - 1) {
+            const [previous, following] =
+              steps === 1 ? [edge.line, other.line] : [other.line, edge.line];
+            if (
+              pointSegmentDistance(previous[0], ...following) === 0 ||
+              pointSegmentDistance(following[1], ...previous) === 0
+            )
+              throw intersects();
+            return;
+          }
+        }
+        const distance = segmentDistance(...edge.line, ...other.line);
+        if (distance < epsilon ** 2) throw intersects();
+        if (precision && distance < margin ** 2)
+          throw new Error(
+            'The separation of nearby board edges cannot be resolved at the curved outline precision.',
+          );
+      },
+      spend,
+    );
+  }
+  return { index, precision };
+}
+
+/** Join open stroke endpoints; native circles and polygons are already closed. */
+export function closedGraphicContours(
+  edges: BoardLine[],
+  context: string,
+  curveTolerance?: number,
+): Point[][] {
   if (edges.length > 5000) throw new Error(`The ${context} exceeds the graphic limit.`);
   const loops: Point[][] = [],
     segments: Point[][] = [];
@@ -193,9 +408,12 @@ export function closedGraphicContours(edges: BoardLine[], context: string): Poin
   for (const g of edges) {
     if (g.kind === 'text' || g.kind === 'dimension')
       throw new Error(`Unsupported ${context} geometry.`);
-    const pts = graphicVertices(g);
+    const pts = graphicVertices(g, curveTolerance);
+    // KiCad retains point-sized curves in native records but adds no material edge.
+    if (g.kind === 'curve' && pts.length === 2 && squaredDistance(pts[0], pts[1]) === 0) continue;
     vertexCount += pts.length;
-    if (vertexCount > 20000) throw new Error(`The ${context} exceeds the geometry limit.`);
+    if (vertexCount > maxContourVertices)
+      throw new Error(`The ${context} exceeds the geometry limit.`);
     if (g.kind === 'circle' || g.kind === 'polygon') loops.push(pts);
     else segments.push(pts);
   }
@@ -248,6 +466,7 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
     h = p.size.y;
   let local: Point[];
   if (p.outline) local = p.outline;
+  else if (p.shape === 'trapezoid') local = pcbPadTrapezoid(p);
   else if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
@@ -281,8 +500,58 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
   };
 }
 
+/** Model/picking polygons for native primitives. Native records remain the
+ * Save authority, and copper rules never consume these tessellated contours. */
+export function displayPadPolygons(footprint: Footprint, pad: Pad): Polygon[] {
+  if (!pad.nativeCustomPad) return [padPolygon(footprint, pad)];
+  return nativePadPolygons(footprint, pad);
+}
+
+function nativePadPolygons(footprint: Footprint, pad: Pad, curveTolerance?: number): Polygon[] {
+  const anchor = nativeCustomPadAnchor(pad);
+  const placement = { ...padPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+  const geometry: Polygon[] = [];
+  let vertices = 0;
+  for (const shape of nativeCustomPadGraphics(pad)) {
+    const polygons = boundedGraphicPolygons(
+      transformPCBGraphic(shape, (point) => footprintPoint(placement, point)),
+      curveTolerance,
+    );
+    if (curveTolerance !== undefined && !polygons.length)
+      throw new Error('A native custom pad primitive is below the DRC clipping resolution.');
+    for (const polygon of polygons) {
+      vertices += polygon.outer.length + polygon.holes.reduce((n, hole) => n + hole.length, 0);
+      if (curveTolerance !== undefined && vertices > maxContourVertices)
+        throw new Error('Native custom pad exceeds the contour vertex limit.');
+      geometry.push(polygon);
+    }
+  }
+  if (anchor && anchor.shape === 'circle' && curveTolerance !== undefined) {
+    geometry.push({
+      outer: circlePolygon(placement, anchor.size.x / 2, curveTolerance),
+      holes: [],
+    });
+  } else if (anchor) geometry.push(padPolygon(footprint, anchor));
+  if (
+    curveTolerance !== undefined &&
+    geometry.some(({ outer }) => !Clipper.Clipper.Area(integer(outer)))
+  )
+    throw new Error('A native custom pad contour is below the DRC clipping resolution.');
+  return operation(geometry, [], Clipper.ClipType.ctUnion);
+}
+
+const nativePadChordTolerance = 0.0005;
+export const nativeCustomPadCopperTolerance = 2 * (nativePadChordTolerance + polygonResolution);
+/** The physical union in world space. Drill geometry is handled by the caller. */
+export function nativeCustomPadCopperPolygons(footprint: Footprint, pad: Pad): Polygon[] {
+  const copper = nativePadPolygons(footprint, pad, nativePadChordTolerance);
+  if (!copper.length) throw new Error('Native custom pad has no measurable copper contour.');
+  return copper;
+}
+
 /** Uniform mask/paste apertures for straight chamfers follow KiCad's plot geometry. */
 export function offsetPadPolygons(f: Footprint, pad: Pad, margin: number): Polygon[] {
+  if (pad.nativeCustomPad) return offsetPolygons(displayPadPolygons(f, pad), margin);
   if (pad.outline) {
     const polygon = padPolygon(f, pad);
     return margin ? offsetPolygons([polygon], margin, 0.0005) : [polygon];
@@ -296,13 +565,38 @@ export function offsetPadPolygons(f: Footprint, pad: Pad, margin: number): Polyg
 }
 export function worldZones(board: PCB): BoardZone[] {
   return [
-    ...board.zones,
+    ...board.zones.filter((zone) => zone.outline.length),
     ...board.footprints.flatMap((f) =>
-      (f.zones ?? []).map((z) => transformPCBZone(z, (p) => footprintPoint(f, p))),
+      (f.zones ?? [])
+        .filter((zone) => zone.outline.length && pcbZoneLayerActive(board, zone.layer))
+        .map((z) => transformPCBZone(z, (p) => footprintPoint(f, p))),
     ),
   ];
 }
 const zonePolygon = (z: BoardZone): Polygon => ({ outer: z.outline, holes: z.holes ?? [] });
+/** The native boundary represented with bounded chords for read-only rule checks. */
+export function ruleAreaPolygon(zone: BoardZone, curveTolerance: number): Polygon {
+  const polygon = zonePolygon(zone);
+  const circle = pcbZoneCircle(zone);
+  if (circle)
+    return { ...polygon, outer: circlePolygon(circle.center, circle.radius, curveTolerance) };
+  if (!zone.nativeOutlineArcs) return polygon;
+  const [start, ...vertices] = zone.outline;
+  const outer = graphicVertices(
+    {
+      id: zone.id,
+      layer: zone.layer,
+      kind: 'polygon',
+      width: 0,
+      start,
+      points: vertices.slice(0, -1),
+      end: vertices.at(-1)!,
+      polygonArcs: zone.nativeOutlineArcs,
+    },
+    curveTolerance,
+  );
+  return { ...polygon, outer };
+}
 export const pourKeepoutPolygons = (zone: BoardZone): Polygon[] =>
   offset([zonePolygon(zone)], zone.clearance);
 export const polygonPath = (polygons: Polygon[]) =>
@@ -310,6 +604,25 @@ export const polygonPath = (polygons: Polygon[]) =>
     .flatMap((p) => [p.outer, ...p.holes])
     .map((pts) => `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`)
     .join(' ');
+
+export function pcbZoneOutlineDisplayPath(zone: BoardZone, polygon = polygonPath): string {
+  const circle = pcbZoneCircle(zone);
+  if (circle) {
+    const [{ x, y }, opposite] = zone.outline;
+    const { radius } = circle;
+    return `M ${x} ${y} A ${radius} ${radius} 0 1 0 ${opposite.x} ${opposite.y} A ${radius} ${radius} 0 1 0 ${x} ${y} Z`;
+  }
+  if (zone.nativeOutlineArcs) return pcbCurvedPolygonPath(zone.outline, zone.nativeOutlineArcs);
+  return zone.outline.length ? polygon([{ outer: zone.outline, holes: zone.holes ?? [] }]) : '';
+}
+
+/** A native fill contains its own zero-width bridges around cutouts. SVG
+ * even-odd painting preserves them without Boolean analysis or refilling. */
+export function pcbSavedZoneDisplayPath(zone: BoardZone): string {
+  return polygonPath(
+    (zone.filledPolygons ?? []).map(({ points }) => ({ outer: points, holes: [] })),
+  );
+}
 
 export const defaultCopperFillClearance = 0.25;
 
@@ -392,6 +705,8 @@ export function preparePCBFillRules(board: PCB, context?: PCBFillRuleContext) {
     };
   };
   const gap = (a: PCBRuleOperand, b: PCBRuleOperand, minimum: number) => {
+    const local = Math.max(a.localClearance ?? 0, b.localClearance ?? 0);
+    if (local > 0) return Math.max(minimum, limits.clearance, local);
     const custom = matchingPCBClearanceRule(rules, a, b, spend);
     return Math.max(
       minimum,
@@ -414,8 +729,10 @@ export function preparePCBFillRules(board: PCB, context?: PCBFillRuleContext) {
       ),
     via: (via: PCB['vias'][number]) =>
       operand('Via', via.netId, () => [{ outer: circlePolygon(via, via.diameter / 2), holes: [] }]),
-    pad: (footprint: Footprint, pad: Pad) =>
-      operand('Pad', pad.netId, () => [padPolygon(footprint, pad)]),
+    pad: (footprint: Footprint, pad: Pad) => ({
+      ...operand('Pad', pad.netId, () => [padPolygon(footprint, pad)]),
+      localClearance: pcbPadCopperClearance(footprint, pad),
+    }),
     gap,
   };
 }
@@ -432,6 +749,7 @@ export function fillCopperZone(
   const zone = board.zones.find((item) => item.id === zoneId);
   if (!zone || zone.keepout || !zone.layer.endsWith('.Cu'))
     throw new Error('Select an existing board copper zone to fill.');
+  if (!zone.outline.length) throw new Error('A zone needs an outline before it can be filled.');
   const enabled = invalidatePCBFill(board, {
     ...board,
     zones: board.zones.map((item) =>
@@ -524,6 +842,8 @@ function fillEdge(graphic: BoardLine) {
       end: fillPoint(graphic.end),
       mid: graphic.mid ? fillPoint(graphic.mid) : null,
       points: graphic.points ? graphic.points.map(fillPoint) : null,
+      roundedRectRadius: graphic.roundedRectRadius ?? null,
+      polygonArcs: graphic.polygonArcs?.map(({ vertex, mid }) => [vertex, fillPoint(mid)]),
     },
   ];
 }
@@ -542,6 +862,7 @@ function fillZone(zone: BoardZone) {
     priority: zone.priority ?? 0,
     padConnection: zone.padConnection ?? null,
     islandRemovalMode: zone.islandRemovalMode ?? 0,
+    islandAreaMin: zone.islandAreaMin ?? defaultPCBIslandAreaMin,
     fillEnabled: zone.fillEnabled !== false,
     keepout: zone.keepout ? { copperpour: zone.keepout.copperpour } : null,
   };
@@ -557,6 +878,7 @@ function fillPad(pad: Pad) {
     shape: pad.shape,
     size: fillPoint(pad.size),
     outline: pad.outline?.map(fillPoint),
+    trapezoidDelta: pad.trapezoidDelta && fillPoint(pad.trapezoidDelta),
     drill: pad.drill === undefined ? null : fillNumber(pad.drill),
     drillSlot: pad.drillSlot ? [pad.drillSlot.axis, fillNumber(pad.drillSlot.length)] : null,
     netId: pad.netId,
@@ -567,6 +889,9 @@ function fillPad(pad: Pad) {
     chamfer: pad.chamfer ?? null,
     thermalBridgeAngle: pad.thermalBridgeAngle ?? 90,
     zoneConnect: pad.zoneConnect === undefined ? null : pad.zoneConnect,
+    copperClearance: pad.copperClearance,
+    thermalGap: pad.thermalGap,
+    thermalBridge: pad.thermalBridge,
   };
 }
 
@@ -590,6 +915,8 @@ function copperFillFingerprint(
       y: fillNumber(footprint.y),
       rotation: fillNumber(footprint.rotation),
       side: footprint.side,
+      zoneConnect: footprint.zoneConnect,
+      copperClearance: footprint.copperClearance,
       edges: footprint.graphics.flatMap(fillEdge),
       pads: footprint.pads.map(fillPad),
       zones: (footprint.zones ?? []).map(fillZone),
@@ -641,8 +968,10 @@ function circularClearance(at: Point, radius: number): Polygon {
   return { outer: circlePolygon(at, enclosingRadius + 4 * polygonResolution), holes: [] };
 }
 
-const hasIslandPolicy = (zone: BoardZone) =>
-  (zone.islandRemovalMode ?? 0) === 0 || zone.islandRemovalMode === 1;
+function polygonArea(polygon: Polygon) {
+  const area = (ring: Point[]) => Math.abs(Clipper.Clipper.Area(integer(ring))) / scale ** 2;
+  return area(polygon.outer) - polygon.holes.reduce((total, hole) => total + area(hole), 0);
+}
 
 function applyCopperIslandPolicy(
   board: PCB,
@@ -651,8 +980,7 @@ function applyCopperIslandPolicy(
   selected?: ReadonlySet<string>,
 ) {
   const targets = zones.filter(
-    (zone) =>
-      (!selected || selected.has(zone.id)) && hasIslandPolicy(zone) && fills.get(zone.id)?.length,
+    (zone) => (!selected || selected.has(zone.id)) && fills.get(zone.id)?.length,
   );
   if (!targets.length) return;
   const nets = new Set(targets.map((zone) => zone.netId));
@@ -727,7 +1055,11 @@ function applyCopperIslandPolicy(
       zone.id,
       pieces.flatMap((piece) => {
         if (connected.has(partition.get(piece.id))) return [piece.polygon];
-        return zone.islandRemovalMode === 1 ? [{ ...piece.polygon, island: true }] : [];
+        const retain =
+          zone.islandRemovalMode === 1 ||
+          (zone.islandRemovalMode === 2 &&
+            polygonArea(piece.polygon) >= (zone.islandAreaMin ?? defaultPCBIslandAreaMin));
+        return retain ? [{ ...piece.polygon, island: true }] : [];
       }),
     );
   }
@@ -745,6 +1077,18 @@ function calculateCopperPolygons(
   reusedContours: Map<string, NonNullable<BoardZone['filledPolygons']>>;
   stored?: Map<string, ZoneFillRecord>;
 } {
+  if (hasNativePCBTeardrops(board))
+    throw new Error('Copper refill on boards with native teardrops requires KiCad.');
+  requireSupportedPCBCopper(board, 'Copper refill');
+  const nativeHatch = (zone: BoardZone) =>
+    zone.outline.length && zone.fillEnabled !== false && (zone.hatchPosition || zone.hatchFill);
+  if (
+    board.zones.some(nativeHatch) ||
+    board.footprints.some((footprint) => footprint.zones?.some(nativeHatch))
+  )
+    throw new Error('Copper refill for native hatch settings requires KiCad.');
+  if (board.tuningPatterns?.length)
+    throw new Error('Copper refill on boards with native tuning patterns requires KiCad.');
   const empty = {
     polygons: new Map<string, CopperFillPolygon[]>(),
     reusedContours: new Map<string, NonNullable<BoardZone['filledPolygons']>>(),
@@ -866,26 +1210,11 @@ function calculateCopperPolygons(
           ? p.layers.includes('*.Cu') || p.layers.includes(z.layer)
           : z.layer === (f.side === 'front' ? 'F.Cu' : 'B.Cu'));
       if (!present) continue;
-      const connection =
-        p.zoneConnect === 0
-          ? 'none'
-          : p.zoneConnect === 2
-            ? 'solid'
-            : p.zoneConnect === 1
-              ? 'thermal'
-              : p.zoneConnect === 3 || z.padConnection === 'thru_hole_only'
-                ? p.type === 'thru_hole'
-                  ? 'thermal'
-                  : 'solid'
-                : z.padConnection === 'no'
-                  ? 'none'
-                  : z.padConnection === 'yes'
-                    ? 'solid'
-                    : 'thermal';
+      const connection = pcbPadZoneConnection(f, p, z);
       if (!p.netId || p.netId !== z.netId || connection === 'none' || p.type === 'np_thru_hole') {
         const padClearance =
           p.netId === z.netId && p.type !== 'np_thru_hole'
-            ? clearance
+            ? Math.max(clearance, pcbPadCopperClearance(f, p) ?? 0)
             : ruleLimits.gap(zoneOperand, operand, clearance);
         if (p.shape === 'circle')
           blocked.push(circularClearance(padPosition(f, p), p.size.x / 2 + padClearance));
@@ -894,9 +1223,11 @@ function calculateCopperPolygons(
           blocked.push(...clearanceOffset([shape], padClearance + chordLoss));
         }
       } else if (connection === 'thermal') {
-        const gap = offset([shape], z.thermalGap);
+        const thermalGap = p.thermalGap || z.thermalGap;
+        const thermalBridge = Math.max(p.thermalBridge || z.thermalBridge, z.minThickness);
+        const gap = offset([shape], thermalGap);
         const at = padPosition(f, p),
-          r = padReach(p) + z.thermalGap + z.thermalBridge;
+          r = padReach(p) + thermalGap + thermalBridge;
         const spokes = Array.from({ length: 2 }, (_, i) => {
           const a = (((p.thermalBridgeAngle ?? 90) - padRotation(f, p) + i * 90) * Math.PI) / 180;
           return strokePolygon(
@@ -904,7 +1235,7 @@ function calculateCopperPolygons(
               { x: at.x - r * Math.cos(a), y: at.y - r * Math.sin(a) },
               { x: at.x + r * Math.cos(a), y: at.y + r * Math.sin(a) },
             ],
-            Math.max(0.0001, z.thermalBridge),
+            thermalBridge,
           );
         }).flat();
         thermal.push(...subtractPolygons(gap, spokes));
@@ -1060,6 +1391,8 @@ function requireFillNets(board: PCB): void {
   const zones = worldZones(board).filter(
     (z) => z.layer.endsWith('.Cu') && !z.keepout && z.fillEnabled !== false,
   );
+  if (zones.some(isUnassignedSavedCopperZone))
+    throw new Error('Copper refill on boards with unassigned native copper fills requires KiCad.');
   if (zones.some((z) => !z.netId))
     throw new Error('Assign a net to each copper zone before filling.');
 }

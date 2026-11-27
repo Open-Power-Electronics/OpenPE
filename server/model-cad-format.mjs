@@ -620,24 +620,104 @@ for (const [relative, entry] of records) {
 // lib/circuit.ts
 var uid = () => crypto.randomUUID();
 
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+function pcbTextLineAdvance(text) {
+  return text.size.y * 1.25 * (text.lineSpacing ?? 1);
+}
+function pcbTextDisplayValue(text) {
+  return text.nativeExpansion?.source === text.value ? text.nativeExpansion.value : text.value;
+}
+
 // lib/pcb-geometry.ts
+function pcbCenterMarkStrokes({
+  start,
+  end
+}) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  return [
+    [{ x: start.x - dx, y: start.y - dy }, { ...end }],
+    [
+      { x: start.x + dy, y: start.y - dx },
+      { x: start.x - dy, y: start.y + dx }
+    ]
+  ];
+}
 function pcbArc(g) {
   const a = g.start, b = g.mid, c = g.end;
   if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - a.x, vy = c.y - a.y;
+  const d = 2 * (ux * vy - uy * vx);
   if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
+  const u2 = ux * ux + uy * uy, v2 = vx * vx + vy * vy;
   const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
+    x: a.x + (u2 * vy - v2 * uy) / d,
+    y: a.y + (ux * v2 - vx * u2) / d
   };
   const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
   const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
   const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
   return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
 }
+function pcbArcBoundsPoints(g) {
+  const points = [g.start, g.end];
+  const arc = pcbArc(g);
+  if (!arc) return points;
+  const tau = Math.PI * 2;
+  const direction = Math.sign(arc.delta);
+  for (const angle of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+    if ((direction * (angle - arc.start) + tau * 2) % tau > Math.abs(arc.delta)) continue;
+    points.push({
+      x: arc.center.x + arc.radius * Math.cos(angle),
+      y: arc.center.y + arc.radius * Math.sin(angle)
+    });
+  }
+  return points;
+}
+function pcbBezierBoundsPoints(g) {
+  const [first, second] = g.points;
+  const parameters = /* @__PURE__ */ new Set();
+  for (const axis of ["x", "y"]) {
+    const c = first[axis] - g.start[axis];
+    const d = second[axis] - first[axis];
+    const e = g.end[axis] - second[axis];
+    const a = c - 2 * d + e;
+    const b = 2 * (d - c);
+    const discriminant = b * b - 4 * a * c;
+    if (a === 0) {
+      if (b !== 0) parameters.add(-c / b);
+    } else if (discriminant >= 0) {
+      const root = Math.sqrt(discriminant);
+      parameters.add((-b + root) / (2 * a));
+      parameters.add((-b - root) / (2 * a));
+    }
+  }
+  const extrema = [...parameters].filter((t) => t > 0 && t < 1).map((t) => {
+    const s = 1 - t;
+    const at = (axis) => s ** 3 * g.start[axis] + 3 * s ** 2 * t * first[axis] + 3 * s * t ** 2 * second[axis] + t ** 3 * g.end[axis];
+    return { x: at("x"), y: at("y") };
+  });
+  return [g.start, ...extrema, g.end];
+}
 function pcbGraphicPoints(g) {
   if (g.text?.hidden) return [];
+  if (g.dimension?.type === "center") return pcbCenterMarkStrokes(g).flat();
+  if (g.kind === "point") {
+    const { x, y } = g.start;
+    const r = g.width / 2;
+    return [
+      { x: x - r, y: y - r },
+      { x: x + r, y: y + r }
+    ];
+  }
+  if (g.kind === "curve") return pcbBezierBoundsPoints(g);
   if (g.kind === "circle" || g.kind === "arc") {
     const arc = g.kind === "arc" ? pcbArc(g) : null, center = arc?.center ?? g.start, r = arc?.radius ?? Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
     return [
@@ -646,9 +726,17 @@ function pcbGraphicPoints(g) {
     ];
   }
   const points = [g.start, g.end, ...g.points ?? [], ...g.mid ? [g.mid] : []];
+  if (g.polygonArcs) {
+    const vertices = [g.start, ...g.points ?? [], g.end];
+    for (const { vertex, mid } of g.polygonArcs)
+      points.push(
+        ...pcbArcBoundsPoints({ start: vertices[vertex], mid, end: vertices[vertex + 1] })
+      );
+  }
   const t = g.text ?? g.dimension?.caption;
   if (t) {
-    const at = g.dimension?.caption ?? g.start, w = Math.max(...t.value.split("\n").map((s) => s.length)) * t.size.x * 0.7, h = t.value.split("\n").length * t.size.y;
+    const lines = pcbTextDisplayValue(t).split("\n");
+    const at = g.dimension?.caption ?? g.start, w = Math.max(...lines.map((s) => s.length)) * t.size.x * 0.7, h = t.size.y + (lines.length - 1) * pcbTextLineAdvance(t);
     const r = Math.hypot(w, h);
     points.push({ x: at.x - r, y: at.y - r }, { x: at.x + r, y: at.y + r });
   }

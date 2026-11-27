@@ -4,20 +4,152 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { parseProject, serializeProject } from '../lib/project';
+import { ProjectCore } from '../core/project-core';
+import { createProject, parseProject, serializeProject } from '../lib/project';
 import {
   projectFromNativeFiles,
   projectNativeFiles,
   replaceNativeProjectFile,
 } from '../lib/kicad-project';
+import { KICAD_PCB_VERSION } from '../lib/kicad-version';
+import { nativeProjectDirty } from '../lib/native-project-dirty';
+import { pcbFillRuleContext, readPCBDesignRuleSources } from '../lib/pcb-clearance-sources';
 import { simulationModelDefinitions } from '../lib/simulation-models';
 import { exampleProject } from '../lib/project-example';
+import { child, parseSExpr, val } from '../lib/sexpr';
 import { atomicWrite } from '../server/atomic-write.mjs';
 
 const require = createRequire(import.meta.url);
 const { createNativeSave } = require('../electron/native-save.cjs');
 const { FileGrants } = require('../electron/file-grants.cjs');
-const { writeNativeProject } = require('../electron/native-project.cjs');
+const { readNativeProject, writeNativeProject } = require('../electron/native-project.cjs');
+
+test('saving again accepts an existing native PCB over the ordinary source size limit', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'openpe-native-large-pcb-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const entry = 'Large.kicad_pcb';
+  const destination = path.join(directory, entry);
+  const source = '(kicad_pcb (version 20260206))\n' + ' '.repeat(8_000_000);
+  const bundle = { entry, files: [{ name: entry, source }] };
+  await writeNativeProject(destination, bundle, atomicWrite);
+  await writeNativeProject(destination, bundle, atomicWrite);
+  assert.deepEqual(await readNativeProject(destination), bundle);
+});
+
+test('a clean KiCad 10 board retains exact bytes across native Save and Save as', async (t) => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'openpe-native-save-board-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const entry = 'Filter.kicad_pro';
+  const boardName = 'Filter.kicad_pcb';
+  const originalFile = path.join(dataDir, entry);
+  const originalBoard = path.join(dataDir, boardName);
+  const copy = path.join(dataDir, 'copy', 'Personal.kicad_pro');
+  const boardSource = `(kicad_pcb
+  (version 20260206)
+  (generator "pcbnew")
+  (generator_version "10.0")
+  (general (thickness 1.6) (legacy_teardrops no))
+  (paper "A4")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+  (setup (pad_to_mask_clearance 0))
+  (net 0 "")
+  (net 1 "GND")
+  (segment (start 10 12) (end 17 12) (width 0.25) (layer "F.Cu") (net "GND")
+    (uuid "7dcef6a4-3444-4dde-8929-3976717dd55a"))
+)\n`;
+  const original = projectNativeFiles(createProject(), entry);
+  original.files.push({ name: boardName, source: boardSource });
+  await writeNativeProject(originalFile, original, atomicWrite);
+  const selected = await readNativeProject(originalBoard);
+  assert.equal(selected.entry, entry);
+  const imported = projectFromNativeFiles(selected);
+  const core = new ProjectCore(imported, { nativeEntryName: entry });
+  const opened = core.getSnapshot();
+  assert.equal(
+    core.getNativeFiles().files.find((file) => file.name === boardName)?.source,
+    boardSource,
+  );
+  assert.equal(nativeProjectDirty(opened.project, opened.source, entry), false);
+
+  const fileGrants = new FileGrants();
+  const fileId = fileGrants.create(originalFile);
+  let cancelled = true;
+  let failPreparation = false;
+  const save = createNativeSave({
+    parseProject,
+    projectNativeFiles,
+    fileGrants,
+    showSaveDialog: async () => ({ canceled: cancelled, filePath: copy }),
+    prepareProjectFiles: async () => {
+      if (failPreparation) throw new Error('Model preparation failed');
+    },
+    atomicWrite,
+  });
+  const snapshot = opened.project!;
+  const packet = { ...snapshot, nativeFiles: projectNativeFiles(snapshot, entry) };
+  assert.equal(await save({ fileId, source: serializeProject(packet), saveAs: true }), null);
+  assert.equal(await readFile(originalBoard, 'utf8'), boardSource);
+  assert.equal(core.getSnapshot().project, snapshot);
+
+  failPreparation = true;
+  await assert.rejects(save({ fileId, source: opened.source }), /Model preparation failed/);
+  assert.equal(await readFile(originalBoard, 'utf8'), boardSource);
+  failPreparation = false;
+  cancelled = false;
+  await mkdir(path.dirname(copy));
+  await save({ fileId, source: opened.source, saveAs: true });
+  assert.equal(await readFile(originalBoard, 'utf8'), boardSource);
+  const renamed = projectNativeFiles(packet, path.basename(copy));
+  const copyBoard = renamed.files.find((file) => file.name === 'Personal.kicad_pcb')!;
+  assert.equal(
+    await readFile(path.join(path.dirname(copy), copyBoard.name), 'utf8'),
+    copyBoard.source,
+  );
+  const savedBoard = parseSExpr(copyBoard.source);
+  assert.equal(val(child(savedBoard, 'version')), KICAD_PCB_VERSION);
+  assert.equal(val(child(child(savedBoard, 'segment')!, 'net')), 'GND');
+  assert.deepEqual(projectFromNativeFiles(await readNativeProject(copy)).pcb, snapshot.pcb);
+
+  assert.equal(core.materialize(snapshot, { ...snapshot, nativeFiles: renamed }), true);
+  core.setNativeEntryName(path.basename(copy));
+  const saved = core.getSnapshot();
+  assert.equal(saved.undoDepth, opened.undoDepth);
+  assert.equal(nativeProjectDirty(saved.project, saved.source, path.basename(copy)), false);
+  assert.deepEqual(core.getNativeFiles(), renamed);
+
+  const originalGrant = fileGrants.create(originalFile);
+  await save({ fileId: originalGrant, source: opened.source });
+  assert.equal(await readFile(originalBoard, 'utf8'), copyBoard.source);
+
+  const standalone = path.join(dataDir, 'standalone', 'Board.kicad_pcb');
+  await mkdir(path.dirname(standalone));
+  await writeFile(standalone, boardSource);
+  const rulesSource = '(version 1)\n(rule "Board clearance" (constraint clearance (min 0.3mm)))\n';
+  await writeFile(path.join(path.dirname(standalone), 'Board.kicad_dru'), rulesSource);
+  const boardOnly = await readNativeProject(standalone);
+  assert.deepEqual(boardOnly, {
+    entry: 'Board.kicad_pcb',
+    files: [
+      { name: 'Board.kicad_dru', source: rulesSource },
+      { name: 'Board.kicad_pcb', source: boardSource },
+    ],
+  });
+  const standaloneProject = projectFromNativeFiles(boardOnly);
+  assert.equal(standaloneProject.schematic.parts.length, 0);
+  const track = standaloneProject.pcb!.tracks[0];
+  assert.equal(track.id, snapshot.pcb!.tracks[0].id);
+  assert.equal(track.netId, standaloneProject.pcb!.nets[0].id);
+  assert.deepEqual(pcbFillRuleContext(standaloneProject), { rulesSource });
+  const rules = readPCBDesignRuleSources(standaloneProject);
+  assert.deepEqual(rules.notes, []);
+  assert.equal(rules.rules[0].clearance, 0.3);
+  const standaloneCore = new ProjectCore(standaloneProject);
+  standaloneCore.execute('layout.delete', {
+    boardId: standaloneProject.pcb!.id,
+    selection: [{ kind: 'track', id: track.id }],
+  });
+  assert.deepEqual(standaloneCore.getSnapshot().project!.pcb!.tracks, []);
+});
 
 test('Save writes a managed example in place; Save as detaches only after a successful write', async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'openpe-native-save-'));

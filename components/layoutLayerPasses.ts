@@ -1,5 +1,10 @@
 import type { BoardLayer, Footprint, PCB } from '../lib/pcb';
-import { pcbPadDisplayLayers, pcbPadPaintLayer, type PCBDisplay } from '../lib/pcb-display';
+import {
+  pcbPadBodyLayers,
+  pcbPadPaintLayer,
+  pcbPadSilkscreenDisplayLayers,
+  type PCBDisplay,
+} from '../lib/pcb-display';
 
 type LayoutFootprintLayerPass = {
   id: string;
@@ -27,13 +32,17 @@ export function layoutFootprintLayerPasses(
         if (!graphic.text?.hidden) captionLayers.add(graphic.layer);
       } else graphicLayers.add(graphic.layer);
     }
+    for (const point of footprint.referencePoints ?? [])
+      if (visible.has(point.layer)) graphicLayers.add(point.layer);
     if (display.zoneOutlines)
       for (const zone of footprint.zones ?? [])
         if (visible.has(zone.layer)) graphicLayers.add(zone.layer);
     for (const pad of footprint.pads) {
-      const padLayers = pcbPadDisplayLayers(board, footprint, pad);
+      const padLayers = pcbPadBodyLayers(board, footprint, pad);
       const owner = pcbPadPaintLayer(padLayers, display, paintOrder);
       if (owner) graphicLayers.add(owner);
+      for (const layer of pcbPadSilkscreenDisplayLayers(pad))
+        if (visible.has(layer)) graphicLayers.add(layer);
     }
     const referenceLayer = footprint.side === 'front' ? 'F.SilkS' : 'B.SilkS';
     if (

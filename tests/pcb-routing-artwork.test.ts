@@ -145,8 +145,8 @@ test('artwork preparation shares dimension strokes while retaining its existing 
   assert.deepEqual(prepared.graphics.slice(4), [technical, edge, missing]);
   assert.deepEqual(board, before);
   for (const caption of [
-    { ...graphic.dimension!.caption, value: '' },
-    { ...graphic.dimension!.caption, hidden: true },
+    { ...graphic.dimension!.caption!, value: '' },
+    { ...graphic.dimension!.caption!, hidden: true },
   ]) {
     const next = { ...graphic, dimension: { ...graphic.dimension!, caption } };
     assert.deepEqual(
@@ -162,7 +162,7 @@ test('local back-side dimension strokes transform once with the native footprint
   graphic.start = { x: 1, y: -2 };
   graphic.end = { x: 5, y: -2 };
   graphic.dimension!.height = -3;
-  graphic.dimension!.caption.hidden = true;
+  graphic.dimension!.caption!.hidden = true;
   const footprint: Footprint = {
       id: 'part',
       x: 10,

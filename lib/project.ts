@@ -5,18 +5,39 @@ import {
   parseCircuitTree,
   uid,
   type Circuit,
+  type Point,
 } from './circuit';
 import { child, children, decodeKiCadString, quote, val, writeSExpr, type SExpr } from './sexpr';
 import { serializePCB, type BoardLine, type BoardZone, type PCB } from './pcb';
 import { padDrillClearance } from './pcb-drill';
-import { padHasElectricalPin } from './pcb-pad-role';
+import {
+  isDrillOnlyPlatedPad,
+  padHasElectricalPin,
+  validatePCBJumperPadGroups,
+  validatePCBNetTiePadGroups,
+  validatePCBPadPruning,
+} from './pcb-pad-role';
 import { footprintPoint } from './pcb-layout';
+import {
+  pcbArc,
+  pcbArcBoundsPoints,
+  pcbZoneOutlineBoundsPoints,
+  pcbZoneSelectionVertices,
+  validatePCBPadTrapezoid,
+} from './pcb-geometry';
+import { maxPCBTextCacheBoardVertices } from './pcb-text-cache-format';
+import { validateNativePCBTuningPatterns } from './kicad-pcb-metadata';
+import { validatePCBGroupLocks } from './pcb-lock';
+import { isPCBViaSpanValid, pcbViaCopperLayers, validatePCBViaBackdrills } from './pcb-native-via';
 import { validateCustomPad } from './pcb-custom-pad';
 import { customPadWorkLimit } from './pcb-custom-pad-limits';
 import validateSchema from './project-validator.mjs';
 import { KICAD_SCHEMATIC_VERSION } from './kicad-version';
 import { schematicTexts, schematicTextBoxes, schematicPolylines } from './schematic-text';
 import { schematicImages } from './schematic-image';
+import { pcbReferenceImages } from './pcb-reference-image';
+import { pcbTableDrawings } from './kicad-pcb';
+import { validatePCBPadstack } from './pcb-padstack';
 import validateDocument from './project-document-validator.mjs';
 import { fromProjectDocument, toProjectDocument, type ProjectDocument } from './project-document';
 import { formatProjectJson } from './project-json';
@@ -47,6 +68,14 @@ import {
 } from './immutable-project';
 import { validateNativeSourceFiles, projectNativeFilesSnapshot } from './kicad-project';
 import { MODEL_CAD_EXTENSION, modelCadFromProject } from './model-cad';
+import { pcbBarcodes } from './pcb-barcode';
+import {
+  MAX_NATIVE_PCB_NODES,
+  MAX_NATIVE_PCB_SNAPSHOT_BYTES,
+  MAX_PROJECT_BYTES,
+  MAX_PROJECT_NODES,
+  MAX_SAVED_PCB_FILL_VERTICES,
+} from './project-size-limits';
 
 export type Project = {
   format: 'openpe';
@@ -62,7 +91,7 @@ export type Project = {
   /** Native source files retained for lossless saving; never renderer paths. */
   nativeFiles?: { entry: string; files: { name: string; source: string; encoding?: 'latin1' }[] };
 };
-export const MAX_PROJECT_BYTES = 8_000_000;
+export { MAX_NATIVE_PCB_SNAPSHOT_BYTES, MAX_PROJECT_BYTES } from './project-size-limits';
 export const MAX_SCHEMATIC_FILES = 12;
 export function projectSchematics(project: Project): Circuit[] {
   return [project.schematic, ...(project.additionalSchematics ?? [])];
@@ -182,14 +211,54 @@ export function createProject(schematic: Circuit = emptyCircuit()): Project {
     extensions: {},
   };
 }
+function validatePolygonArcs(vertices: Point[], arcs: NonNullable<BoardLine['polygonArcs']>) {
+  let previous = -2;
+  for (const { vertex, mid } of arcs) {
+    if (vertex <= previous + 1 || vertex >= vertices.length - 1)
+      fail('PCB polygon arcs require ordered, distinct vertex pairs.');
+    const arc = { start: vertices[vertex], mid, end: vertices[vertex + 1] };
+    if (
+      !pcbArc(arc) ||
+      pcbArcBoundsPoints(arc).some(
+        ({ x, y }) =>
+          !Number.isFinite(x) || !Number.isFinite(y) || Math.max(Math.abs(x), Math.abs(y)) > 100000,
+      )
+    )
+      fail('PCB polygon arcs require non-degenerate bounded sweeps.');
+    previous = vertex;
+  }
+}
+
 function fail(message: string): never {
   throw new Error(`Invalid OpenPE project: ${message}`);
 }
 
 // Bound recursion before JSON Schema's recursive S-expression validator runs.
 const ownedBounds = new WeakMap<object, { nodes: number; depth: number }>();
-function bounded(value: unknown, depth = 0, budget = { nodes: 0 }): number {
-  if (depth > 80 || ++budget.nodes > 300000)
+function hasNativePCBSource(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const { pcb, nativeFiles } = value as Partial<Project>;
+  return (
+    !!pcb &&
+    Array.isArray(nativeFiles?.files) &&
+    nativeFiles.files.some(
+      (file) =>
+        typeof file?.name === 'string' &&
+        /\.kicad_pcb$/i.test(file.name) &&
+        typeof file.source === 'string',
+    )
+  );
+}
+
+function boundProject(value: unknown) {
+  bounded(value, 0, {
+    nodes: 0,
+    limit: hasNativePCBSource(value) ? MAX_NATIVE_PCB_NODES : MAX_PROJECT_NODES,
+  });
+}
+
+function bounded(value: unknown, depth: number, budget: { nodes: number; limit: number }): number {
+  if (depth > 80 || ++budget.nodes > budget.limit)
     fail('document nesting or object count exceeds the supported limit.');
   if (typeof value === 'number' && !Number.isFinite(value)) fail('numbers must be finite.');
   if (value && typeof value === 'object') {
@@ -197,7 +266,7 @@ function bounded(value: unknown, depth = 0, budget = { nodes: 0 }): number {
     const cached = owned ? ownedBounds.get(value) : undefined;
     if (cached) {
       budget.nodes += cached.nodes - 1;
-      if (depth + cached.depth > 80 || budget.nodes > 300000)
+      if (depth + cached.depth > 80 || budget.nodes > budget.limit)
         fail('document nesting or object count exceeds the supported limit.');
       return cached.depth;
     }
@@ -221,6 +290,7 @@ type FootprintCertificate = {
   layers: PCB['layers'];
   ids: readonly string[];
   filledVertices: number;
+  textCacheVertices: number;
 };
 // Copper edits retain this exact immutable collection and its local semantic
 // context. Keep only its latest successful context; global IDs and the combined
@@ -242,7 +312,7 @@ export function validateProject(input: unknown): asserts input is Project {
   if (isOwnedProject(project)) validatedOwnedProjects.add(project);
 }
 function validateProjectContent(input: unknown): void {
-  bounded(input);
+  boundProject(input);
   if (!validateSchema(input)) {
     const e = validateSchema.errors?.[0];
     fail(
@@ -256,6 +326,7 @@ function validateProjectContent(input: unknown): void {
   const modelCad = modelCadFromProject(project);
   if (modelCad && !project.pcb) fail('Model CAD requires its PCB layout.');
   if (project.nativeFiles) validateNativeSourceFiles(project.nativeFiles, project);
+  else if (project.pcb?.groupLocks?.length) fail('native PCB group locks require retained Source.');
   const ids = new Set<string>();
   let boardIds: string[] | undefined;
   const id = (value: string) => {
@@ -419,47 +490,212 @@ function validateProjectContent(input: unknown): void {
     if (value.endsWith('.Cu') && !board.layers.some((l) => l === value))
       fail(`PCB layer ${value} is not in the board copper stack.`);
   };
+  for (const image of pcbReferenceImages(board.referenceImages)) {
+    id(image.id);
+    layer(image.layer);
+  }
+  let textCacheVertices = 0;
   const graphic = (g: BoardLine, footprint = false) => {
     id(g.id);
     layer(g.layer);
+    if (
+      g.kind === 'point' &&
+      (footprint ||
+        g.width <= 0 ||
+        g.start.x !== g.end.x ||
+        g.start.y !== g.end.y ||
+        g.netId ||
+        g.maskLayer)
+    )
+      fail('Invalid native PCB reference point.');
+    if (g.netId !== undefined) {
+      if (footprint || !g.layer.endsWith('.Cu') || g.kind === 'text' || g.kind === 'dimension')
+        fail('Graphic net association requires a native board copper shape.');
+      net(g.netId);
+    }
+    if (
+      g.maskLayer !== undefined &&
+      ((g.layer !== 'F.Cu' && g.layer !== 'B.Cu') ||
+        !g.maskLayer.startsWith(g.layer.slice(0, 2)) ||
+        g.kind === 'text' ||
+        g.kind === 'dimension')
+    )
+      fail('Graphic mask membership requires a same-side outer copper shape.');
+    if (g.solderMaskMargin !== undefined && !g.maskLayer)
+      fail('Graphic solder-mask margin requires native paired layers.');
     if ((g.kind === 'arc') !== (g.mid !== undefined))
       fail('PCB arc graphics require exactly one middle point.');
-    if (g.points !== undefined && g.kind !== 'polygon')
-      fail('PCB polygon points require a polygon graphic.');
-    if (g.kind === 'polygon' && !g.points?.length)
+    if (g.points !== undefined && g.kind !== 'polygon' && g.kind !== 'curve')
+      fail('PCB intermediate points require a polygon or Bézier graphic.');
+    if (g.kind === 'curve' && g.points?.length !== 2)
+      fail('PCB Bézier graphics require exactly two control points.');
+    if (g.kind === 'polygon' && !g.points?.length && !g.polygonArcs?.length)
       fail('PCB polygon graphics require at least three vertices.');
+    if (g.polygonArcs) {
+      if (g.kind !== 'polygon' || g.roundedRectRadius !== undefined)
+        fail('Native arcs require a PCB polygon contour.');
+      validatePolygonArcs([g.start, ...(g.points ?? []), g.end], g.polygonArcs);
+    }
+    if (g.roundedRectRadius !== undefined) {
+      const adjacent = g.points?.[0],
+        opposite = g.points?.[1];
+      if (
+        g.kind !== 'polygon' ||
+        g.points?.length !== 2 ||
+        !adjacent ||
+        !opposite ||
+        adjacent.x !== opposite.x ||
+        adjacent.y !== g.start.y ||
+        g.end.x !== g.start.x ||
+        g.end.y !== opposite.y ||
+        g.roundedRectRadius * 2 >
+          Math.min(Math.abs(opposite.x - g.start.x), Math.abs(opposite.y - g.start.y)) + 1e-9
+      )
+        fail('Invalid PCB rounded rectangle radius or corners.');
+    }
     if ((g.kind === 'text') !== (g.text !== undefined))
       fail('PCB text graphics require text properties.');
     if (g.keepUpright !== undefined && (!footprint || g.kind !== 'text'))
       fail('Text orientation applies only to footprint text.');
     if ((g.kind === 'dimension') !== (g.dimension !== undefined))
       fail('PCB dimensions require dimension properties.');
+    if (g.dimension?.type === 'center') {
+      if (
+        g.dimension.format ||
+        g.dimension.caption ||
+        g.dimension.height !== undefined ||
+        g.dimension.leaderLength !== undefined ||
+        (g.start.x === g.end.x && g.start.y === g.end.y)
+      )
+        fail('PCB center marks require two distinct anchors with no format or caption.');
+    } else if (g.dimension && (!g.dimension.format || !g.dimension.caption)) {
+      fail('PCB dimensions require a format and caption.');
+    }
+    if (
+      g.dimension &&
+      (g.dimension.type === 'orthogonal') !== (g.dimension.orientation !== undefined)
+    )
+      fail('Only orthogonal PCB dimensions have an axis orientation.');
     if (g.fill !== undefined && !['circle', 'polygon'].includes(g.kind ?? ''))
       fail('Only circle and polygon PCB graphics support fill.');
+    if (g.nativeNoStroke && (!g.fill || g.width !== 0))
+      fail('Invalid filled PCB graphic without stroke.');
+    const box = g.textBox;
+    if (box) {
+      if (
+        g.kind !== 'text' ||
+        !g.stroke ||
+        g.text?.property ||
+        g.keepUpright !== undefined ||
+        g.width !== Math.max(0, box.strokeWidth) ||
+        (box.border && box.strokeWidth < 0)
+      )
+        fail('Invalid native PCB text box.');
+      if (box.outline) {
+        const first = box.outline[0],
+          last = box.outline.at(-1)!;
+        const area = box.outline.reduce((sum, point, index) => {
+          const next = box.outline![(index + 1) % box.outline!.length];
+          return sum + point.x * next.y - next.x * point.y;
+        }, 0);
+        if (
+          first.x !== g.start.x ||
+          first.y !== g.start.y ||
+          last.x !== g.end.x ||
+          last.y !== g.end.y ||
+          Math.abs(area) < 0.000000000001
+        )
+          fail('Invalid native PCB text box polygon.');
+      } else if (g.start.x === g.end.x || g.start.y === g.end.y)
+        fail('Invalid native PCB text box rectangle.');
+    }
+    const text = g.text ?? g.dimension?.caption;
+    if (text?.renderCache) {
+      if (!text.fontFace) fail('PCB text render cache requires a font face.');
+      for (const polygon of text.renderCache.polygons)
+        textCacheVertices += polygon.split(' ').length;
+      if (textCacheVertices > maxPCBTextCacheBoardVertices)
+        fail('PCB text render caches exceed the board vertex limit.');
+    }
   };
   let filledVertices = 0;
-  const zone = (z: BoardZone) => {
+  const nativePCB = hasNativePCBSource(project);
+  const fillLimit = nativePCB ? MAX_SAVED_PCB_FILL_VERTICES : 60000;
+  const zone = (z: BoardZone, footprint = false) => {
     id(z.id);
     net(z.netId);
-    layer(z.layer);
+    if (!(nativePCB && footprint && z.keepout && /^In\d+\.Cu$/.test(z.layer))) layer(z.layer);
+    if (z.nativePlacement && (!nativePCB || !z.keepout || z.netId !== null))
+      fail('Native placement requires an unassigned native rule area.');
+    if (z.nativeCircularOutline) {
+      const [start, mid] = z.outline;
+      if (
+        !nativePCB ||
+        !z.keepout ||
+        z.outline.length !== 2 ||
+        (start.x === mid.x && start.y === mid.y) ||
+        z.nativeOutlineArcs ||
+        z.holes?.length ||
+        z.filledPolygons !== undefined ||
+        z.teardrop ||
+        pcbZoneOutlineBoundsPoints(z).some(
+          ({ x, y }) => Math.max(Math.abs(x), Math.abs(y)) > 100000,
+        )
+      )
+        fail('A native circular outline requires two diametric points for one unfilled rule area.');
+      return;
+    }
+    if (!z.outline.length) {
+      if (
+        !nativePCB ||
+        z.nativeOutlineArcs ||
+        z.holes?.length ||
+        z.filledPolygons !== undefined ||
+        z.keepout ||
+        z.teardrop
+      )
+        fail('An empty native zone cannot have holes, saved fills, or electrical rules.');
+      return;
+    }
+    if (z.nativeOutlineArcs) {
+      if (!nativePCB || !z.keepout || z.holes?.length)
+        fail('Native arc edges require a single-contour rule area.');
+      validatePolygonArcs(z.outline, z.nativeOutlineArcs);
+    } else if (z.outline.length < 3) fail('Copper zones require at least three polygon vertices.');
+    if (
+      z.teardrop &&
+      (footprint ||
+        !z.layer.endsWith('.Cu') ||
+        z.keepout ||
+        z.fillEnabled === false ||
+        !z.netId ||
+        !z.filledPolygons?.length)
+    )
+      fail('Native teardrops require a net and saved copper contours on a board copper layer.');
+    const artworkFill =
+      z.netId === null && (z.layer.endsWith('.Mask') || (nativePCB && z.layer === 'Edge.Cuts'));
     if (
       z.filledPolygons !== undefined &&
-      (!z.layer.endsWith('.Cu') || z.keepout || z.fillEnabled === false)
+      ((!z.layer.endsWith('.Cu') && !artworkFill) || z.keepout || z.fillEnabled === false)
     )
-      fail('saved copper fills require an enabled copper zone without keepout rules.');
-    if (z.filledPolygons?.length && !z.netId) fail('saved copper fills require an assigned net.');
+      fail('saved zone fills require an enabled copper or supported artwork zone without keepout rules.');
+    const unassignedCopper = Boolean(z.filledPolygons?.length && !z.netId && !artworkFill);
+    if (unassignedCopper !== (z.nativeUnassignedFill === true) || (unassignedCopper && !nativePCB))
+      fail('saved copper fills require an assigned net or retained native unassigned contours.');
     filledVertices += (z.filledPolygons ?? []).reduce((n, p) => n + p.points.length, 0);
-    if (filledVertices > 60000) fail('saved copper fills exceed the 60000-vertex board limit.');
+    if (filledVertices > fillLimit)
+      fail(`saved copper fills exceed the ${fillLimit}-vertex board limit.`);
     for (const outline of [
-      z.outline,
+      pcbZoneSelectionVertices(z),
       ...(z.holes ?? []),
       ...(z.filledPolygons ?? []).map((p) => p.points),
     ]) {
+      const anchor = outline[0];
       const area = outline.reduce((a, p, i) => {
         const next = outline[(i + 1) % outline.length];
-        return a + p.x * next.y - next.x * p.y;
+        return a + (p.x - anchor.x) * (next.y - anchor.y) - (next.x - anchor.x) * (p.y - anchor.y);
       }, 0);
-      if (Math.abs(area) < 0.000000000001) fail('copper zones need a non-degenerate polygon.');
+      if (Math.abs(area) < 0.00000000000001) fail('copper zones need a non-degenerate polygon.');
     }
   };
   const reusableFootprints =
@@ -482,13 +718,17 @@ function validateProjectContent(input: unknown): void {
     // including earlier sheets/CAD and later tracks, graphics and board zones.
     for (const value of footprintCertificate.ids) id(value);
     filledVertices += footprintCertificate.filledVertices;
+    textCacheVertices += footprintCertificate.textCacheVertices;
   } else {
     const footprintIdStart = boardIds?.length ?? 0;
     const initialFilledVertices = filledVertices;
+    const initialTextCacheVertices = textCacheVertices;
     const linked = new Set<string>();
     let customPadWork = 0;
     for (const f of board.footprints) {
       id(f.id);
+      if (f.netTiePadGroups) validatePCBNetTiePadGroups(f.netTiePadGroups, f.pads, fail);
+      if (f.jumperPadGroups) validatePCBJumperPadGroups(f.jumperPadGroups, f.pads, fail);
       const p = d.parts.find((p) => p.id === f.symbolId);
       if (f.symbolId !== null && !p)
         fail(
@@ -496,6 +736,11 @@ function validateProjectContent(input: unknown): void {
         );
       if (f.symbolId === null && (f.reference === undefined || f.value === undefined))
         fail('unlinked footprints require their own reference and value.');
+      if (
+        (f.nativeMissingReference && (f.symbolId !== null || f.reference !== '')) ||
+        (f.nativeMissingValue && (f.symbolId !== null || f.value !== ''))
+      )
+        fail('Invalid native footprint caption omission.');
       if (p && (f.reference !== undefined || f.value !== undefined))
         fail('linked footprints derive their reference and value from the schematic symbol.');
       if (p && linked.has(p.ref)) fail(`multiple footprints refer to ${p.ref}.`);
@@ -512,9 +757,27 @@ function validateProjectContent(input: unknown): void {
         id(pad.id);
         net(pad.netId);
         customPadWork += (pad.outline?.length ?? 0) ** 2;
+        for (const shape of pad.nativeCustomPad?.primitives ?? [])
+          customPadWork += (child(shape, 'pts')?.length ?? 4) ** 2;
         if (customPadWork > customPadWorkLimit)
           fail('custom pads exceed the board geometry limit.');
         validateCustomPad(pad, fail);
+        if (pad.nativeConnect && pad.type !== 'smd')
+          fail('A native connector pad requires surface-mount geometry.');
+        if (
+          pad.fabricationProperty &&
+          (pad.heatsink ||
+            (pad.fabricationProperty === 'pad_prop_bga' && pad.type !== 'smd') ||
+            ((pad.fabricationProperty === 'pad_prop_pressfit' ||
+              pad.fabricationProperty === 'pad_prop_castellated') &&
+              pad.type !== 'thru_hole'))
+        )
+          fail('Invalid native pad fabrication property.');
+        if (
+          pad.postMachining &&
+          ((!pad.postMachining.front && !pad.postMachining.back) || !pad.drill || pad.drillSlot)
+        )
+          fail('Pad post-machining requires a round drilled hole and a surface operation.');
         const electrical = padHasElectricalPin(pad);
         if (electrical && p && !pins.has(pad.number) && !pad.unconnected)
           fail(`${p.ref} has no pin ${pad.number} for its PCB pad.`);
@@ -524,31 +787,39 @@ function validateProjectContent(input: unknown): void {
           if (pad.netId !== null) fail('mechanical pads cannot carry an electrical net.');
           if (!pad.drill) fail('non-plated holes require a drill.');
         } else if (electrical) {
-          if (pinNets.has(pad.number) && pinNets.get(pad.number) !== pad.netId)
+          if (p && pinNets.has(pad.number) && pinNets.get(pad.number) !== pad.netId)
             fail(`${p?.ref ?? f.reference} pin ${pad.number} has conflicting PCB net assignments.`);
           pinNets.set(pad.number, pad.netId);
         } else if (pad.netId !== null) {
           fail('Mask and paste apertures cannot carry a net.');
         }
+        const drillOnly = isDrillOnlyPlatedPad(pad);
+        if (pad.layers?.length === 0 && !drillOnly && pad.type !== 'np_thru_hole')
+          fail('Only drill-only pads can omit all electrical and technical layers.');
         if (
           pad.type === 'thru_hole' &&
-          (!pad.drill || (!pad.outline && pad.drill >= Math.min(pad.size.x, pad.size.y)))
+          !drillOnly &&
+          (!pad.drill ||
+            (!pad.outline && !pad.nativeCustomPad && pad.drill >= Math.min(pad.size.x, pad.size.y)))
         )
           fail('through-hole drill must be positive and smaller than its pad.');
-        if (
-          pad.type === 'smd' &&
-          (pad.drill !== undefined || pad.drillOffset !== undefined || pad.drillSlot)
-        )
-          fail('SMD pads cannot have a drill or drill offset.');
+        if (pad.type === 'smd' && (pad.drill !== undefined || pad.drillSlot))
+          fail('SMD pads cannot have a drill.');
         if (pad.drillSlot && (!pad.drill || pad.drillSlot.length <= pad.drill))
           fail('slot length must exceed its tool diameter.');
+        if (pad.nativeRoundDrillY !== undefined && (!pad.drill || pad.drillSlot))
+          fail('A second native round drill dimension requires a round drill.');
+        validatePCBPadTrapezoid(pad, fail);
+        validatePCBPadPruning(pad, board.layers, fail);
+        validatePCBPadstack(pad, board.layers, fail);
         if (
           pad.type === 'thru_hole' &&
-          (pad.drillSlot || pad.outline) &&
+          !pad.nativeCustomPad &&
+          (pad.drillSlot || pad.outline || pad.shape === 'trapezoid') &&
           padDrillClearance(pad) <= 1e-12
         )
           fail(
-            pad.outline
+            pad.outline || pad.shape === 'trapezoid'
               ? 'a plated drill must stay inside its copper pad.'
               : 'a plated slot must stay inside its copper pad.',
           );
@@ -580,11 +851,12 @@ function validateProjectContent(input: unknown): void {
       }
       for (const point of f.referencePoints ?? []) {
         id(point.id);
+        layer(point.layer);
         const position = footprintPoint(f, point);
         if (Math.abs(position.x) > 100000 || Math.abs(position.y) > 100000)
           fail('footprint reference point exceeds the board coordinate limit.');
       }
-      for (const z of f.zones ?? []) zone(z);
+      for (const z of f.zones ?? []) zone(z, true);
     }
     if (reusableFootprints)
       pendingFootprintCertificate = {
@@ -593,33 +865,92 @@ function validateProjectContent(input: unknown): void {
         layers: board.layers,
         ids: Object.freeze(boardIds!.slice(footprintIdStart)),
         filledVertices: filledVertices - initialFilledVertices,
+        textCacheVertices: textCacheVertices - initialTextCacheVertices,
       };
   }
-  for (const item of [...board.tracks, ...board.vias]) {
-    id(item.id);
-    net(item.netId);
+  const trackRecord = (track: PCB['tracks'][number]) => {
+    id(track.id);
+    if (track.netId) net(track.netId);
+    layer(track.layer);
+    if (
+      track.maskLayer &&
+      (track.layer !== 'F.Cu' || track.maskLayer !== 'F.Mask') &&
+      (track.layer !== 'B.Cu' || track.maskLayer !== 'B.Mask')
+    )
+      fail('Track solder mask must match its outer copper side.');
+    if (track.solderMaskMargin !== undefined && !track.maskLayer)
+      fail('Track solder-mask margin requires native paired layers.');
+  };
+  for (const track of board.tracks) trackRecord(track);
+  if (board.tracks.length + (board.arcTracks?.length ?? 0) > 10000)
+    fail('PCB tracks exceed the 10000-object limit.');
+  for (const track of board.arcTracks ?? []) {
+    trackRecord(track);
+    if (!pcbArc(track)) fail('PCB arc tracks require three distinct non-collinear points.');
+    if (
+      pcbArcBoundsPoints(track).some(
+        (p) =>
+          !Number.isFinite(p.x) ||
+          !Number.isFinite(p.y) ||
+          Math.max(Math.abs(p.x), Math.abs(p.y)) > 100000,
+      )
+    )
+      fail('PCB arc track exceeds the board coordinate limit.');
   }
-  for (const track of board.tracks) layer(track.layer);
+  if (board.tuningPatterns?.length)
+    for (const pattern of validateNativePCBTuningPatterns(
+      board.tuningPatterns,
+      board.tracks.concat(board.arcTracks ?? []),
+      board.layers,
+    ))
+      id(pattern);
   for (const g of board.graphics) graphic(g);
-  for (const v of board.vias)
+  for (const table of pcbTableDrawings(board.nativeTables)) {
+    id(table.id);
+    layer(table.layer);
+    for (const item of table.graphics) graphic(item);
+  }
+  for (const barcode of pcbBarcodes(board.barcodes)) id(barcode.id);
+  for (const v of board.vias) {
+    id(v.id);
+    if (v.netId) net(v.netId);
+    if (v.span && !isPCBViaSpanValid(board.layers, v.span))
+      fail('Via span is invalid for the board copper stack.');
+    if (v.span && v.padstack) fail('Native via padstacks require through vias.');
+    validatePCBViaBackdrills(v, board.layers, fail);
+    if (v.startEndOnly && (v.removeUnusedLayers || v.keepEndLayers))
+      fail('Native via end-only mode conflicts with other copper-ring modes.');
+    if ((v.keepEndLayers || v.zoneLayerConnections) && !v.removeUnusedLayers && !v.startEndOnly)
+      fail('Native via end-layer and zone connections require unused layer removal.');
+    if (
+      v.zoneLayerConnections?.some((layer) => !pcbViaCopperLayers(board.layers, v).includes(layer))
+    )
+      fail('Native via zone layer connections must use copper layers inside the via span.');
     if (v.drill >= v.diameter) fail('via drill must be smaller than its diameter.');
+  }
   for (const z of board.zones) zone(z);
+  validatePCBGroupLocks(board, fail);
   if (reusable) validatedOwnedBoards.set(board, { libraries: d.libraries, pins, ids: boardIds! });
   // A later track/zone error must not publish a new local certificate.
   if (pendingFootprintCertificate)
     ownedFootprintCertificates.set(board.footprints, pendingFootprintCertificate);
 }
 export function parseProject(source: string): Project {
-  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail('file exceeds 8 MB.');
+  if (exceedsUtf8ByteLimit(source, MAX_NATIVE_PCB_SNAPSHOT_BYTES))
+    fail('file exceeds the 48 MB native PCB snapshot limit.');
   let data: unknown;
   try {
     data = JSON.parse(source);
   } catch {
+    if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail('file exceeds 8 MB.');
     fail(
       'expected a valid internal project snapshot. Open native KiCad files through Open project.',
     );
   }
-  bounded(data);
+  const sizeLimit = hasNativePCBSource(data) ? MAX_NATIVE_PCB_SNAPSHOT_BYTES : MAX_PROJECT_BYTES;
+  if (sizeLimit === MAX_PROJECT_BYTES && exceedsUtf8ByteLimit(source, sizeLimit))
+    fail('file exceeds 8 MB.');
+  boundProject(data);
   if (!data || typeof data !== 'object' || (data as { version?: unknown }).version !== 1)
     fail(
       'unsupported format version. This project format is not supported; older projects are not migrated. Re-export the schematic from KiCad or create a new project.',
@@ -631,8 +962,8 @@ export function parseProject(source: string): Project {
   validateFileDocument(data);
   const project = fromProjectDocument(data);
   validateProjectContent(project);
-  if (exceedsUtf8ByteLimit(formatProjectJson(toProjectDocument(project, true)), MAX_PROJECT_BYTES))
-    fail('canonical JSON exceeds 8 MB.');
+  if (exceedsUtf8ByteLimit(formatProjectJson(toProjectDocument(project, true)), sizeLimit))
+    fail(`canonical JSON exceeds ${sizeLimit / 1_000_000} MB.`);
   return project;
 }
 type FlatDocumentComponent = NonNullable<
@@ -702,7 +1033,8 @@ export function serializeProject(project: Project): string {
   if (project.nativeFiles) document.nativeFiles = projectNativeFilesSnapshot(project);
   validateFileDocument(document, true);
   const source = formatProjectJson(document);
-  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail('file exceeds 8 MB.');
+  const sizeLimit = hasNativePCBSource(project) ? MAX_NATIVE_PCB_SNAPSHOT_BYTES : MAX_PROJECT_BYTES;
+  if (exceedsUtf8ByteLimit(source, sizeLimit)) fail(`file exceeds ${sizeLimit / 1_000_000} MB.`);
   if (isOwnedProject(project)) ownedProjectSources.set(project, source);
   return source;
 }

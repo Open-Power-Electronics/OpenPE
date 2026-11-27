@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { uid } from '../lib/circuit';
+import { emptyCircuit, uid } from '../lib/circuit';
 import {
   createProject,
   parseProject,
@@ -11,7 +11,7 @@ import {
   projectNativeFiles,
 } from '../lib/project';
 import { createEmptyPCB, movePCBSelection } from '../lib/pcb-layout';
-import { invalidatePCBFill, type BoardZone } from '../lib/pcb';
+import { invalidatePCBFill, serializePCB, type BoardZone, type Pad } from '../lib/pcb';
 import {
   copperPolygons,
   filledCopperPolygons,
@@ -86,6 +86,84 @@ function fixture() {
   board.vias = [{ id: uid(), netId: board.nets[1].id, x: 10, y: 5, diameter: 1, drill: 0.5 }];
   return board;
 }
+
+test('refill honors inherited footprint connection, pad thermal settings and explicit zero clearance', () => {
+  const board = fixture();
+  const [ground, signal] = board.nets.map(({ id }) => id);
+  const pad = (
+    number: string,
+    x: number,
+    y: number,
+    netId: string,
+    overrides: Partial<Pad> = {},
+  ): Pad => ({
+    id: uid(),
+    number,
+    x,
+    y,
+    netId,
+    rotation: 0,
+    type: 'smd',
+    shape: 'rect',
+    size: { x: 1, y: 1 },
+    ...overrides,
+  });
+  board.footprints = [
+    {
+      id: uid(),
+      symbolId: null,
+      libraryId: 'Test:Zone',
+      reference: 'J1',
+      value: 'Zone fixture',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      side: 'front',
+      zoneConnect: 0,
+      copperClearance: 0.8,
+      graphics: [],
+      pads: [
+        pad('1', 4, 4, ground),
+        pad('2', 8, 4, ground, { zoneConnect: 2 }),
+        pad('3', 14, 4, signal),
+        pad('4', 18, 4, signal, { copperClearance: 0 }),
+        pad('5', 23, 4, ground, { zoneConnect: 1, thermalGap: 0.8, thermalBridge: 0.2 }),
+      ],
+    },
+  ];
+  board.zones[0].islandRemovalMode = 2;
+  board.zones[0].islandAreaMin = 7.5;
+  board.zones[0].priority = 30001;
+
+  const source = serializePCB(board, emptyCircuit());
+  const name = 'Board.kicad_pcb';
+  const imported = projectFromNativeFiles({ entry: name, files: [{ name, source }] });
+  const loaded = imported.pcb!;
+  assert.equal(loaded.footprints[0].zoneConnect, 0);
+  assert.equal(loaded.footprints[0].copperClearance, 0.8);
+  assert.equal(loaded.footprints[0].pads[3].copperClearance, 0);
+  assert.equal(loaded.footprints[0].pads[4].thermalGap, 0.8);
+  assert.equal(loaded.footprints[0].pads[4].thermalBridge, 0.2);
+  assert.equal(loaded.zones[0].islandAreaMin, 7.5);
+  assert.equal(loaded.zones[0].priority, 30001);
+
+  const filled = fillCopperZones(loaded);
+  const copper = filledCopperPolygons(filled).get(loaded.zones[0].id)!;
+  assert.equal(contains(copper, 4, 4), false, 'Footprint requests no connection.');
+  assert.equal(contains(copper, 8, 4), true, 'Pad overrides footprint with a solid connection.');
+  assert.equal(contains(copper, 15.05, 4), false, 'Foreign pad inherits the local clearance.');
+  assert.equal(
+    contains(copper, 19.05, 4),
+    true,
+    'Explicit zero suppresses the inherited clearance.',
+  );
+  assert.equal(contains(copper, 23.8, 4.6), false, 'Pad overrides the inherited thermal gap.');
+  assert.equal(contains(copper, 23.8, 4), true, 'The thermal spoke still connects to the pad.');
+
+  const reopened = projectFromNativeFiles(projectNativeFiles({ ...imported, pcb: filled })).pcb!;
+  assert.deepEqual(reopened.footprints[0], loaded.footprints[0]);
+  assert.deepEqual(reopened.zones[0], filled.zones[0]);
+});
 
 test('refill applies native pair rules in both operand orders and never lowers the board minimum', () => {
   const board = fixture();
@@ -374,6 +452,12 @@ test('native island policies remove or mark a disconnected fragment of a connect
     removed,
     kept.filter((polygon) => !polygon.island),
   );
+  zone.islandRemovalMode = 2;
+  zone.islandAreaMin = 0;
+  assert.deepEqual(fillCopperZone(board, zone.id).zones[0].filledPolygons, kept);
+  zone.islandAreaMin = 2_000;
+  assert.deepEqual(fillCopperZone(board, zone.id).zones[0].filledPolygons, removed);
+  delete zone.islandAreaMin;
   delete zone.islandRemovalMode;
   assert.deepEqual(fillCopperZone(board, zone.id).zones[0].filledPolygons, removed);
   assert.deepEqual(fillCopperZones(board).zones[0].filledPolygons, removed);

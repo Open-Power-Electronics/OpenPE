@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { uid } from '../lib/circuit';
+import { projectFromNativeFiles } from '../lib/kicad-project';
 import { exportBoardOutlineDxf } from '../lib/pcb-dxf';
 import { manufacturingProject } from './manufacturing-fixture';
 
@@ -121,6 +122,41 @@ test('DXF preserves the major arc in either native sweep direction', () => {
       ['30', '-20', '5', '90', '0'],
     );
   }
+});
+
+test('DXF keeps rounded rectangles and major-arc polygon cutouts as exact closed polylines', () => {
+  const name = 'Curved.kicad_pcb';
+  const source = `(kicad_pcb
+    (version 20260206) (generator pcbnew)
+    (general (thickness 1.6))
+    (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+    (setup (pad_to_mask_clearance 0))
+    (gr_rect (start 0 0) (end 40 30) (radius 2) (stroke (width 0.05) (type default))
+      (fill no) (layer "Edge.Cuts"))
+    (gr_poly (pts (arc (start 35 20) (mid 30 25) (end 30 15)))
+      (stroke (width 0.05) (type default)) (fill no) (layer "Edge.Cuts"))
+  )\n`;
+  const board = projectFromNativeFiles({ entry: name, files: [{ name, source }] }).pcb!;
+  const { entities } = readDxf(exportBoardOutlineDxf(board));
+  assert.deepEqual(
+    entities.map(({ kind }) => kind),
+    ['LWPOLYLINE', 'LWPOLYLINE'],
+  );
+  const [rectangle, cutout] = entities.map(({ groups }) => groups);
+  assert.deepEqual(
+    [90, 70].map((code) => rectangle.get(code)?.[0]),
+    ['8', '1'],
+  );
+  assert.deepEqual(rectangle.get(10)?.map(Number), [0, 2, 38, 40, 40, 38, 2, 0]);
+  assert.deepEqual(rectangle.get(20)?.map(Number), [-2, 0, 0, -2, -28, -30, -30, -28]);
+  assert.deepEqual(rectangle.get(42)?.map(Number), Array(4).fill(-Math.tan(Math.PI / 8)));
+  assert.deepEqual(
+    [90, 70].map((code) => cutout.get(code)?.[0]),
+    ['2', '1'],
+  );
+  assert.deepEqual(cutout.get(10)?.map(Number), [35, 30]);
+  assert.deepEqual(cutout.get(20)?.map(Number), [-20, -15]);
+  assert.deepEqual(cutout.get(42)?.map(Number), [-Math.tan((3 * Math.PI) / 8)]);
 });
 
 test('DXF rejects open, unsupported and oversized outlines', () => {

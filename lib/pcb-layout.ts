@@ -1,13 +1,28 @@
 import { uid, type Circuit, type Point } from './circuit';
 import type { BoardLine, BoardText, CopperLayer, Footprint, Pad, PCB } from './pcb';
 import { child, children, val, type SExpr } from './sexpr';
-import { pcbGraphicPoints, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
+import {
+  pcbArcBoundsPoints,
+  pcbGraphicPoints,
+  readPCBPadRoundRectRatio,
+  readPCBPadTrapezoidDelta,
+  pcbZoneOutlineBoundsPoints,
+  transformPCBGraphic,
+  transformPCBZone,
+  validatePCBPadTrapezoid,
+} from './pcb-geometry';
 import { footprintModels } from './pcb-models';
+import { pcbPadOnLayer } from './pcb-padstack';
+import { pcbViaOpeningDiameter } from './pcb-native-via';
 import { squaredDistance } from './pcb-collision';
 import { localPadDrillLine, padDrillClearance, readPadDrill } from './pcb-drill';
 import { padBoundPoints, readCustomPad, validateCustomPad } from './pcb-custom-pad';
-import { footprintTextPlacement } from './pcb-text';
-import { padApertureLayers, padHasElectricalPin, readPadHeatsink } from './pcb-pad-role';
+import { footprintTextPlacement, readPCBTextLineSpacing } from './pcb-text';
+import {
+  padApertureLayers,
+  padHasElectricalPin,
+  readPCBPadFabricationProperty,
+} from './pcb-pad-role';
 export { insidePolygon, pointSegmentDistance, segmentDistance } from './pcb-collision';
 export { pcbPadChamferEndpoints, pcbPadCorners } from './pcb-geometry';
 
@@ -89,6 +104,7 @@ export function flipPCBFootprint(footprint: Footprint): Footprint {
       ...mirror(p),
       rotation: angle(-p.rotation),
       ...(p.outline ? { outline: p.outline.map(mirror) } : {}),
+      ...(p.trapezoidDelta ? { trapezoidDelta: mirror(p.trapezoidDelta) } : {}),
       ...(p.drillOffset ? { drillOffset: mirror(p.drillOffset) } : {}),
       ...(p.layers
         ? {
@@ -125,7 +141,9 @@ export function flipPCBFootprint(footprint: Footprint): Footprint {
           referencePoints: footprint.referencePoints.map((p): typeof p => ({
             ...p,
             ...mirror(p),
-            layer: p.layer === 'F.Fab' ? 'B.Fab' : 'F.Fab',
+            layer: (p.layer.startsWith('F.')
+              ? p.layer.replace(/^F\./, 'B.')
+              : p.layer.replace(/^B\./, 'F.')) as BoardLine['layer'],
           })),
         }
       : {}),
@@ -214,7 +232,7 @@ function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): Boa
     fail('The text effects contain unsupported flags.');
   const font = child(effects, 'font');
   if (!font) fail('The footprint text has no font geometry.');
-  allowedChildren(font, ['size', 'thickness', 'bold', 'italic'], 'The text font');
+  allowedChildren(font, ['size', 'thickness', 'line_spacing', 'bold', 'italic'], 'The text font');
   if (font.slice(1).some((item) => !Array.isArray(item) && item !== 'bold' && item !== 'italic'))
     fail('The footprint text uses an unsupported font.');
   tuple(child(font, 'size'), 2, 2, 'Text size');
@@ -253,6 +271,7 @@ function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): Boa
       rotation: angle(sourceNumber(at, 3, 'Text rotation', true)),
       size,
       thickness,
+      ...readPCBTextLineSpacing(font, fail),
       ...(justify ? { justify: justify as BoardText['justify'] } : {}),
       ...(hidden ? { hidden: true } : {}),
       ...(bold ? { bold: true } : {}),
@@ -370,6 +389,7 @@ export function readLibraryFootprint(detail: {
           'tstamp',
           'remove_unused_layers',
           'roundrect_rratio',
+          'rect_delta',
           'chamfer_ratio',
           'chamfer',
           'options',
@@ -388,28 +408,11 @@ export function readLibraryFootprint(detail: {
         number = val(node);
       if (type !== 'smd' && type !== 'thru_hole' && type !== 'np_thru_hole')
         fail(`Pad type ${type} is not supported.`);
-      if (!['rect', 'circle', 'oval', 'roundrect', 'custom'].includes(shape))
+      if (!['rect', 'circle', 'oval', 'roundrect', 'trapezoid', 'custom'].includes(shape))
         fail(`Pad shape ${shape} is not supported.`);
       const customPad = readCustomPad(node, fail);
       const { outline } = customPad;
-      const ratioNode = child(node, 'roundrect_rratio');
-      if ((shape === 'roundrect') !== Boolean(ratioNode))
-        fail(
-          'Rounded rectangular pads require an explicit corner ratio; other pad shapes cannot use it.',
-        );
-      let roundrectRatio: number | undefined;
-      if (ratioNode) {
-        tuple(ratioNode, 1, 1, 'Pad corner ratio');
-        const rawRatio = val(ratioNode);
-        roundrectRatio = Number(rawRatio);
-        if (
-          !rawRatio ||
-          !Number.isFinite(roundrectRatio) ||
-          roundrectRatio < 0 ||
-          roundrectRatio > 0.5
-        )
-          fail('Pad corner ratio must be between 0 and 0.5.');
-      }
+      const roundrectRatio = readPCBPadRoundRectRatio(node, fail);
       const chamferNode = child(node, 'chamfer');
       const chamferRatioNode = child(node, 'chamfer_ratio');
       let chamfer: Pad['chamfer'];
@@ -531,11 +534,13 @@ export function readLibraryFootprint(detail: {
       const remove = child(node, 'remove_unused_layers');
       if (remove && val(remove) !== 'no')
         fail('Pads that remove unused copper layers are not supported.');
-      const drill = readPadDrill(child(node, 'drill'), fail);
+      const drill = readPadDrill(child(node, 'drill'), fail, type === 'smd');
       if (!!drill.drill !== (type !== 'smd')) fail('Pad drill does not match its type.');
       if (drill.drill !== undefined && drill.drill < 0.0001)
         fail('Pad drill must be at least 0.0001 mm.');
       const padShape = shape as Pad['shape'];
+      const trapezoidDelta = readPCBPadTrapezoidDelta(node, fail);
+      validatePCBPadTrapezoid({ shape: padShape, size, trapezoidDelta }, fail);
       validateCustomPad(
         { shape: padShape, type, size, ...customPad, drillOffset: drill.drillOffset },
         fail,
@@ -545,6 +550,7 @@ export function readLibraryFootprint(detail: {
           ...drill,
           size,
           shape: padShape,
+          trapezoidDelta,
           roundrectRatio,
           chamferRatio,
           chamfer,
@@ -574,12 +580,13 @@ export function readLibraryFootprint(detail: {
         rotation,
         type,
         shape: padShape,
+        ...(trapezoidDelta ? { trapezoidDelta } : {}),
         ...(retainedLayers ? { layers: retainedLayers } : {}),
         ...(roundrectRatio === undefined ? {} : { roundrectRatio }),
         ...(chamfer ? { chamfer, chamferRatio } : {}),
         ...customPad,
         ...attributes,
-        ...readPadHeatsink(node, fail),
+        ...readPCBPadFabricationProperty(node, fail),
         size,
         ...drill,
         netId: null,
@@ -1154,26 +1161,39 @@ export function pcbBounds(board: PCB): PCBBounds {
     points.push({ x: p.x - radius, y: p.y - radius }, { x: p.x + radius, y: p.y + radius });
   for (const f of board.footprints) {
     add(f);
-    for (const p of f.pads) {
-      const center = padPosition(f, p),
-        radians = (-padRotation(f, p) * Math.PI) / 180;
-      for (const { x, y } of padBoundPoints(p))
-        add({
-          x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
-          y: center.y + x * Math.sin(radians) + y * Math.cos(radians),
-        });
+    for (const source of f.pads) {
+      const pads = source.padstack
+        ? board.layers.map((layer) => pcbPadOnLayer(source, layer))
+        : [source];
+      for (const pad of pads) {
+        const center = padPosition(f, pad);
+        const radians = (-padRotation(f, pad) * Math.PI) / 180;
+        for (const { x, y } of padBoundPoints(pad))
+          add({
+            x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
+            y: center.y + x * Math.sin(radians) + y * Math.cos(radians),
+          });
+      }
     }
     for (const g of f.graphics) {
-      for (const p of pcbGraphicPoints(g)) add(footprintPoint(f, p), g.width / 2);
+      if (g.kind === 'curve') {
+        const world = transformPCBGraphic(g, (p) => footprintPoint(f, p));
+        for (const p of pcbGraphicPoints(world)) add(p, g.width / 2);
+      } else {
+        for (const p of pcbGraphicPoints(g)) add(footprintPoint(f, p), g.width / 2);
+      }
+      for (const point of f.referencePoints ?? []) add(footprintPoint(f, point), point.size / 2);
     }
   }
   for (const item of board.tracks) {
     add(item.start, item.width / 2);
     add(item.end, item.width / 2);
   }
+  for (const item of board.arcTracks ?? [])
+    for (const p of pcbArcBoundsPoints(item)) add(p, item.width / 2);
   for (const g of board.graphics) for (const p of pcbGraphicPoints(g)) add(p, g.width / 2);
-  for (const v of board.vias) add(v, v.diameter / 2);
-  for (const z of board.zones) for (const p of z.outline) add(p);
+  for (const v of board.vias) add(v, Math.max(v.diameter, pcbViaOpeningDiameter(v)) / 2);
+  for (const zone of board.zones) for (const p of pcbZoneOutlineBoundsPoints(zone)) add(p);
   if (!points.length) return { minX: 0, minY: 0, maxX: 80, maxY: 60 };
   return points.reduce(
     (b, p) => ({
