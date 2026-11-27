@@ -55,6 +55,16 @@ jobs:
             (process.platform === 'darwin' && process.arch === 'arm64'));
           console.log(`Building OpenPE ${pkg.version} on ${process.platform}-${process.arch}`);
           NODE
+      - name: Use the runner's canonical Windows temp directory
+        if: runner.os == 'Windows'
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, realpathSync } from 'node:fs';
+          import { tmpdir } from 'node:os';
+          const directory = realpathSync.native(process.env.RUNNER_TEMP);
+          console.log('Default temp uses a path alias:', tmpdir().toLowerCase() !== realpathSync.native(tmpdir()).toLowerCase());
+          appendFileSync(process.env.GITHUB_ENV, `TEMP=${directory}\nTMP=${directory}\n`);
+          NODE
       - run: npm ci
       - run: npm run libraries:download
       - run: npm run simulation:prepare
