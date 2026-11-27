@@ -74,7 +74,20 @@ jobs:
       - run: npx next typegen
       - run: npm run typecheck
       - run: npm test
-      - run: npm run package
+      - name: Package the native installer
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            # osx-sign opens the bundled KiCad library files concurrently.
+            echo "Signing file limits: soft=$(ulimit -Sn) hard=$(ulimit -Hn)"
+            if (( $(sysctl -n kern.maxfiles) < 131072 )); then
+              sudo -n sysctl -w kern.maxfiles=131072
+            fi
+            if (( $(sysctl -n kern.maxfilesperproc) < 65536 )); then
+              sudo -n sysctl -w kern.maxfilesperproc=65536
+            fi
+            ulimit -S -n 65536
+          fi
+          npm run package
       - name: Stage installers and checksums
         env:
           ARTIFACT_PLATFORM: ${{ matrix.platform }}
