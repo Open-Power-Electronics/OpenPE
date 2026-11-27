@@ -1,5 +1,10 @@
 import type { Point } from '../../../lib/circuit';
-import type { BoardLine, CopperLayer, PCB } from '../../../lib/pcb';
+import {
+  requireSupportedPCBCopper,
+  type BoardLine,
+  type CopperLayer,
+  type PCB,
+} from '../../../lib/pcb';
 import { padCopperLayers } from '../../../lib/pcb-connectivity';
 import { transformPCBGraphic } from '../../../lib/pcb-geometry';
 import { footprintPoint, padDrillPosition } from '../../../lib/pcb-layout';
@@ -64,6 +69,7 @@ function graphicCopper(graphic: BoardLine): Polygon[] {
 
 /** Only physical geometry enters this adapter. It never fills a zone or edits a PCB. */
 export function prepareThermalGeometry(board: PCB, config: ThermalConfig): Geometry {
+  requireSupportedPCBCopper(board, 'PCB thermal analysis');
   if (
     !['F.Cu,B.Cu', 'F.Cu,In1.Cu,In2.Cu,B.Cu'].includes(board.layers.join(',')) ||
     !positive(board.thickness) ||

@@ -1,6 +1,13 @@
 import type { Footprint, Pad } from './pcb';
 import { isOwnedProjectNode } from './immutable-project';
-import { padDrillPolygon, padPolygon, type Polygon } from './pcb-polygons';
+import {
+  padDrillPolygon,
+  padPolygon,
+  polygonResolution,
+  subtractPolygons,
+  type Polygon,
+} from './pcb-polygons';
+import { polygonEdges, segmentDistance } from './pcb-collision';
 
 // Shared private geometry for connectivity and fixed track contacts. Each
 // footprint owns its pad identities, bounding the inner map by its actual pads;
@@ -54,6 +61,29 @@ export function borrowPCBPadCopperContour(footprint: Footprint, pad: Pad): Polyg
   if (contours.retained && pad.drill) freezeContour(polygon);
   contours.copper = polygon;
   return polygon;
+}
+
+/** Physical copper sections can have different lands around one shared drill. */
+export function inspectPCBPadLand(footprint: Footprint, pad: Pad, outline: Polygon): Polygon[] {
+  if (!pad.drill) return [outline];
+  const bore = { outer: padDrillPolygon(footprint, pad), holes: [] };
+  return subtractPolygons([outline], [bore]);
+}
+
+export function pcbPadLandTouchesBarrel(
+  footprint: Footprint,
+  pad: Pad,
+  polygon: Polygon,
+  spend: () => void,
+) {
+  if (!pad.drill || pad.type !== 'thru_hole') return false;
+  const rim = polygonEdges({ outer: padDrillPolygon(footprint, pad), holes: [] });
+  return polygonEdges(polygon).some(([a, b]) =>
+    rim.some(([c, d]) => {
+      spend();
+      return segmentDistance(a, b, c, d) <= 2 * polygonResolution ** 2;
+    }),
+  );
 }
 
 /** Public geometry remains independently mutable, including every hole/point. */

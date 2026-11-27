@@ -1,5 +1,5 @@
 import type { Point } from './circuit';
-import type { PCB } from './pcb';
+import { requireSupportedPCBCopper, type PCB } from './pcb';
 import type { PCBSelection } from './pcb-layout';
 import { createPCBFootprintDrag } from './pcb-footprint-drag';
 import { createPCBTrackDrag } from './pcb-track-drag';
@@ -25,6 +25,7 @@ export function createPCBInteractiveDrag(
     endpointTolerance?: number;
   },
 ) {
+  requireSupportedPCBCopper(board, 'Connected drag');
   if (options.mode === 'corner') {
     if (selection.length !== 1 || selection[0].kind !== 'track' || !options.pickup)
       throw new Error('Corner drag requires one track and an exact pickup point.');

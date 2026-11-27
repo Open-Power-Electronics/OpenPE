@@ -8805,8 +8805,116 @@ function compileCapabilitySchema(schema) {
   };
 }
 
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+
 // lib/pcb-custom-pad.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-zone-settings.ts
+var pcbFootprintZoneOverrideFields = [
+  ["clearance", "copperClearance"],
+  ["zone_connect", "zoneConnect"]
+];
+var pcbPadZoneOverrideFields = [
+  ...pcbFootprintZoneOverrideFields,
+  ["thermal_gap", "thermalGap"],
+  ["thermal_bridge_width", "thermalBridge"]
+];
 
 // lib/pcb-polygons.ts
 var import_clipper_lib2 = __toESM(require_clipper(), 1);
@@ -8859,8 +8967,13 @@ var pcbDesignRuleScopes = {
   ],
   clearance: ["pcb.short", "pcb.clearance"],
   edge: ["pcb.outline", "pcb.copper-edge"],
-  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
-  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing", "pcb.holes-co-located"],
+  silkscreen: [
+    "pcb.silk-clearance",
+    "pcb.silk-edge",
+    "pcb.silk-text-height",
+    "pcb.silk-text-thickness"
+  ],
   courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
   keepouts: ["pcb.keepout"],
   connectivity: ["pcb.unrouted"]
@@ -8908,6 +9021,8 @@ var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
 var padCornerSegments = 8;
 var padCornerStep = Math.PI / 2 / padCornerSegments;
+var nativePadChordTolerance = 5e-4;
+var nativeCustomPadCopperTolerance = 2 * (nativePadChordTolerance + polygonResolution);
 var clearanceArcTolerance = 1e-3;
 var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 

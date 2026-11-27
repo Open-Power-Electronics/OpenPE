@@ -239,6 +239,11 @@ test('manufacturing rejects open outlines and unfilled zones without mutating th
   const project = manufacturingProject();
   project.pcb!.graphics.pop();
   assert.throws(() => exportProjectFile(project, 'gerber', 'x'), /outline is open/);
+  const gap = manufacturingProject();
+  const edge = gap.pcb!.graphics.find((graphic) => graphic.layer === 'Edge.Cuts')!;
+  edge.end = { ...edge.end, x: edge.end.x - 0.0001 };
+  for (const format of ['gerber', 'stencil', 'dxf'] as const)
+    assert.throws(() => exportProjectFile(gap, format, 'x'), /requires exact joins/);
   const filled = manufacturingProject();
   filled.pcb!.zones = [
     {
@@ -275,6 +280,92 @@ test('four copper layers and through vias retain layer order and metric drill po
   assert.match(files.get('x.gbl')!, /Copper,L4,Bot/);
   assert.match(files.get('x.g1')!, /X-2000000Y-3000000D03\*/);
   assert.match(files.get('x-PTH.drl')!, /T1C0.3[\s\S]*X-2\.000000Y-3\.000000/);
+});
+
+test('via spans and backdrills export distinct metric programs and retain the native Gerber lands', async () => {
+  const name = 'vias.kicad_pcb';
+  const source = `(kicad_pcb
+    (version 20260206) (generator pcbnew)
+    (general (thickness 1.6))
+    (layers (0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal)
+      (8 "In3.Cu" signal) (10 "In4.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+    (setup (pad_to_mask_clearance 0))
+    (gr_rect (start 0 0) (end 50 50) (stroke (width 0.05) (type default))
+      (fill no) (layer "Edge.Cuts"))
+    (via (at 10 20) (size 0.6) (drill 0.3)
+      (backdrill (size 0.33) (layers "F.Cu" "In1.Cu"))
+      (tertiary_drill (size 0.42) (layers "B.Cu" "In4.Cu"))
+      (layers "F.Cu" "B.Cu") (net "GND"))
+    (via (at 20 30) (size 0.6) (drill 0.3)
+      (tertiary_drill (size 0.44) (layers "B.Cu" "In4.Cu"))
+      (layers "F.Cu" "B.Cu") (net "GND"))
+    (via blind (at 31 21) (size 0.62) (drill 0.21) (layers "F.Cu" "In2.Cu")
+      (start_end_only yes) (net "GND"))
+    (via buried (at 32 22) (size 0.52) (drill 0.22) (layers "In2.Cu" "In4.Cu") (net "GND"))
+    (via micro (at 33 23) (size 0.37) (drill 0.13) (layers "In4.Cu" "B.Cu") (net "GND"))
+  )\n`;
+  const open = (sourceText = source) =>
+    projectFromNativeFiles({ entry: name, files: [{ name, source: sourceText }] });
+  const project = open();
+  const gerber = await unzip(exportProjectFile(project, 'gerber', name).bytes);
+  const drill = await unzip(exportProjectFile(project, 'drill', name).bytes);
+
+  assert.deepEqual([...drill.keys()].sort(), [
+    'vias-Backdrill-L1-L2.drl',
+    'vias-Backdrill-L6-L5.drl',
+    'vias-Blind-L1-L3.drl',
+    'vias-Buried-L3-L5.drl',
+    'vias-Microvia-L5-L6.drl',
+    'vias-NPTH.drl',
+    'vias-PTH.drl',
+  ]);
+  for (const [file, contents] of drill) assert.equal(gerber.get(file), contents);
+  const through = drill.get('vias-PTH.drl')!;
+  assert.match(through, /TF\.FileFunction,Plated,1,6,PTH/);
+  assert.match(through, /T1C0\.3\n[\s\S]*X10\.000000Y-20\.000000\nX20\.000000Y-30\.000000/);
+  assert.doesNotMatch(through, /X3[123]\.000000/);
+  const front = drill.get('vias-Backdrill-L1-L2.drl')!;
+  assert.match(front, /from L1 \(F\.Cu\) through must-cut L2 \(In1\.Cu\)/);
+  assert.match(front, /TF\.FileFunction,NonPlated,1,2,Blind/);
+  assert.match(front, /T1C0\.33\n[\s\S]*X10\.000000Y-20\.000000/);
+  assert.doesNotMatch(front, /X20\.000000/);
+  const back = drill.get('vias-Backdrill-L6-L5.drl')!;
+  assert.match(back, /from L6 \(B\.Cu\) through must-cut L5 \(In4\.Cu\)/);
+  assert.match(back, /TF\.FileFunction,NonPlated,6,5,Blind/);
+  assert.match(
+    back,
+    /T1C0\.42\nT2C0\.44\n[\s\S]*T1\nX10\.000000Y-20\.000000\nT2\nX20\.000000Y-30\.000000/,
+  );
+  assert.match(gerber.get('README.txt')!, /fabricator determines machine depths and tolerances/);
+  for (const [file, fileFunction, tool, hit] of [
+    ['Blind-L1-L3', 'Plated,1,3,Blind', '0.21', 'X31.000000Y-21.000000'],
+    ['Buried-L3-L5', 'Plated,3,5,Buried', '0.22', 'X32.000000Y-22.000000'],
+    ['Microvia-L5-L6', 'Plated,5,6,Blind', '0.13', 'X33.000000Y-23.000000'],
+  ]) {
+    const program = drill.get(`vias-${file}.drl`)!;
+    assert.ok(program.includes(`TF.FileFunction,${fileFunction}\n`));
+    assert.ok(program.includes(`\nT1C${tool}\n`));
+    assert.ok(program.includes(`\n${hit}\n`));
+  }
+  for (const extension of ['gtl', 'g1', 'g2', 'g3', 'g4', 'gbl']) {
+    const copper = gerber.get(`vias.${extension}`)!;
+    assert.match(copper, /X10000000Y-20000000D03\*/);
+    assert.match(copper, /X20000000Y-30000000D03\*/);
+    assert.equal(copper.includes('X31000000Y-21000000D03*'), ['gtl', 'g2'].includes(extension));
+    assert.equal(
+      copper.includes('X32000000Y-22000000D03*'),
+      ['g2', 'g3', 'g4'].includes(extension),
+    );
+    assert.equal(copper.includes('X33000000Y-23000000D03*'), ['g4', 'gbl'].includes(extension));
+  }
+  assert.match(gerber.get('vias.gts')!, /X31000000Y-21000000D03\*/);
+  assert.doesNotMatch(gerber.get('vias.gbs')!, /X31000000Y-21000000D03\*/);
+  assert.match(gerber.get('vias.gbs')!, /X33000000Y-23000000D03\*/);
+  assert.doesNotMatch(gerber.get('vias.gts')!, /X33000000Y-23000000D03\*/);
+  assert.throws(
+    () => exportProjectFile(open(source.replace('(size 0.33)', '(size 0.3)')), 'drill', name),
+    /backdrill cutter must be larger/,
+  );
 });
 
 test('Gerber arcs flip handedness with Y and unsupported physical artwork rejects explicitly', () => {
@@ -446,7 +537,7 @@ test('Excellon places round hits and slot centreline moves in the proper drill f
   assert.doesNotMatch(npth, /X11\.000000/);
 });
 
-test('saved zone holes become Gerber contours without clearing overlapping pads and drill offsets rotate with their pads', async () => {
+test('saved zone holes stay clear while overlapping pads and rotated drill offsets are retained', async () => {
   const project = manufacturingProject(),
     board = project.pcb!;
   const netId = uid();
@@ -490,8 +581,136 @@ test('saved zone holes become Gerber contours without clearing overlapping pads 
     ],
   });
   const files = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
-  const firstRegion = files.get('x.gtl')!.split('G36*')[1].split('G37*')[0];
-  assert.equal((firstRegion.match(/D02\*/g) ?? []).length, 2);
-  assert.doesNotMatch(files.get('x.gtl')!, /%LPC/);
+  const copper = files.get('x.gtl')!;
+  const [dark, remainder] = copper.split('%LPC*%');
+  assert.match(dark, /G36\*[\s\S]*X1000000Y-1000000D0[12]\*[\s\S]*G37\*/);
+  const [hole, pads] = remainder.split('%LPD*%');
+  assert.match(hole, /G36\*[\s\S]*X4000000Y-4000000D0[12]\*[\s\S]*G37\*/);
+  assert.match(pads, /G36\*[\s\S]*G37\*/);
   assert.match(files.get('x-PTH.drl')!, /X10\.300000Y-12\.800000/);
+});
+
+test('saved Edge.Cuts artwork plots separately from the routed profile and stencil archive', async () => {
+  const project = nativeBoard((source) =>
+    source.replace(
+      /\)\s*$/,
+      `  (zone (layer "Edge.Cuts") (hatch edge 0.5)
+          (connect_pads (clearance 0.2)) (min_thickness 0.25) (fill yes (thermal_gap 0.3) (thermal_bridge_width 0.3))
+          (polygon (pts (xy 60 20) (xy 70 20) (xy 70 25) (xy 60 25)))
+          (filled_polygon (layer "Edge.Cuts") (pts (xy 61 21) (xy 69 21) (xy 69 24) (xy 61 24))))
+      )`,
+    ),
+  );
+  const gerber = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  const stencil = await unzip(exportProjectFile(project, 'stencil', 'x').bytes);
+  const drawing = gerber.get('x-edge-cuts-fill.gbr')!;
+  assert.match(drawing, /%TF.FileFunction,OtherDrawing,EdgeCutsFill\*%/);
+  assert.match(drawing, /G36\*[\s\S]*X61000000Y-21000000D0[12]\*[\s\S]*G37\*/);
+  const profile = gerber.get('x.gko')!;
+  assert.match(profile, /%TF.FileFunction,Profile,NP\*%/);
+  assert.doesNotMatch(profile, /X61000000|G36\*/);
+  assert.equal(stencil.get('x.gko'), profile);
+  assert.ok(!stencil.has('x-edge-cuts-fill.gbr'));
+  assert.match(gerber.get('README.txt')!, /Use x\.gko as the routed board profile/);
+});
+
+test('paired masks keep native route geometry and use signed local or board expansion', async () => {
+  const project = nativeBoard((source) =>
+    source.replace('(pad_to_mask_clearance 0)', '(pad_to_mask_clearance 0.25)').replace(
+      /\)\s*$/,
+      `  (segment (start 1 5) (end 3 5) (width 0.3) (layers "F.Cu" "F.Mask") (solder_mask_margin 0.15) (net ""))
+         (arc (start 5 6) (mid 7 8) (end 9 6) (width 0.2) (layers "B.Cu" "B.Mask") (net ""))
+         (segment (start 2 7) (end 4 7) (width 0.4) (layers "B.Cu" "B.Mask") (solder_mask_margin -0.3) (net ""))
+         (gr_rect (start 2 2) (end 6 4) (stroke (width 0.2) (type default)) (fill yes)
+           (layers "F.Cu" "F.Mask") (solder_mask_margin -0.3))
+         (gr_circle (center 8 3) (end 9 3) (stroke (width 0.1) (type default)) (fill yes)
+           (layers "F.Cu" "F.Mask") (solder_mask_margin -0.25))
+       )`,
+    ),
+  );
+  const gerbers = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  const frontMask = gerbers.get('x.gts')!;
+  const backMask = gerbers.get('x.gbs')!;
+  const frontCopper = gerbers.get('x.gtl')!;
+  const backCopper = gerbers.get('x.gbl')!;
+  assert.match(
+    frontMask,
+    /%ADD(\d+)C,0\.6\*%[\s\S]*D\1\*\nG01\*\nX1000000Y-5000000D02\*\nX3000000Y-5000000D01\*/,
+  );
+  assert.match(frontCopper, /%ADD(\d+)C,0\.3\*%[\s\S]*D\1\*\nG01\*\nX1000000Y-5000000D02\*/);
+  assert.match(
+    backMask,
+    /%ADD(\d+)C,0\.7\*%[\s\S]*D\1\*\nX5000000Y-6000000D02\*\nG03X9000000Y-6000000I2000000J0D01\*/,
+  );
+  assert.doesNotMatch(backMask, /X2000000Y-7000000D02\*/);
+  assert.match(backCopper, /X2000000Y-7000000D02\*/);
+  assert.match(frontMask, /G36\*\nX2400000Y-2400000D02\*/);
+  assert.match(frontMask, /%ADD(\d+)C,1\.6\*%[\s\S]*D\1\*\nX8000000Y-3000000D03\*/);
+});
+
+test('native plated padstacks plot individual lands and preserve the shared drill anchor', async () => {
+  const project = manufacturingProject();
+  const board = project.pcb!;
+  board.layers = ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'];
+  const footprint = board.footprints[0];
+  footprint.rotation = 0;
+  delete footprint.pads[0].roundrectRatio;
+  footprint.pads[0] = {
+    ...footprint.pads[0],
+    type: 'thru_hole',
+    shape: 'circle',
+    size: { x: 1.8, y: 1.8 },
+    drill: 0.8,
+    layers: ['*.Cu', '*.Mask', 'F.Paste', 'B.Paste'],
+    padstack: {
+      inner: { shape: 'circle', size: { x: 1.3, y: 1.3 } },
+      back: { shape: 'circle', size: { x: 2.4, y: 2.4 }, offset: { x: 1, y: 0 } },
+    },
+  };
+  const files = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  for (const name of ['x.gtl', 'x.gts', 'x.gtp'])
+    assert.match(files.get(name)!, /%ADD(\d+)C,1\.8\*%[\s\S]*D\1\*\nX9000000Y-12000000D03\*/);
+  for (const name of ['x.g1', 'x.g2'])
+    assert.match(files.get(name)!, /%ADD(\d+)C,1\.3\*%[\s\S]*D\1\*\nX9000000Y-12000000D03\*/);
+  for (const name of ['x.gbl', 'x.gbs', 'x.gbp'])
+    assert.match(files.get(name)!, /%ADD(\d+)C,2\.4\*%[\s\S]*D\1\*\nX10000000Y-12000000D03\*/);
+  assert.match(files.get('x-PTH.drl')!, /X9\.000000Y-12\.000000/);
+  const stencil = await unzip(exportProjectFile(project, 'stencil', 'x').bytes);
+  for (const name of ['x.gtp', 'x.gbp']) assert.equal(stencil.get(name), files.get(name));
+});
+
+test('Gerber uses circular interpolation for native curved polygon art and the routed profile', async () => {
+  const project = nativeBoard((source) =>
+    source.replace(
+      /\)\s*$/,
+      `  (gr_poly (pts (arc (start 1 1) (mid 2 0) (end 3 1)) (xy 3 3) (xy 1 3))
+           (stroke (width 0.05) (type default)) (fill yes) (layer "F.Cu"))
+         (gr_poly (pts (arc (start 11 11) (mid 12 10) (end 13 11)) (xy 13 13) (xy 11 13))
+           (stroke (width 0.05) (type default)) (fill yes) (layer "Edge.Cuts"))
+       )`,
+    ),
+  );
+  const files = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  assert.match(
+    files.get('x.gtl')!,
+    /G36\*\nX1000000Y-1000000D02\*\nG02X3000000Y-1000000I1000000J0D01\*/,
+  );
+  assert.match(
+    files.get('x.gko')!,
+    /X11000000Y-11000000D02\*\nG02X13000000Y-11000000I1000000J0D01\*/,
+  );
+  assert.doesNotMatch(files.get('x.gko')!, /G36\*/);
+});
+
+test('manufacturing rejects intersecting native curved board outlines before writing a profile', () => {
+  const project = nativeBoard((source) =>
+    source.replace(
+      /\)\s*$/,
+      ` (gr_poly (pts (arc (start 0 0) (mid 1.6 2.4) (end 4 4)) (xy 0 4) (xy 4 0))
+           (stroke (width 0.05) (type default)) (fill no) (layer "Edge.Cuts"))
+       )`,
+    ),
+  );
+  for (const format of ['gerber', 'stencil', 'dxf'] as const)
+    assert.throws(() => exportProjectFile(project, format, 'x'), /board outline intersects/);
 });

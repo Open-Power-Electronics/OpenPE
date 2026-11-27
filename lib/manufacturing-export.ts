@@ -1,14 +1,29 @@
 import { validateProject, type Project } from './project';
 import type { Point } from './circuit';
 import { projectNativeFiles } from './kicad-project';
-import { parseKiCadPCBTree } from './kicad-pcb';
+import { parseKiCadPCB } from './kicad-pcb';
 import { child, children, parseSExpr, val, type SExpr } from './sexpr';
-import { resolvePCBGraphic, type BoardLayer, type Footprint, type PCB } from './pcb';
+import {
+  hasNativeCustomPads,
+  hasNativePCBPadMachining,
+  hasNativePCBTableOutput,
+  hasPCBGraphicMask,
+  hasPCBTrackMask,
+  isNativePCBEdgeCutFill,
+  pcbTrackMaskOpeningWidth,
+  resolvePCBGraphic,
+  type BoardLayer,
+  type Footprint,
+  type PCB,
+} from './pcb';
 import { footprintPoint, padDrillLine } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
-import { boardPolygons, worldZones } from './pcb-polygons';
+import { prepareFabricationOutline, worldZones } from './pcb-polygons';
 import { GerberLayer } from './manufacturing-gerber';
-import { padApertureLayers } from './pcb-pad-role';
+import { padApertureLayers, padSilkscreenLayers } from './pcb-pad-role';
+import { pcbViaCopperLayers, pcbViaHasTreatment } from './pcb-native-via';
+import { pcbPadOnLayer, pcbViaDiameter } from './pcb-padstack';
+import { pcbFillRuleContext } from './pcb-clearance-sources';
 import { exportModelCadScad } from './model-cad-scad';
 import { modelCadFromProject } from './model-cad';
 import { exportZip } from './export-zip';
@@ -17,6 +32,7 @@ import { exportSchematicNetlist } from './schematic-netlist-export';
 import { projectExportFormats, type ProjectExportFormat } from './export-formats';
 export { projectExportFormats } from './export-formats';
 type ManufacturingFile = { name: string; source: string };
+type DrillHit = { line: [Point, Point]; diameter: number; slot: boolean };
 const number = (n: number) => String(Number(n.toFixed(6)));
 const csv = (rows: (string | number)[][]) =>
   rows.map((row) => row.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\r\n') +
@@ -39,9 +55,12 @@ function boardData(project: Project) {
   if (!file) throw new Error('The project has no native PCB file.');
   // Use the same complete native backing as Save/Source, including retained
   // board setup and native assembly flags absent from the editable PCB model.
-  const root = parseSExpr(file.source);
-  const { board } = parseKiCadPCBTree(root, project.schematic, project.id);
-  return { board, root };
+  const {
+    board,
+    nativeRectangleIds,
+    normalized: root,
+  } = parseKiCadPCB(file.source, project.schematic, project.id);
+  return { board, nativeRectangleIds, root };
 }
 
 function assemblyFiles(
@@ -51,6 +70,11 @@ function assemblyFiles(
   stem: string,
   format: 'bom' | 'placement' | 'jlcpcb',
 ): ManufacturingFile[] {
+  if (
+    children(child(root, 'variants') ?? [], 'variant').length ||
+    children(root, 'footprint').some((footprint) => child(footprint, 'variant'))
+  )
+    throw new Error('Assembly export for native KiCad variants is unavailable in OpenPE.');
   const includeBom = format !== 'placement';
   const includePosition = format !== 'bom';
   const native = new Map(children(root, 'footprint').map((f) => [val(child(f, 'uuid')), f]));
@@ -155,42 +179,59 @@ function assemblyFiles(
   return files;
 }
 
-/** Split native filled-polygon cut-ins into exact, non-overlapping contours.
- * A repeated bridge is a zero-area ring and is discarded; no coordinates move.
- */
-function contours(points: { x: number; y: number }[]) {
-  const result: (typeof points)[] = [],
-    path: typeof points = [],
-    indices = new Map<string, number>();
-  for (const p of [...points, points[0]]) {
-    const key = `${p.x},${p.y}`,
-      prior = indices.get(key);
-    if (prior !== undefined) {
-      const ring = path.slice(prior);
-      if (ring.length >= 3) result.push(ring);
-      for (const removed of path.splice(prior + 1)) indices.delete(`${removed.x},${removed.y}`);
-    } else {
-      indices.set(key, path.length);
-      path.push(p);
-    }
-  }
-  return result;
-}
-
 function gerberFiles(
   project: Project,
-  board: PCB,
-  root: SExpr,
+  { board, nativeRectangleIds, root }: ReturnType<typeof boardData>,
   stem: string,
   stencil = false,
 ): ManufacturingFile[] {
-  boardPolygons(board); // Reject open/ambiguous outlines before publishing any file.
+  if (hasNativePCBPadMachining(board))
+    throw new Error('Gerber export for native pad machining or press-fit settings requires KiCad.');
+  if (!stencil && board.barcodes?.length)
+    throw new Error('Gerber plotting of native barcodes requires KiCad.');
+  if (!stencil) requireSupportedViaManufacturing(board);
+  if (hasNativePCBTableOutput(board))
+    throw new Error('Gerber plotting of native tables on fabrication layers requires KiCad.');
+  const outline = prepareFabricationOutline(board, 'Gerber');
   const setup = child(root, 'setup') ?? [];
   const setting = (key: string) => Number(val(child(setup, key)) || 0);
+  const boardMaskMargin = setting('pad_to_mask_clearance');
+  if (!stencil && !Number.isFinite(boardMaskMargin))
+    throw new Error('The native board solder-mask margin must be finite.');
+  const pairedMask = !stencil && (hasPCBGraphicMask(board) || hasPCBTrackMask(board));
+  const customPads = hasNativeCustomPads(board);
+  if (pairedMask || customPads) {
+    const { rulesSource } = pcbFillRuleContext(project);
+    if (rulesSource && /solder_(?:mask_expansion|paste_(?:abs|rel)_margin)/.test(rulesSource)) {
+      const rules = parseSExpr(`(${rulesSource.replace(/^\s*#[^\r\n]*/gm, '')})`, 131072);
+      const constraints = new Set(
+        children(rules, 'rule').flatMap((rule) => children(rule, 'constraint').map((c) => val(c))),
+      );
+      if (!stencil && constraints.has('solder_mask_expansion'))
+        throw new Error('Gerber export does not support custom solder-mask expansion rules.');
+      if (
+        customPads &&
+        (constraints.has('solder_paste_abs_margin') || constraints.has('solder_paste_rel_margin'))
+      )
+        throw new Error(
+          'Gerber export does not support solder-paste margin rules on native custom pads.',
+        );
+    }
+  }
   const zones = stencil
     ? []
     : worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
   if (!stencil) {
+    const plotSettings = child(setup, 'pcbplotparams') ?? [];
+    if (
+      val(child(plotSettings, 'subtractmaskfromsilk')) === 'yes' &&
+      board.footprints.some((footprint) =>
+        footprint.pads.some((pad) => padSilkscreenLayers(pad).length),
+      )
+    )
+      throw new Error(
+        'Gerber plotting of native pad silkscreen with solder-mask subtraction requires KiCad.',
+      );
     for (const key of ['covering', 'plugging'])
       if (['front', 'back'].some((side) => val(child(child(setup, key) ?? [], side)) === 'yes'))
         throw new Error(`Gerber export does not support enabled via ${key}.`);
@@ -198,17 +239,20 @@ function gerberFiles(
       throw new Error('Gerber export does not support capped or filled vias.');
     if (setting('solder_mask_min_width'))
       throw new Error('Gerber export does not support a nonzero minimum solder-mask web.');
-    if (zones.some((z) => z.filledPolygons === undefined))
-      throw new Error('Fill all enabled zones in Layout before exporting Gerber files.');
     if (
       board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) ||
-      children(root, 'via').some((v) => val(child(v, 'remove_unused_layers')) === 'yes')
+      board.vias.some((via) => via.removeUnusedLayers)
     )
       throw new Error('Gerber export does not support removing unused pad or via copper layers.');
   }
   // Font faces and text knockout need native glyph outlines not held by this exporter.
   const textLayers = stencil ? /^[FB]\.Paste$/ : /\.(?:Cu|Mask|Paste|SilkS)$/;
   const checkText = (node: SExpr) => {
+    if (
+      (node[0] === 'gr_text_box' || node[0] === 'fp_text_box') &&
+      textLayers.test(val(child(node, 'layer')))
+    )
+      throw new Error('Gerber export does not support native PCB text boxes on plotted layers.');
     if (
       (node[0] === 'gr_text' || node[0] === 'fp_text' || node[0] === 'property') &&
       textLayers.test(val(child(node, 'layer'))) &&
@@ -228,6 +272,7 @@ function gerberFiles(
   checkText(root);
   const files: ManufacturingFile[] = [];
   const parts = new Map(project.schematic.parts.map((part) => [part.id, part]));
+  const viaLayers = new Map(board.vias.map((via) => [via, pcbViaCopperLayers(board.layers, via)]));
   const layers: [BoardLayer, string, string][] = [
     ...board.layers.map((layer, i): [BoardLayer, string, string] => [
       layer,
@@ -245,19 +290,51 @@ function gerberFiles(
   for (const [layer, fileFunction, extension] of layers) {
     if (stencil && layer !== 'Edge.Cuts' && !layer.endsWith('.Paste')) continue;
     const plot = new GerberLayer(fileFunction);
-    for (const zone of zones.filter((z) => z.layer === layer))
-      for (const polygon of zone.filledPolygons!) {
-        const rings = contours(polygon.points);
-        if (rings.length) plot.region(rings);
+    if (layer === 'Edge.Cuts') {
+      for (const edge of outline) plot.graphic(edge);
+      files.push({ name: `${stem}.${extension}`, source: plot.finish() });
+      continue;
+    }
+    const layerZones = zones.filter((zone) => zone.layer === layer);
+    if (layerZones.some((zone) => zone.filledPolygons === undefined))
+      throw new Error('Fill all enabled zones in Layout before exporting Gerber files.');
+    plot.zoneFills(layerZones.flatMap((zone) => zone.filledPolygons!.map((p) => p.points)));
+    const trackWidth = (track: PCB['tracks'][number]) =>
+      track.layer === layer
+        ? track.width
+        : track.maskLayer === layer
+          ? pcbTrackMaskOpeningWidth({
+              ...track,
+              solderMaskMargin: track.solderMaskMargin ?? boardMaskMargin,
+            })
+          : 0;
+    for (const track of board.tracks) {
+      const width = trackWidth(track);
+      if (width >= 0.0000005) plot.line(track.start, track.end, width);
+    }
+    for (const track of board.arcTracks ?? []) {
+      const width = trackWidth(track);
+      if (width >= 0.0000005) plot.graphic({ ...track, kind: 'arc', width });
+    }
+    const copperLayer = board.layers.find((candidate) => candidate === layer);
+    if (copperLayer)
+      for (const via of board.vias) {
+        if (!viaLayers.get(via)!.includes(copperLayer)) continue;
+        const diameter = pcbViaDiameter(via, copperLayer);
+        if (diameter) plot.circle(via, diameter);
       }
-    for (const track of board.tracks.filter((t) => t.layer === layer))
-      plot.line(track.start, track.end, track.width);
-    if (layer.endsWith('.Cu')) for (const via of board.vias) plot.circle(via, via.diameter);
-    if (
-      layer.endsWith('.Mask') &&
-      val(child(child(setup, 'tenting') ?? [], layer === 'F.Mask' ? 'front' : 'back')) !== 'yes'
-    )
-      for (const via of board.vias) plot.circle(via, via.diameter);
+    if (layer.endsWith('.Mask')) {
+      const side = layer === 'F.Mask' ? 'front' : 'back';
+      const outerLayer = side === 'front' ? 'F.Cu' : 'B.Cu';
+      const defaults = val(child(child(setup, 'tenting') ?? [], side)) === 'yes';
+      for (const via of board.vias) {
+        if (!viaLayers.get(via)!.includes(outerLayer) || (via.tenting?.[side] ?? defaults))
+          continue;
+        const diameter = pcbViaDiameter(via, outerLayer);
+        if (diameter && diameter + 2 * boardMaskMargin >= 0.0000005)
+          plot.circle(via, diameter + 2 * boardMaskMargin);
+      }
+    }
     for (const f of board.footprints) {
       for (const p of f.pads) {
         if (
@@ -283,16 +360,18 @@ function gerberFiles(
             (l) =>
               l === layer ||
               (l === '*.Cu' && layer.endsWith('.Cu')) ||
+              (l === 'F&B.Cu' && (layer === 'F.Cu' || layer === 'B.Cu')) ||
               (l === '*.Mask' && layer.endsWith('.Mask')),
-          )
+          ) &&
+          !(layer.endsWith('.SilkS') && padSilkscreenLayers(p).some((silk) => silk === layer))
         )
           continue;
+        const layerPad = pcbPadOnLayer(p, layer);
         if (padApertureLayers(p)) {
-          plot.pad(f, p);
+          plot.pad(f, layerPad);
         } else if (layer.endsWith('.Mask')) {
-          const margin =
-            p.solderMaskMargin ?? f.solderMaskMargin ?? setting('pad_to_mask_clearance');
-          plot.pad(f, p, margin);
+          const margin = p.solderMaskMargin ?? f.solderMaskMargin ?? boardMaskMargin;
+          plot.pad(f, layerPad, margin);
         } else if (layer.endsWith('.Paste')) {
           const margin =
             p.solderPasteMargin ?? f.solderPasteMargin ?? setting('pad_to_paste_clearance');
@@ -300,70 +379,173 @@ function gerberFiles(
             p.solderPasteMarginRatio ??
             f.solderPasteMarginRatio ??
             setting('pad_to_paste_clearance_ratio');
-          plot.pad(f, p, margin + p.size.x * ratio, margin + p.size.y * ratio);
-        } else plot.pad(f, p);
+          plot.pad(f, layerPad, margin + layerPad.size.x * ratio, margin + layerPad.size.y * ratio);
+        } else plot.pad(f, layerPad);
       }
       const part = f.symbolId ? parts.get(f.symbolId) : undefined;
-      for (const g of f.graphics.filter((g) => g.layer === layer))
-        plot.graphic(
-          transformPCBGraphic(
-            resolvePCBGraphic(g, part?.ref ?? f.reference ?? '', part?.value ?? f.value ?? ''),
-            (p) => footprintPoint(f, p),
-            (a) => a + f.rotation,
-          ),
+      const graphics: Footprint['graphics'] = f.graphics.filter(
+        (graphic) => graphic.layer === layer || graphic.maskLayer === layer,
+      );
+      for (const g of graphics) {
+        const placed = transformPCBGraphic(
+          resolvePCBGraphic(g, part?.ref ?? f.reference ?? '', part?.value ?? f.value ?? ''),
+          (p) => footprintPoint(f, p),
+          (a) => a + f.rotation,
         );
+        if (g.layer === layer) plot.graphic(placed);
+        else
+          plot.maskGraphic(
+            placed,
+            g.solderMaskMargin ?? boardMaskMargin,
+            nativeRectangleIds.has(g.id),
+          );
+      }
     }
-    for (const g of board.graphics.filter((g) => g.layer === layer)) plot.graphic(g);
+    for (const g of board.graphics) {
+      if (g.layer === layer) plot.graphic(g);
+      else if (g.maskLayer === layer)
+        plot.maskGraphic(g, g.solderMaskMargin ?? boardMaskMargin, nativeRectangleIds.has(g.id));
+    }
     files.push({ name: `${stem}.${extension}`, source: plot.finish() });
+  }
+  const edgeCutFills = zones.filter(isNativePCBEdgeCutFill);
+  if (edgeCutFills.length) {
+    const drawing = new GerberLayer('OtherDrawing,EdgeCutsFill');
+    drawing.zoneFills(edgeCutFills.flatMap((zone) => zone.filledPolygons!.map((p) => p.points)));
+    files.push({ name: `${stem}-edge-cuts-fill.gbr`, source: drawing.finish() });
   }
   return files;
 }
 
 const fabricationNotes =
-  'OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes and outline before ordering.\n';
+  'OpenPE manufacturing export\n\nGerber X2 and metric Excellon drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes and outline before ordering.\n';
+const backdrillNotes =
+  '\nBackdrill files are separate after-plating operations. File names and headers give the physical entry and inclusive must-cut layers, numbered from the front copper layer. The fabricator determines machine depths and tolerances from the actual stackup.\n';
 const assemblyNotes =
   '\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred. Review assembly orientation before ordering.\n';
 
+function requireSupportedViaManufacturing(board: PCB) {
+  for (const via of board.vias) {
+    if (pcbViaHasTreatment(via.treatment))
+      throw new Error('Manufacturing output for native via treatments is unsupported.');
+    if (via.backdrills && Object.values(via.backdrills).some((cut) => cut.diameter <= via.drill))
+      throw new Error('A backdrill cutter must be larger than its primary drill.');
+  }
+}
+
+function drillProgram(holes: DrillHit[], description: string, fileFunction: string): string {
+  const hitsByTool = new Map<string, DrillHit[]>();
+  for (const hole of holes) {
+    const diameter = number(hole.diameter);
+    const hits = hitsByTool.get(diameter);
+    if (hits) hits.push(hole);
+    else hitsByTool.set(diameter, [hole]);
+  }
+  const diameters = [...hitsByTool.keys()].sort((a, b) => Number(a) - Number(b));
+  const commands = [
+    'M48',
+    '; OpenPE metric Excellon; absolute XY; explicit decimals',
+    `; ${description}`,
+    `; #@! TF.FileFunction,${fileFunction}`,
+    'METRIC,TZ',
+    ...diameters.map((diameter, i) => `T${i + 1}C${diameter}`),
+    '%',
+    'G90',
+    'G05',
+  ];
+  const coordinate = (point: Point) => `X${point.x.toFixed(6)}Y${(-point.y).toFixed(6)}`;
+  for (const [i, diameter] of diameters.entries()) {
+    commands.push(`T${i + 1}`);
+    for (const {
+      line: [start, end],
+      slot,
+    } of hitsByTool.get(diameter)!)
+      if (slot) commands.push(`${coordinate(start)}G85${coordinate(end)}`, 'G05');
+      else commands.push(coordinate(start));
+  }
+  return [...commands, 'M30', ''].join('\n');
+}
+
 function drillFiles(board: PCB, stem: string): ManufacturingFile[] {
-  const files: ManufacturingFile[] = [];
-  for (const plated of [true, false]) {
-    const coordinate = (point: Point) => `X${point.x.toFixed(6)}Y${(-point.y).toFixed(6)}`;
-    const holes = board.footprints.flatMap((f) =>
+  if (hasNativePCBPadMachining(board))
+    throw new Error('Drill export for native pad machining or press-fit settings requires KiCad.');
+  requireSupportedViaManufacturing(board);
+  const programs = new Map<
+    string,
+    { description: string; fileFunction: string; holes: DrillHit[] }
+  >();
+  const throughPads = (plated: boolean): DrillHit[] =>
+    board.footprints.flatMap((f) =>
       f.pads
         .filter((p) => p.drill && (p.type !== 'np_thru_hole') === plated)
         .map((p) => ({ line: padDrillLine(f, p), diameter: p.drill!, slot: !!p.drillSlot })),
     );
-    if (plated)
-      for (const via of board.vias)
-        holes.push({ line: [via, via], diameter: via.drill, slot: false });
-    const diameters = [...new Set(holes.map((h) => number(h.diameter)))].sort(
-      (a, b) => Number(a) - Number(b),
-    );
-    const commands = [
-      'M48',
-      '; OpenPE metric Excellon; absolute XY; explicit decimals',
-      `; ${plated ? 'Plated' : 'Non-plated'} through holes`,
-      'METRIC,TZ',
-      ...diameters.map((d, i) => `T${i + 1}C${d}`),
-      '%',
-      'G90',
-      'G05',
-    ];
-    for (const [i, d] of diameters.entries()) {
-      commands.push(`T${i + 1}`);
-      for (const {
-        line: [start, end],
-        slot,
-      } of holes.filter((h) => number(h.diameter) === d))
-        if (slot) commands.push(`${coordinate(start)}G85${coordinate(end)}`, 'G05');
-        else commands.push(coordinate(start));
+  const lastLayer = board.layers.length;
+  const platedThrough = throughPads(true);
+  programs.set(`${stem}-PTH.drl`, {
+    description: 'Plated through holes',
+    fileFunction: `Plated,1,${lastLayer},PTH`,
+    holes: platedThrough,
+  });
+  programs.set(`${stem}-NPTH.drl`, {
+    description: 'Non-plated through holes',
+    fileFunction: `NonPlated,1,${lastLayer},NPTH`,
+    holes: throughPads(false),
+  });
+  const append = (
+    name: string,
+    description: string,
+    fileFunction: string,
+    at: Point,
+    diameter: number,
+  ) => {
+    const hit: DrillHit = { line: [at, at], diameter, slot: false };
+    const program = programs.get(name);
+    if (program) program.holes.push(hit);
+    else programs.set(name, { description, fileFunction, holes: [hit] });
+  };
+  for (const via of board.vias) {
+    if (
+      !via.span ||
+      (via.span.kind !== 'micro' && via.span.start === 'F.Cu' && via.span.end === 'B.Cu')
+    ) {
+      platedThrough.push({ line: [via, via], diameter: via.drill, slot: false });
+    } else {
+      const { start, end, kind } = via.span;
+      const first = board.layers.indexOf(start) + 1;
+      const last = board.layers.indexOf(end) + 1;
+      const type =
+        first === 1 && last === lastLayer
+          ? 'PTH'
+          : first === 1 || last === lastLayer
+            ? 'Blind'
+            : 'Buried';
+      const program = kind === 'micro' ? 'Microvia' : type;
+      append(
+        `${stem}-${program}-L${first}-L${last}.drl`,
+        `Plated ${program.toLowerCase()} holes from L${first} (${start}) to L${last} (${end})`,
+        `Plated,${first},${last},${type}`,
+        via,
+        via.drill,
+      );
     }
-    files.push({
-      name: `${stem}-${plated ? 'PTH' : 'NPTH'}.drl`,
-      source: [...commands, 'M30', ''].join('\n'),
-    });
+    if (!via.backdrills) continue;
+    for (const { start, end, diameter } of Object.values(via.backdrills)) {
+      const entry = board.layers.indexOf(start) + 1;
+      const mustCut = board.layers.indexOf(end) + 1;
+      append(
+        `${stem}-Backdrill-L${entry}-L${mustCut}.drl`,
+        `After-plating backdrill from L${entry} (${start}) through must-cut L${mustCut} (${end})`,
+        `NonPlated,${entry},${mustCut},Blind`,
+        via,
+        diameter,
+      );
+    }
   }
-  return files;
+  return Array.from(programs, ([name, { description, fileFunction, holes }]) => ({
+    name,
+    source: drillProgram(holes, description, fileFunction),
+  }));
 }
 
 export function exportProjectFile(
@@ -389,7 +571,8 @@ export function exportProjectFile(
       mime: 'text/plain',
     };
   }
-  const { board, root } = boardData(project);
+  const native = boardData(project);
+  const { board, root } = native;
   if (format === 'dxf')
     return {
       name: filename,
@@ -408,14 +591,22 @@ export function exportProjectFile(
   if (format === 'drill') {
     files = drillFiles(board, stem);
   } else if (format === 'stencil') {
-    files = gerberFiles(project, board, root, stem, true);
+    files = gerberFiles(project, native, stem, true);
   } else {
+    const gerbers = gerberFiles(project, native, stem);
+    const drawing = `${stem}-edge-cuts-fill.gbr`;
     files = [
-      ...gerberFiles(project, board, root, stem),
+      ...gerbers,
       ...drillFiles(board, stem),
       {
         name: 'README.txt',
-        source: format === 'jlcpcb' ? fabricationNotes + assemblyNotes : fabricationNotes,
+        source:
+          fabricationNotes +
+          (gerbers.some(({ name }) => name === drawing)
+            ? `\n${drawing} contains saved technical artwork. Use ${stem}.gko as the routed board profile.\n`
+            : '') +
+          (board.vias.some((via) => via.backdrills) ? backdrillNotes : '') +
+          (format === 'jlcpcb' ? assemblyNotes : ''),
       },
     ];
     if (format === 'jlcpcb') files.push(...assemblyFiles(project, board, root, stem, format));

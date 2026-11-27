@@ -3,6 +3,8 @@ import { footprintPoint } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
 import { circlePolygon, graphicPolygons, offsetPadPolygons, type Polygon } from './pcb-polygons';
 import { padApertureLayers } from './pcb-pad-role';
+import { pcbViaCopperLayers } from './pcb-native-via';
+import { pcbPadOnLayer, pcbViaDiameter } from './pcb-padstack';
 
 /** Mask layers describe apertures, rather than the green coating itself. */
 export function padHasMaskOpening(footprint: Footprint, pad: Pad, side: 'front' | 'back') {
@@ -11,9 +13,7 @@ export function padHasMaskOpening(footprint: Footprint, pad: Pad, side: 'front' 
     : pad.type !== 'smd' || footprint.side === side;
 }
 
-/** Read-only presentation geometry from the existing pad and mask artwork data.
- * PCB v1 has no via-tenting settings, so retain visible via holes and annuli.
- */
+/** Read-only presentation geometry from pads, via tenting and mask artwork. */
 export function solderMaskOpenings(board: PCB, side: 'front' | 'back') {
   const layer = side === 'front' ? 'F.Mask' : 'B.Mask';
   const openings: Polygon[] = board.footprints.flatMap((footprint) =>
@@ -22,13 +22,22 @@ export function solderMaskOpenings(board: PCB, side: 'front' | 'back') {
       .flatMap((pad) =>
         offsetPadPolygons(
           footprint,
-          pad,
+          pcbPadOnLayer(pad, layer),
           padApertureLayers(pad) ? 0 : (pad.solderMaskMargin ?? footprint.solderMaskMargin ?? 0),
         ),
       ),
   );
   openings.push(
-    ...board.vias.map((via) => ({ outer: circlePolygon(via, via.diameter / 2), holes: [] })),
+    ...board.vias
+      .filter(
+        (via) =>
+          pcbViaCopperLayers(board.layers, via).includes(side === 'front' ? 'F.Cu' : 'B.Cu') &&
+          !via.tenting?.[side],
+      )
+      .flatMap((via) => {
+        const diameter = pcbViaDiameter(via, layer);
+        return diameter > 0 ? [{ outer: circlePolygon(via, diameter / 2), holes: [] }] : [];
+      }),
   );
   const graphics = [
     ...board.graphics.filter((graphic) => graphic.layer === layer),

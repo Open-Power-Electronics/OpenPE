@@ -2,6 +2,7 @@ import type { Project } from './project';
 import type { Circuit } from './circuit';
 import type { PCB } from './pcb';
 import { isOwnedProjectNode, recordOwnedProjectNode } from './immutable-project-ownership.mjs';
+import { MAX_NATIVE_PCB_NODES, MAX_PROJECT_NODES } from './project-size-limits';
 export { isOwnedProjectNode } from './immutable-project-ownership.mjs';
 
 // Detached trees and fresh arrays constructed by the private text parser qualify
@@ -27,15 +28,16 @@ export function isOwnedPCB(board: PCB): boolean {
  * copied editor drafts also preserves identities when an editor cloned a sheet
  * or board before changing one object. */
 export function ownProject(project: Project, previous?: Project | null): Project {
-  return ownProjectData(project, previous ?? undefined);
+  const maxNodes = project.pcb && project.nativeFiles ? MAX_NATIVE_PCB_NODES : MAX_PROJECT_NODES;
+  return ownProjectData(project, previous ?? undefined, maxNodes);
 }
 
 /** Detach private derived JSON data with the same ownership guarantees. This
  * certifies immutability only; semantic/schema acceptance is still separate. */
-export function ownProjectData<T>(value: T, previous?: T): T {
+export function ownProjectData<T>(value: T, previous?: T, maxNodes = MAX_PROJECT_NODES): T {
   let nodes = 0;
   function copy(value: unknown, old: unknown, depth: number): unknown {
-    if (depth > 80 || ++nodes > 300000)
+    if (depth > 80 || ++nodes > maxNodes)
       throw new Error(
         'Invalid OpenPE project: document nesting or object count exceeds the supported limit.',
       );

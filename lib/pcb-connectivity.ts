@@ -1,9 +1,25 @@
 import type { Point } from './circuit';
-import type { Footprint, Pad, PCB } from './pcb';
-import { padPosition } from './pcb-layout';
+import { requireSupportedPCBCopper, type Footprint, type Pad, type PCB } from './pcb';
+import { footprintPoint, padPosition } from './pcb-layout';
 import { isOwnedPCB, isOwnedProjectNode } from './immutable-project';
-import { borrowPCBPadCopperContour } from './pcb-pad-contour';
-import { borrowFilledCopperPolygons, worldZones, type Polygon } from './pcb-polygons';
+import {
+  borrowPCBPadCopperContour,
+  borrowPCBPadOutline,
+  inspectPCBPadLand,
+  pcbPadLandTouchesBarrel,
+} from './pcb-pad-contour';
+import {
+  borrowFilledCopperPolygons,
+  circlePolygon,
+  graphicPolygons,
+  graphicVertices,
+  nativeCustomPadCopperPolygons,
+  worldZones,
+  type Polygon,
+} from './pcb-polygons';
+import { transformPCBGraphic } from './pcb-geometry';
+import { pcbPadCopperSections, pcbViaLayerSections } from './pcb-padstack';
+import type { resolvePCBPrunedCopper } from './pcb-pruned-copper';
 import { squaredDistance as distance, segmentDistance, polygonEdges } from './pcb-collision';
 
 export type Airwire = {
@@ -39,6 +55,7 @@ type Body = Bounds & {
   layers: readonly string[];
   anchor?: Anchor;
   sharedPad?: PadGeometry;
+  barrel?: object;
 };
 type CopperKind = 'pad' | 'track' | 'via' | 'fill';
 type NetInput = { sources: (object | CopperKind)[]; filled: boolean };
@@ -265,6 +282,14 @@ function copperGroups(items: Body[], spend: Spend) {
     }
     return i;
   };
+  const barrels = new Map<object, number>();
+  for (const [i, item] of items.entries()) {
+    if (!item.barrel) continue;
+    spend();
+    const anchor = barrels.get(item.barrel);
+    if (anchor === undefined) barrels.set(item.barrel, i);
+    else parents[i] = anchor;
+  }
   const sorted = items.map((body, i) => ({ body, i })).sort((a, b) => a.body.minX - b.body.minX);
   for (let i = 0; i < sorted.length; i++)
     for (
@@ -425,12 +450,38 @@ export function createIncrementalPCBRoutingPartition(
 /** Link disconnected copper groups with a minimum spanning tree, independent
  * of visibility. Only saved fill contours establish zone connections.
  */
-export function analyzePCBConnectivity(board: PCB): {
+export function analyzePCBConnectivity(
+  board: PCB,
+  mode?: 'inspection',
+  options?: {
+    pruning?: ReturnType<typeof resolvePCBPrunedCopper>;
+  },
+): {
   edges: Airwire[];
   padCount: number;
   warnings: string[];
 } {
-  const owned = isOwnedPCB(board);
+  requireSupportedPCBCopper(board, mode ? 'Copper connectivity' : 'Airwire preview', mode);
+  const inspection = mode === 'inspection';
+  const pruning = inspection ? options?.pruning : undefined;
+  const usesViaSections = (via: PCB['vias'][number]) =>
+    Boolean(
+      via.backdrills || via.padstack || via.span || via.startEndOnly || via.removeUnusedLayers,
+    );
+  // The editable partition omits native physical sections and net-bearing artwork.
+  // Reuse its caches only when the inspected inputs use the same copper bodies.
+  const nativeBodies =
+    inspection &&
+    (pruning?.pads.size ||
+      board.arcTracks?.length ||
+      board.vias.some(usesViaSections) ||
+      board.graphics.some((graphic) => graphic.netId) ||
+      board.footprints.some(
+        (footprint) =>
+          footprint.pads.some((pad) => pad.padstack || pad.nativeCustomPad) ||
+          footprint.graphics.some((graphic) => graphic.netId),
+      ));
+  const owned = !nativeBodies && isOwnedPCB(board);
   const previousPartition = owned ? ownedNetPartitions.get(board.footprints) : undefined;
   const previous =
     owned && previousPartition?.layers === board.layers ? previousPartition : undefined;
@@ -463,7 +514,7 @@ export function analyzePCBConnectivity(board: PCB): {
     kind: CopperKind = 'pad',
     geometry?: CopperGeometry,
   ) => {
-    if (!netId || !layers.length) return;
+    if (!netId || (!layers.length && !anchor)) return;
     if (owned) {
       const input = inputs.get(netId) ?? { sources: [], filled: false };
       input.sources.push(kind, source!);
@@ -494,12 +545,38 @@ export function analyzePCBConnectivity(board: PCB): {
   };
   for (const footprint of board.footprints)
     for (const pad of footprint.pads) {
-      const layers = padCopperLayers(board, footprint, pad);
-      if (!pad.netId || !layers.length) continue;
+      const pruned = pruning?.pads.get(pad);
+      const layers = pruned ?? padCopperLayers(board, footprint, pad);
+      if (!pad.netId || (!layers.length && !pruned)) continue;
       if (++padCount > 3000)
         throw new Error(
           'Airwire preview supports at most 3000 assigned pads. Check this board in KiCad.',
         );
+      if (!layers.length) {
+        const anchor = { ...padPosition(footprint, pad), id: pad.id };
+        add(pad.netId, [anchor], 0, [], anchor);
+        continue;
+      }
+      if (inspection && (pad.padstack || pad.nativeCustomPad)) {
+        let terminal: Body | undefined;
+        for (const { pad: land, layers: landLayers } of pcbPadCopperSections(pad, layers)) {
+          const outlines = land.nativeCustomPad
+            ? nativeCustomPadCopperPolygons(footprint, land)
+            : [borrowPCBPadOutline(footprint, land)];
+          for (const outline of outlines) {
+            for (const polygon of inspectPCBPadLand(footprint, land, outline)) {
+              spend(polygon.outer.length + polygon.holes.reduce((n, hole) => n + hole.length, 0));
+              const section = add(pad.netId, polygon.outer, 0, landLayers, undefined, polygon)!;
+              if (pcbPadLandTouchesBarrel(footprint, land, polygon, spend)) section.barrel = pad;
+              if (!terminal || (section.barrel && !terminal.barrel)) terminal = section;
+            }
+          }
+        }
+        const anchor = { ...padPosition(footprint, pad), id: pad.id };
+        if (terminal) terminal.anchor = anchor;
+        else add(pad.netId, [anchor], 0, [], anchor);
+        continue;
+      }
       const polygon = borrowPCBPadCopperContour(footprint, pad);
       add(
         pad.netId,
@@ -536,7 +613,26 @@ export function analyzePCBConnectivity(board: PCB): {
     );
     if (reusable && !geometry && body) pendingTracks.set(track, freezeCopperGeometry(body));
   }
+  if (inspection)
+    for (const track of board.arcTracks ?? [])
+      add(track.netId, graphicVertices({ ...track, kind: 'arc' }), track.width / 2, [track.layer]);
   for (const via of board.vias) {
+    if (inspection && usesViaSections(via)) {
+      for (const { layer, diameter, drill, plated } of pcbViaLayerSections(
+        board.layers,
+        via,
+        pruning?.vias.get(via),
+      )) {
+        if (diameter <= drill) continue;
+        const polygon = {
+          outer: circlePolygon(via, diameter / 2),
+          holes: [circlePolygon(via, drill / 2)],
+        };
+        const section = add(via.netId, polygon.outer, 0, [layer], undefined, polygon);
+        if (section && plated) section.barrel = via;
+      }
+      continue;
+    }
     const reusable = retainCopper && isOwnedProjectNode(via);
     const saved = reusable ? ownedViaGeometry.get(via) : undefined;
     const geometry =
@@ -555,6 +651,18 @@ export function analyzePCBConnectivity(board: PCB): {
       geometry,
     );
     if (reusable && !geometry && body) pendingVias.set(via, freezeCopperGeometry(body));
+  }
+  if (inspection) {
+    const addGraphic = (graphic: PCB['graphics'][number]) => {
+      if (!graphic.netId || !graphic.layer.endsWith('.Cu')) return;
+      for (const polygon of graphicPolygons(graphic))
+        add(graphic.netId, polygon.outer, 0, [graphic.layer], undefined, polygon);
+    };
+    for (const graphic of board.graphics) addGraphic(graphic);
+    for (const footprint of board.footprints)
+      for (const graphic of footprint.graphics)
+        if (graphic.netId)
+          addGraphic(transformPCBGraphic(graphic, (point) => footprintPoint(footprint, point)));
   }
   const fills = borrowFilledCopperPolygons(board);
   const zones = worldZones(board);

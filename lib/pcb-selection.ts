@@ -15,12 +15,39 @@ import {
   pcbPadDisplayLayers,
   type PCBDisplay,
 } from './pcb-display';
-import { pcbArc } from './pcb-geometry';
+import {
+  pcbArc,
+  pcbBezierVertices,
+  pcbCenterMarkStrokes,
+  pcbZoneCircle,
+  pcbZoneSelectionVertices,
+} from './pcb-geometry';
 import { findPCBGraphic, footprintPoint, padPosition, type PCBSelection } from './pcb-layout';
-import { filledCopperPolygons, padPolygon, type Polygon } from './pcb-polygons';
+import { displayPadPolygons, filledCopperPolygons, type Polygon } from './pcb-polygons';
 import { padReach } from './pcb-custom-pad';
 import { isOwnedPCB } from './immutable-project';
 import { pcbStrokeText } from './pcb-stroke-text';
+import { pcbViaCopperLayers, pcbViaOpeningDiameter } from './pcb-native-via';
+import { pcbPadOnLayer, pcbViaDiameter } from './pcb-padstack';
+import { pcbZoneLayerActive } from './pcb-zone-settings';
+
+function visiblePadPolygons(
+  owner: Footprint,
+  pad: PCB['footprints'][number]['pads'][number],
+  layers: readonly BoardLayer[],
+) {
+  return pad.padstack
+    ? layers.flatMap((layer) => displayPadPolygons(owner, pcbPadOnLayer(pad, layer)))
+    : displayPadPolygons(owner, pad);
+}
+
+function visibleViaRadius(via: PCB['vias'][number], layers: readonly BoardLayer[]) {
+  const copper =
+    via.padstack || via.removeUnusedLayers || via.startEndOnly
+      ? Math.max(0, ...layers.map((layer) => pcbViaDiameter(via, layer)))
+      : via.diameter;
+  return Math.max(copper, pcbViaOpeningDiameter(via)) / 2;
+}
 
 export type PCBSelectionFilters = Record<PCBSelection['kind'], boolean> & {
   pad?: boolean;
@@ -205,14 +232,20 @@ export function selectPCBPadPoint(
     for (const pad of owner.pads) {
       if (pad.locked && filters.locked === false) continue;
       const center = padPosition(owner, pad);
-      if (Math.hypot(at.x - center.x, at.y - center.y) > padReach(pad) + tolerance + epsilon)
-        continue;
-      if (!pcbPadDisplayLayers(board, owner, pad).some((layer) => layers[layer])) continue;
-      const { outer } = padPolygon(owner, pad);
       if (
-        inContour(at, outer) ||
-        outer.some(
-          (p, i) => pointDistance(at, p, outer[(i + 1) % outer.length]) <= tolerance + epsilon,
+        !pad.padstack &&
+        Math.hypot(at.x - center.x, at.y - center.y) > padReach(pad) + tolerance + epsilon
+      )
+        continue;
+      const visible = pcbPadDisplayLayers(board, owner, pad).filter((layer) => layers[layer]);
+      if (!visible.length) continue;
+      if (
+        visiblePadPolygons(owner, pad, visible).some(
+          ({ outer, holes }) =>
+            (inContour(at, outer) && !holes.some((hole) => inContour(at, hole))) ||
+            outer.some(
+              (p, i) => pointDistance(at, p, outer[(i + 1) % outer.length]) <= tolerance + epsilon,
+            ),
         )
       )
         ids.push(pad.id);
@@ -317,6 +350,26 @@ function circleMatches(g: BoardLine, rectangle: Rectangle, contained: boolean) {
     (p) => Math.hypot(p.x - g.start.x, p.y - g.start.y) >= radius - g.width / 2 - epsilon,
   );
 }
+function ruleAreaCircle(zone: BoardZone, owner?: Footprint): BoardLine | undefined {
+  const circle = pcbZoneCircle(zone);
+  if (!circle) return undefined;
+  const start = owner ? footprintPoint(owner, circle.center) : circle.center;
+  return {
+    id: zone.id,
+    layer: zone.layer,
+    kind: 'circle',
+    start,
+    end: { x: start.x + circle.radius, y: start.y },
+    width: 0.08,
+  };
+}
+function inZoneOutline(at: Point, zone: BoardZone) {
+  const circle = pcbZoneCircle(zone);
+  return circle
+    ? Math.hypot(at.x - circle.center.x, at.y - circle.center.y) <= circle.radius
+    : inContour(at, pcbZoneSelectionVertices(zone)) &&
+        !(zone.holes ?? []).some((hole) => inContour(at, hole));
+}
 function textContour(text: BoardText, at: Point): Point[] {
   const lines = text.value.split('\n'),
     width = Math.max(...lines.map((line) => Array.from(line).length), 0) * text.size.x * 0.7,
@@ -409,12 +462,14 @@ function graphicShape(g: BoardLine): Shape {
     return { paths: [], polygons: outer.length ? [{ outer, holes: [] }] : [], radius: 0 };
   }
   if (g.kind === 'dimension' && g.dimension) {
+    if (g.dimension.type === 'center')
+      return { paths: pcbCenterMarkStrokes(g), polygons: [], radius: g.width / 2 };
     const dx = g.end.x - g.start.x,
       dy = g.end.y - g.start.y,
       length = Math.hypot(dx, dy) || 1,
       height = g.dimension.height ?? 0,
       offset = { x: (-dy / length) * height, y: (dx / length) * height },
-      outer = textContour(g.dimension.caption, g.dimension.caption);
+      outer = g.dimension.caption ? textContour(g.dimension.caption, g.dimension.caption) : [];
     return {
       paths: [
         [
@@ -461,6 +516,8 @@ function graphicShape(g: BoardLine): Shape {
       };
     }
   }
+  if (g.kind === 'curve')
+    return { paths: [pcbBezierVertices(g)], polygons: [], radius: g.width / 2 };
   const points = [g.start, ...(g.points ?? []), g.end];
   return g.kind === 'polygon'
     ? {
@@ -477,7 +534,10 @@ function zoneShape(
   fills: ReadonlyMap<string, Polygon[]>,
 ): Shape {
   return {
-    paths: layers.zoneOutlines ? [zone.outline, ...(zone.holes ?? [])].map(closed) : [],
+    paths:
+      layers.zoneOutlines && zone.outline.length
+        ? [pcbZoneSelectionVertices(zone), ...(zone.holes ?? [])].map(closed)
+        : [],
     polygons: layers.copper ? (fills.get(zone.id) ?? []) : [],
     radius: layers.zoneOutlines ? 0.04 : 0,
   };
@@ -673,6 +733,19 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       priority: false,
     };
   };
+  const zoneScore = (zone: BoardZone, transform?: (point: Point) => Point): PointScore => {
+    const circle = ruleAreaCircle(zone);
+    return circle
+      ? graphicScore(circle, transform)
+      : shapeScore(
+          {
+            paths: [pcbZoneSelectionVertices(zone), ...(zone.holes ?? [])].map(closed),
+            polygons: [],
+            radius: 0.04,
+          },
+          transform,
+        );
+  };
   const silkScore = (graphic: BoardLine, score: PointScore, owner?: Footprint): PointScore => {
     if (!silkLayer(graphic.layer) || graphic.kind === 'dimension') return score;
     let area = graphic.fill ? score.area : graphic.width ** 2;
@@ -777,9 +850,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       )
         continue;
       const { owner, pad } = found;
-      const padLayers = pcbPadDisplayLayers(board, owner, pad);
-      if (!padLayers.some((layer) => layers[layer as BoardLayer])) continue;
-      const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
+      const padLayers = pcbPadDisplayLayers(board, owner, pad).filter((layer) => layers[layer]);
+      if (!padLayers.length) continue;
+      const score = shapeScore({
+          paths: [],
+          polygons: visiblePadPolygons(owner, pad, padLayers),
+          radius: 0,
+        }),
         center = padPosition(owner, pad);
       score.local = Math.hypot(at.x - center.x, at.y - center.y);
       score.priority = priority(padLayers);
@@ -809,20 +886,17 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       accept(candidate, { ...score, overlapArea: track.width ** 2 });
     } else if (object.kind === 'via') {
       const via = allObjects().vias.get(object.id);
-      if (
-        !via ||
-        !filters.via ||
-        (via.locked && filters.locked === false) ||
-        !board.layers.some((layer) => layers[layer])
-      )
-        continue;
+      if (!via || !filters.via || (via.locked && filters.locked === false)) continue;
+      const viaLayers = pcbViaCopperLayers(board.layers, via).filter((layer) => layers[layer]);
+      if (!viaLayers.length) continue;
       const d = Math.hypot(at.x - via.x, at.y - via.y);
+      const radius = visibleViaRadius(via, viaLayers);
       accept(candidate, {
-        distance: Math.max(0, d - via.diameter / 2),
+        distance: Math.max(0, d - radius),
         local: d,
-        area: Math.PI * (via.diameter / 2) ** 2,
-        priority: priority(board.layers),
-        layerRank: layerRank(board.layers),
+        area: Math.PI * radius ** 2,
+        priority: priority(viaLayers),
+        layerRank: layerRank(viaLayers),
         overlapArea: (via.drill / 2) ** 2,
       });
     } else if (object.kind === 'graphic') {
@@ -889,28 +963,24 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     } else if (object.kind === 'zone') {
       const zone = allObjects().zones.get(object.id);
       if (!zone || !layers[zone.layer] || !pcbZoneSelectionEligible(zone, filters)) continue;
+      const circle = ruleAreaCircle(zone);
       if (layers.zoneOutlines)
         accept(candidate, {
-          ...shapeScore({
-            paths: [zone.outline, ...(zone.holes ?? [])].map(closed),
-            polygons: [],
-            radius: 0.04,
-          }),
+          ...zoneScore(zone),
           overlapArea: 5 * pixel ** 2,
           priority: priority([zone.layer]),
           layerRank: layerRank([zone.layer]),
         });
       const body =
-        options.includeRegionInteriors &&
-        layers.zoneOutlines &&
-        inContour(at, zone.outline) &&
-        !(zone.holes ?? []).some((hole) => inContour(at, hole))
+        options.includeRegionInteriors && layers.zoneOutlines && inZoneOutline(at, zone)
           ? {
-              ...shapeScore({
-                paths: [],
-                polygons: [{ outer: zone.outline, holes: zone.holes ?? [] }],
-                radius: 0,
-              }),
+              ...(circle
+                ? graphicScore({ ...circle, fill: true, width: 0 })
+                : shapeScore({
+                    paths: [],
+                    polygons: [{ outer: pcbZoneSelectionVertices(zone), holes: zone.holes ?? [] }],
+                    radius: 0,
+                  })),
               priority: priority([zone.layer]),
               layerRank: layerRank([zone.layer]),
             }
@@ -933,7 +1003,11 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       for (const pad of owner.pads) {
         const padLayers = pcbPadDisplayLayers(board, owner, pad);
         if (!padLayers.some((layer) => layers[layer])) continue;
-        const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
+        const score = shapeScore({
+            paths: [],
+            polygons: displayPadPolygons(owner, pad),
+            radius: 0,
+          }),
           center = padPosition(owner, pad);
         accept(candidate, {
           ...score,
@@ -951,18 +1025,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
             priority: priority([graphic.layer]),
             layerRank: layerRank([graphic.layer]),
           });
-      const ownZones = (owner.zones ?? []).filter((zone) => layers[zone.layer]);
+      const ownZones = (owner.zones ?? []).filter(
+        (zone) => layers[zone.layer] && pcbZoneLayerActive(board, zone.layer),
+      );
       if (layers.zoneOutlines)
         for (const zone of ownZones)
           accept(candidate, {
-            ...shapeScore(
-              {
-                paths: [zone.outline, ...(zone.holes ?? [])].map(closed),
-                polygons: [],
-                radius: 0.04,
-              },
-              transform,
-            ),
+            ...zoneScore(zone, transform),
             priority: priority([zone.layer]),
             layerRank: layerRank([zone.layer]),
           });
@@ -1068,6 +1137,7 @@ function selectPCBGeometry(
     for (const footprint of board.footprints) {
       if (footprint.locked && filters.locked === false) continue;
       const bounds = pcbFootprintBodyBounds(board, footprint, layers);
+      const circles: BoardLine[] = [];
       const shapes: Shape[] = bounds
         ? [
             {
@@ -1084,7 +1154,17 @@ function selectPCBGeometry(
         : [];
       if (layers.footprints && (layers.zoneOutlines || layers.copper))
         for (const zone of footprint.zones ?? []) {
-          if (!layers[zone.layer] || !pcbZoneSelectionEligible(zone, filters)) continue;
+          if (
+            !layers[zone.layer] ||
+            !pcbZoneLayerActive(board, zone.layer) ||
+            !pcbZoneSelectionEligible(zone, filters)
+          )
+            continue;
+          const circle = layers.zoneOutlines && ruleAreaCircle(zone, footprint);
+          if (circle) {
+            circles.push(circle);
+            continue;
+          }
           const shape = zoneShape(zone, layers, fills);
           shape.paths = shape.paths.map((path) =>
             path.map((point) => footprintPoint(footprint, point)),
@@ -1092,10 +1172,12 @@ function selectPCBGeometry(
           if (shape.paths.length || shape.polygons.length) shapes.push(shape);
         }
       if (
-        shapes.length &&
+        (shapes.length || circles.length) &&
         (contained
-          ? shapes.every((shape) => shapeMatches(shape, rectangle, true))
-          : shapes.some((shape) => shapeMatches(shape, rectangle, false)))
+          ? shapes.every((shape) => shapeMatches(shape, rectangle, true)) &&
+            circles.every((circle) => circleMatches(circle, rectangle, true))
+          : shapes.some((shape) => shapeMatches(shape, rectangle, false)) ||
+            circles.some((circle) => circleMatches(circle, rectangle, false)))
       )
         selected.push({ kind: 'footprint', id: footprint.id });
     }
@@ -1112,12 +1194,15 @@ function selectPCBGeometry(
       )
         selected.push({ kind: 'track', id: track.id });
   if (filters.via && board.layers.some((layer) => layers[layer]))
-    for (const via of board.vias)
+    for (const via of board.vias) {
+      const viaLayers = pcbViaCopperLayers(board.layers, via).filter((layer) => layers[layer]);
       if (
         (!via.locked || filters.locked !== false) &&
-        diskMatches(via, via.diameter / 2, rectangle, contained)
+        viaLayers.length &&
+        diskMatches(via, visibleViaRadius(via, viaLayers), rectangle, contained)
       )
         selected.push({ kind: 'via', id: via.id });
+    }
   for (const graphic of board.graphics) {
     if (
       !pcbGraphicSelectionEligible(graphic, filters) ||
@@ -1135,8 +1220,13 @@ function selectPCBGeometry(
   if (layers.zoneOutlines || layers.copper) {
     for (const zone of board.zones) {
       if (!layers[zone.layer] || !pcbZoneSelectionEligible(zone, filters)) continue;
-      const shape = zoneShape(zone, layers, fills);
-      if (shapeMatches(shape, rectangle, contained)) selected.push({ kind: 'zone', id: zone.id });
+      const circle = layers.zoneOutlines && ruleAreaCircle(zone);
+      if (
+        circle
+          ? circleMatches(circle, rectangle, contained)
+          : shapeMatches(zoneShape(zone, layers, fills), rectangle, contained)
+      )
+        selected.push({ kind: 'zone', id: zone.id });
     }
   }
   return selected;
@@ -1234,6 +1324,23 @@ function precisePointGeometry(
         matches: (rectangle) => shapeMatches(shape, rectangle, false),
       });
     };
+    const addCircle = (selection: PCBSelection, graphic: BoardLine, zone?: BoardZone) => {
+      const radius =
+        Math.hypot(graphic.end.x - graphic.start.x, graphic.end.y - graphic.start.y) +
+        graphic.width / 2;
+      records.push({
+        selection,
+        order,
+        zone,
+        bounds: {
+          minX: graphic.start.x - radius,
+          minY: graphic.start.y - radius,
+          maxX: graphic.start.x + radius,
+          maxY: graphic.start.y + radius,
+        },
+        matches: (rectangle) => circleMatches(graphic, rectangle, false),
+      });
+    };
     for (const footprint of board.footprints) {
       const selection: PCBSelection = { kind: 'footprint', id: footprint.id };
       const bounds = pcbFootprintBodyBounds(board, footprint, layers);
@@ -1247,7 +1354,12 @@ function precisePointGeometry(
         });
       if (layers.footprints && layers.zoneOutlines)
         for (const zone of footprint.zones ?? []) {
-          if (!layers[zone.layer]) continue;
+          if (!layers[zone.layer] || !pcbZoneLayerActive(board, zone.layer)) continue;
+          const circle = ruleAreaCircle(zone, footprint);
+          if (circle) {
+            addCircle(selection, circle, zone);
+            continue;
+          }
           const shape = zoneShape(zone, layers, noCopperFills);
           shape.paths = shape.paths.map((path) =>
             path.map((point) => footprintPoint(footprint, point)),
@@ -1265,8 +1377,9 @@ function precisePointGeometry(
       order++;
     }
     for (const via of board.vias) {
-      const radius = via.diameter / 2;
-      if (board.layers.some((layer) => layers[layer]))
+      const viaLayers = pcbViaCopperLayers(board.layers, via).filter((layer) => layers[layer]);
+      const radius = visibleViaRadius(via, viaLayers);
+      if (viaLayers.length)
         records.push({
           selection: { kind: 'via', id: via.id },
           order,
@@ -1283,29 +1396,19 @@ function precisePointGeometry(
     for (const graphic of board.graphics) {
       if (layers[graphic.layer] && (graphic.layer === 'Edge.Cuts' || layers.footprints)) {
         const selection: PCBSelection = { kind: 'graphic', id: graphic.id };
-        if (graphic.kind === 'circle') {
-          const radius =
-            Math.hypot(graphic.end.x - graphic.start.x, graphic.end.y - graphic.start.y) +
-            graphic.width / 2;
-          records.push({
-            selection,
-            order,
-            bounds: {
-              minX: graphic.start.x - radius,
-              minY: graphic.start.y - radius,
-              maxX: graphic.start.x + radius,
-              maxY: graphic.start.y + radius,
-            },
-            matches: (rectangle) => circleMatches(graphic, rectangle, false),
-          });
-        } else addShape(selection, graphicShape(graphic));
+        if (graphic.kind === 'circle') addCircle(selection, graphic);
+        else addShape(selection, graphicShape(graphic));
       }
       order++;
     }
     if (layers.zoneOutlines)
       for (const zone of board.zones) {
-        if (layers[zone.layer])
-          addShape({ kind: 'zone', id: zone.id }, zoneShape(zone, layers, noCopperFills));
+        if (layers[zone.layer]) {
+          const selection: PCBSelection = { kind: 'zone', id: zone.id };
+          const circle = ruleAreaCircle(zone);
+          if (circle) addCircle(selection, circle);
+          else addShape(selection, zoneShape(zone, layers, noCopperFills));
+        }
         order++;
       }
     const tree = pointTree(records);
@@ -1429,8 +1532,7 @@ export function selectPCBPoint(
         if (
           layers[zone.layer] &&
           pcbZoneSelectionEligible(zone, filters) &&
-          inContour(at, zone.outline) &&
-          !(zone.holes ?? []).some((hole) => inContour(at, hole))
+          inZoneOutline(at, zone)
         )
           regions.push({ kind: 'zone', id: zone.id });
     if (regions.length) return regions;

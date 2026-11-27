@@ -9,6 +9,10 @@ function recordOwnedProjectNode(value) {
   ownedNodes.add(value);
 }
 
+// lib/project-size-limits.ts
+var MAX_PROJECT_BYTES = 8e6;
+var MAX_NATIVE_PCB_BYTES = 2e7;
+
 // lib/sexpr.ts
 function decodeKiCadString(value) {
   const decoded = JSON.parse(
@@ -23,28 +27,30 @@ var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
 var val = (n, i = 1) => n ? atom(n[i]) : "";
 var num = (n, i = 1) => Number(val(n, i) || 0);
-function parseSExpr(source, maxLength = 8e6) {
-  return parseSExprValue(source, maxLength, false);
+function parseSExpr(source, maxLength = MAX_PROJECT_BYTES, maxNodes) {
+  return parseSExprValue(source, maxLength, false, maxNodes);
 }
-function parseSExprValue(source, maxLength, owned) {
+function parseSExprValue(source, maxLength, owned, maxNodes) {
   if (source.length > maxLength)
-    throw new Error("Files over 8 MB are not supported in this preview.");
+    throw new Error(
+      maxLength === MAX_NATIVE_PCB_BYTES ? "Native PCB files over 20 MB are not supported." : "Files over 8 MB are not supported in this preview."
+    );
   const tokens = source.match(/"(?:\\.|[^"\\])*"|[()]|[^\s()]+/g) || [];
   let i = 0, nodes = 0;
   const bounded = (depth) => {
-    if (depth > 80 || ++nodes > 3e5)
+    if (owned && depth > 80 || maxNodes !== void 0 && ++nodes > maxNodes)
       throw new Error(
         "Invalid OpenPE project: document nesting or object count exceeds the supported limit."
       );
   };
   function read(depth) {
-    if (owned) bounded(depth);
+    bounded(depth);
     if (depth > 100 || tokens[i++] !== "(") throw new Error("Invalid S-expression structure.");
     const list = [];
     while (i < tokens.length && tokens[i] !== ")") {
       if (tokens[i] === "(") list.push(read(depth + 1));
       else {
-        if (owned) bounded(depth + 1);
+        bounded(depth + 1);
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {

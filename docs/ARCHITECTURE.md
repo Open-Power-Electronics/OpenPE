@@ -72,6 +72,17 @@ Sketch corner fillet/chamfer and Boolean extrusion use pure `lib/model-cad-sketc
 
 ## Repository management
 
+`lib/kicad-pcb.ts` projects supported native KiCad 10 records for Core admission
+and host Save. Both paths share the native parser and preserve unchanged files.
+Layout renders the validated layer geometry, saved contours and retained
+artwork without changing native project data.
+[Native format](FORMAT.md) owns the accepted records and Save behavior.
+
+Core protects imported copper whose native generators or curved connectivity
+the editor cannot recompute. Native Source can update the validated records
+explicitly. Layout and export use the accepted native arcs and saved contours.
+[Imported routing](LAYOUT.md#imported-routing) owns the operation bounds.
+
 | Location                          | Responsibility                                                            | Main contract                                         |
 | --------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `api/`                            | Framework-independent Uniform API                                         | [API](API.md), [Core](CORE.md)                        |
@@ -384,20 +395,20 @@ native reader without granting or staging a project. `HomeProjectCard` retains
 one schematic thumbnail per mounted card and reuses `CanvasContextMenu` for
 keyboard/IME-safe Pin/Unpin and removal from the list.
 
-| Data                                  | Location/lifecycle                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Native design and supporting files    | User-selected KiCad directory; grant-bound Save                                                                                 |
-| Verified portable simulation models   | Separate immutable `models/<component>.lib`; available through plugin removal                                                   |
-| Completed desktop results             | Direct `spice-simulation/<native-stem>.*` / `layout-thermal/<native-stem>.*`; project-bound v2 manifest and current success     |
-| Workspace recovery                    | App data `openpe-workspace-v2.json`; no host destinations/grants/plugin results                                                 |
-| Recent native locations and pins      | App data `recent-projects.json` and `recent-pins.json`; bounded host-only path indexes, separate from recovery and live grants  |
-| Appearance and Layout preferences     | App data `appearance-v1.json` and `layout-preferences-v1.json`; independent settings                                             |
-| Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                            |
-| Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                         |
+| Data                                  | Location/lifecycle                                                                                                                                                                                    |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native design and supporting files    | User-selected KiCad directory; grant-bound Save                                                                                                                                                       |
+| Verified portable simulation models   | Separate immutable `models/<component>.lib`; available through plugin removal                                                                                                                         |
+| Completed desktop results             | Direct `spice-simulation/<native-stem>.*` / `layout-thermal/<native-stem>.*`; project-bound v2 manifest and current success                                                                           |
+| Workspace recovery                    | App data `openpe-workspace-v2.json`; no host destinations/grants/plugin results                                                                                                                       |
+| Recent native locations and pins      | App data `recent-projects.json` and `recent-pins.json`; bounded host-only path indexes, separate from recovery and live grants                                                                        |
+| Appearance and Layout preferences     | App data `appearance-v1.json` and `layout-preferences-v1.json`; independent settings                                                                                                                  |
+| Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                                                                                                  |
+| Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                                                                                               |
 | Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/` under the [example asset rules](EXAMPLES.md#original-project-directories-and-portable-assets) |
-| Destination-bound project history     | App data `project-history-v1/<normalized-destination-sha256>.git`; outside every project directory                              |
-| Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                           |
-| Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                                 |
+| Destination-bound project history     | App data `project-history-v1/<normalized-destination-sha256>.git`; outside every project directory                                                                                                    |
+| Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                                                                                                 |
+| Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                                                                                                       |
 
 `server/flat-analysis-files.mjs` owns the per-directory queue shared by result-store instances and individual-file publication. SPICE Simulation and Layout Thermal keep logical artifact identities while writing stem-prefixed physical files and publishing the project-bound manifest last. Private sibling `*-backups` folders hold staged and previous bytes for failure rollback. Unknown sidecars and other projects stay protected; cross-file filesystem crash atomicity is not guaranteed. Result readers require current v2 records and ignore retired nested layouts. These host results never enter Core documents.
 
@@ -485,16 +496,16 @@ ignored `next-env.d.ts`.
 
 [AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. Windows x64, macOS arm64 and glibc Linux x64 are verified separately; unavailable hosts are recorded as unverified. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
 
-| Agent or renderer concern                                                     | Focused checks                                                                                                                                 |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Questions and answer delivery                                                 | `tests/agent-questions.test.ts`, `check-agent-questions-ui.mjs`, `check-agent-reading-ui.mjs`                                                  |
-| Transcript reading, search, outline, quoting, reuse, prompt history and focus | `check-agent-reading-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-stop-ui.mjs`                                                       |
-| Markdown, user messages, code, tables and formulas                            | `tests/agent-markdown.test.ts`, `check-agent-message-ui.mjs`, `check-agent-code-ui.mjs`, `check-agent-table-ui.mjs`, `check-agent-math-ui.mjs` |
-| Tool reviews, history and diagnostics                                         | `check-agent-tools-ui.mjs`, `check-agent-history-ui.mjs`, `check-agent-review-navigation-ui.mjs`                                               |
-| Queued messages and attachments                                               | `check-agent-queue-preview-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-attachments-ui.mjs`, `check-annotations.mjs`                 |
-| Embedded symbol and footprint drawing                                         | `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts`, `tests/footprint-drawing.test.ts`, `check-component-drawing-ui.mjs`  |
-| [Panel Find](../DESIGN.md#panel-find) | `tests/panel-find.test.ts`, `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs` |
-| [Cross-mode component highlighting](../DESIGN.md#cross-mode-component-highlighting) | `tests/component-highlight.test.ts` |
+| Agent or renderer concern                                                           | Focused checks                                                                                                                                 |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Questions and answer delivery                                                       | `tests/agent-questions.test.ts`, `check-agent-questions-ui.mjs`, `check-agent-reading-ui.mjs`                                                  |
+| Transcript reading, search, outline, quoting, reuse, prompt history and focus       | `check-agent-reading-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-stop-ui.mjs`                                                       |
+| Markdown, user messages, code, tables and formulas                                  | `tests/agent-markdown.test.ts`, `check-agent-message-ui.mjs`, `check-agent-code-ui.mjs`, `check-agent-table-ui.mjs`, `check-agent-math-ui.mjs` |
+| Tool reviews, history and diagnostics                                               | `check-agent-tools-ui.mjs`, `check-agent-history-ui.mjs`, `check-agent-review-navigation-ui.mjs`                                               |
+| Queued messages and attachments                                                     | `check-agent-queue-preview-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-attachments-ui.mjs`, `check-annotations.mjs`                 |
+| Embedded symbol and footprint drawing                                               | `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts`, `tests/footprint-drawing.test.ts`, `check-component-drawing-ui.mjs`  |
+| [Panel Find](../DESIGN.md#panel-find)                                               | `tests/panel-find.test.ts`, `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs`                                                             |
+| [Cross-mode component highlighting](../DESIGN.md#cross-mode-component-highlighting) | `tests/component-highlight.test.ts`                                                                                                            |
 
 `tests/gui-agent-parity.test.ts` compares native KiCad bytes and undo for GUI
 and Agent edits behind revision, Source and close gates. Host parity checks
@@ -521,7 +532,7 @@ complete test set. Focused runs pass test paths after `npm test --`.
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                                                                                        |
 | Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                                                             |
-| Recent projects             | `tests/recent-projects.test.ts`, `tests/desktop-recent.test.ts`, `check-recent-ui.mjs`                                                                                                                           |
+| Recent projects             | `tests/recent-projects.test.ts`, `tests/desktop-recent.test.ts`, `check-recent-ui.mjs`                                                                                                                                                                                        |
 | Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                                              |
 | Schematic sections          | `tests/schematic-section.test.ts`, `tests/schematic-section-views.test.ts`, `tests/schematic-section-controls.test.ts`; `check-thermal-workbench-ui.mjs --schematic-sections` (actual Workbench/Core with mocked host services)                                               |
 | Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                                                                      |

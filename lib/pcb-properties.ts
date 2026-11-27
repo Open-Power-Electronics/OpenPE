@@ -1,7 +1,8 @@
 import { invalidatePCBFill, type Pad, type PCB, type Footprint, type BoardZone } from './pcb';
 import { flipPCBFootprint } from './pcb-layout';
+import { validatePCBPadTrapezoid } from './pcb-geometry';
 
-type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
+type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons' | 'teardrop'>>;
 
 /** Undefined clears an optional override; omitted fields and native identity survive. */
 export function preparePCBZoneProperties(zone: BoardZone, changes: PCBZoneProperties): BoardZone {
@@ -31,6 +32,8 @@ export type PCBFootprintProperties = Partial<
     | 'solderMaskMargin'
     | 'solderPasteMargin'
     | 'solderPasteMarginRatio'
+    | 'copperClearance'
+    | 'zoneConnect'
   >
 >;
 
@@ -52,6 +55,8 @@ export function preparePCBFootprintProperties(
   const basis =
     changes.side && changes.side !== footprint.side ? flipPCBFootprint(footprint) : footprint;
   const next = { ...basis, ...changes };
+  if (changes.reference !== undefined) delete next.nativeMissingReference;
+  if (changes.value !== undefined) delete next.nativeMissingValue;
   for (const key of Object.keys(next) as (keyof Footprint)[])
     if (next[key] === undefined) delete next[key];
   return next;
@@ -69,7 +74,7 @@ export function validateFootprintModelPath(path: string): void {
 export function setPCBViaProperties(
   board: PCB,
   viaId: string,
-  changes: Partial<Omit<PCB['vias'][number], 'id'>>,
+  changes: Partial<Omit<PCB['vias'][number], 'id' | 'teardrops'>>,
 ): PCB {
   if (!board.vias.some((via) => via.id === viaId)) fail('This via no longer exists.');
   const via = board.vias.find((via) => via.id === viaId)!;
@@ -89,7 +94,23 @@ export function setPCBViaProperties(
 export type PCBPadProperties = Partial<
   Omit<
     Pad,
-    'id' | 'number' | 'netId' | 'type' | 'layers' | 'unconnected' | 'outline' | 'customAnchor'
+    | 'id'
+    | 'number'
+    | 'netId'
+    | 'type'
+    | 'layers'
+    | 'unconnected'
+    | 'outline'
+    | 'customAnchor'
+    | 'nativeCustomPad'
+    | 'nativeConnect'
+    | 'fabricationProperty'
+    | 'teardrops'
+    | 'keepEndLayers'
+    | 'zoneLayerConnections'
+    | 'postMachining'
+    | 'dieLength'
+    | 'dieDelay'
   >
 >;
 
@@ -99,6 +120,7 @@ const padPropertyKeys = new Set([
   'rotation',
   'size',
   'shape',
+  'trapezoidDelta',
   'drill',
   'drillOffset',
   'drillSlot',
@@ -109,6 +131,9 @@ const padPropertyKeys = new Set([
   'solderPasteMargin',
   'solderPasteMarginRatio',
   'thermalBridgeAngle',
+  'copperClearance',
+  'thermalGap',
+  'thermalBridge',
   'zoneConnect',
   'removeUnusedLayers',
 ]);
@@ -136,8 +161,11 @@ export function setPCBPadProperties(board: PCB, padId: string, changes: PCBPadPr
   for (const key of Object.keys(changes) as (keyof PCBPadProperties)[])
     if (changes[key] === undefined) delete next[key];
   if (changes.size) next.size = { ...changes.size };
+  if (changes.trapezoidDelta) next.trapezoidDelta = { ...changes.trapezoidDelta };
+  else if (next.shape !== 'trapezoid') delete next.trapezoidDelta;
   if (changes.drillOffset) next.drillOffset = { ...changes.drillOffset };
   if (changes.drillSlot) next.drillSlot = { ...changes.drillSlot };
+  if (next.drill !== pad.drill || next.drillSlot) delete next.nativeRoundDrillY;
   if (changes.chamfer) next.chamfer = [...changes.chamfer];
   if (next.shape === 'circle' || next.customAnchor === 'circle') {
     // A single dimension field edits the circle diameter on either axis.
@@ -159,9 +187,10 @@ export function setPCBPadProperties(board: PCB, padId: string, changes: PCBPadPr
     next.size.y <= 0
   )
     fail('Pad position, rotation and positive size must be finite.');
+  validatePCBPadTrapezoid(next, fail);
   if (
     next.type === 'smd' &&
-    (next.drill !== undefined || next.drillOffset !== undefined || next.drillSlot)
+    (next.drill !== undefined || changes.drillOffset !== undefined || next.drillSlot)
   )
     fail('SMD pads cannot have a drill or drill offset.');
   if (next.type !== 'smd' && (!Number.isFinite(next.drill) || next.drill! <= 0))

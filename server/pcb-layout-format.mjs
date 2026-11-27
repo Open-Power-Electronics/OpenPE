@@ -5875,7 +5875,92 @@ for (const [relative, entry] of records) {
 // lib/circuit.ts
 var uid = () => crypto.randomUUID();
 
+// lib/pcb-collision.ts
+var squaredDistance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+function pointSegmentDistance(p, a, b) {
+  const length = squaredDistance(a, b);
+  const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length)) : 0;
+  const x = a.x + t * (b.x - a.x), y = a.y + t * (b.y - a.y);
+  return (p.x - x) ** 2 + (p.y - y) ** 2;
+}
+function segmentDistance(a, b, c, d) {
+  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return 0;
+  return Math.min(
+    pointSegmentDistance(a, c, d),
+    pointSegmentDistance(b, c, d),
+    pointSegmentDistance(c, a, b),
+    pointSegmentDistance(d, a, b)
+  );
+}
+function insideRing(p, ring, spend = () => {
+}) {
+  let result = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    spend();
+    const a = ring[i], b = ring[j];
+    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
+      result = !result;
+  }
+  return result;
+}
+var insidePolygon = (p, polygon, spend) => insideRing(p, polygon.outer, spend) && !polygon.holes.some((hole) => insideRing(p, hole, spend));
+var polygonEdges = (polygon) => [polygon.outer, ...polygon.holes].flatMap(
+  (ring) => ring.map((p, i) => [p, ring[(i + 1) % ring.length]])
+);
+
+// lib/pcb-text-cache-format.ts
+var maxPCBTextCachePolygonVertices = 4096;
+var pcbTextCacheCoordinatePattern = "-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)";
+var pcbTextCachePointPattern = `${pcbTextCacheCoordinatePattern},${pcbTextCacheCoordinatePattern}`;
+var pcbTextCachePolygonPattern = `^${pcbTextCachePointPattern}(?: ${pcbTextCachePointPattern}){2,${maxPCBTextCachePolygonVertices - 1}}$`;
+
+// lib/pcb-text.ts
+var cacheCoordinate = new RegExp(`^${pcbTextCacheCoordinatePattern}$`);
+function readPCBTextLineSpacing(font, fail2) {
+  const [record, duplicate] = children(font, "line_spacing");
+  if (!record) return {};
+  const raw = record[1];
+  const value = Number(raw);
+  if (duplicate || record.length !== 2 || typeof raw !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw) || !(value >= 0 && value <= 1e3))
+    return fail2("Invalid native PCB text line spacing.");
+  return { lineSpacing: value || 0 };
+}
+function pcbTextLineAdvance(text) {
+  return text.size.y * 1.25 * (text.lineSpacing ?? 1);
+}
+function pcbTextDisplayValue(text) {
+  return text.nativeExpansion?.source === text.value ? text.nativeExpansion.value : text.value;
+}
+function footprintTextPlacement(node, fail2) {
+  const at = child(node, "at");
+  const inPosition = at?.at(-1) === "unlocked";
+  const flags = children(node, "unlocked");
+  const bare = node.filter((item) => item === "unlocked").length;
+  const [flag] = flags;
+  if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
+    fail2("Invalid footprint text orientation flag.");
+  return {
+    at: inPosition ? at.slice(0, -1) : at,
+    unlocked: inPosition || bare === 1 || val(flag) === "yes",
+    flag,
+    bare: bare === 1,
+    inPosition
+  };
+}
+
 // lib/pcb-geometry.ts
+var nativePCBPadRoundRectRatio = 0.25;
+function readPCBPadRoundRectRatio(node, fail2) {
+  const [record, duplicate] = children(node, "roundrect_rratio");
+  if (!record) return val(node, 3) === "roundrect" ? nativePCBPadRoundRectRatio : void 0;
+  if (val(node, 3) !== "roundrect") fail2("Only rounded rectangular pads accept a corner ratio.");
+  const raw = record[1];
+  const ratio = Number(raw);
+  if (duplicate || record.length !== 2 || typeof raw !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw) || !(ratio >= 0 && ratio <= 0.5))
+    fail2("Pad corner ratio must be between 0 and 0.5.");
+  return ratio || 0;
+}
 function transformPCBGraphic(g, point2, angle2 = (n) => n) {
   return {
     ...g,
@@ -5883,8 +5968,10 @@ function transformPCBGraphic(g, point2, angle2 = (n) => n) {
     end: point2(g.end),
     ...g.mid ? { mid: point2(g.mid) } : {},
     ...g.points ? { points: g.points.map(point2) } : {},
+    ...g.polygonArcs ? { polygonArcs: g.polygonArcs.map((arc) => ({ ...arc, mid: point2(arc.mid) })) } : {},
     ...g.text ? { text: { ...g.text, rotation: angle2(g.text.rotation) } } : {},
-    ...g.dimension ? {
+    ...g.textBox?.outline ? { textBox: { ...g.textBox, outline: g.textBox.outline.map(point2) } } : {},
+    ...g.dimension?.caption ? {
       dimension: {
         ...g.dimension,
         caption: {
@@ -5900,27 +5987,117 @@ function transformPCBZone(z, point2) {
   return {
     ...z,
     outline: z.outline.map(point2),
+    ...z.nativeOutlineArcs ? { nativeOutlineArcs: z.nativeOutlineArcs.map((arc) => ({ ...arc, mid: point2(arc.mid) })) } : {},
     ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
     ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
   };
 }
+function pcbZoneCircle(zone) {
+  if (!zone.nativeCircularOutline) return void 0;
+  const [start, mid] = zone.outline;
+  return {
+    center: { x: (start.x + mid.x) / 2, y: (start.y + mid.y) / 2 },
+    radius: Math.hypot(start.x - mid.x, start.y - mid.y) / 2
+  };
+}
+function pcbZoneOutlineBoundsPoints(zone) {
+  const circle = pcbZoneCircle(zone);
+  if (circle) {
+    const { center, radius } = circle;
+    return [
+      { x: center.x - radius, y: center.y - radius },
+      { x: center.x + radius, y: center.y + radius }
+    ];
+  }
+  return zone.nativeOutlineArcs ? [
+    ...zone.outline,
+    ...zone.nativeOutlineArcs.flatMap(
+      ({ vertex, mid }) => pcbArcBoundsPoints({ start: zone.outline[vertex], mid, end: zone.outline[vertex + 1] })
+    )
+  ] : zone.outline;
+}
+function pcbCenterMarkStrokes({
+  start,
+  end
+}) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  return [
+    [{ x: start.x - dx, y: start.y - dy }, { ...end }],
+    [
+      { x: start.x + dy, y: start.y - dx },
+      { x: start.x - dy, y: start.y + dx }
+    ]
+  ];
+}
 function pcbArc(g) {
   const a = g.start, b = g.mid, c = g.end;
   if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - a.x, vy = c.y - a.y;
+  const d = 2 * (ux * vy - uy * vx);
   if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
+  const u2 = ux * ux + uy * uy, v2 = vx * vx + vy * vy;
   const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
+    x: a.x + (u2 * vy - v2 * uy) / d,
+    y: a.y + (ux * v2 - vx * u2) / d
   };
   const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
   const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
   const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
   return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
 }
+function pcbArcBoundsPoints(g) {
+  const points = [g.start, g.end];
+  const arc = pcbArc(g);
+  if (!arc) return points;
+  const tau = Math.PI * 2;
+  const direction = Math.sign(arc.delta);
+  for (const angle2 of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+    if ((direction * (angle2 - arc.start) + tau * 2) % tau > Math.abs(arc.delta)) continue;
+    points.push({
+      x: arc.center.x + arc.radius * Math.cos(angle2),
+      y: arc.center.y + arc.radius * Math.sin(angle2)
+    });
+  }
+  return points;
+}
+function pcbBezierBoundsPoints(g) {
+  const [first, second] = g.points;
+  const parameters = /* @__PURE__ */ new Set();
+  for (const axis of ["x", "y"]) {
+    const c = first[axis] - g.start[axis];
+    const d = second[axis] - first[axis];
+    const e = g.end[axis] - second[axis];
+    const a = c - 2 * d + e;
+    const b = 2 * (d - c);
+    const discriminant = b * b - 4 * a * c;
+    if (a === 0) {
+      if (b !== 0) parameters.add(-c / b);
+    } else if (discriminant >= 0) {
+      const root = Math.sqrt(discriminant);
+      parameters.add((-b + root) / (2 * a));
+      parameters.add((-b - root) / (2 * a));
+    }
+  }
+  const extrema = [...parameters].filter((t) => t > 0 && t < 1).map((t) => {
+    const s = 1 - t;
+    const at = (axis) => s ** 3 * g.start[axis] + 3 * s ** 2 * t * first[axis] + 3 * s * t ** 2 * second[axis] + t ** 3 * g.end[axis];
+    return { x: at("x"), y: at("y") };
+  });
+  return [g.start, ...extrema, g.end];
+}
 function pcbGraphicPoints(g) {
   if (g.text?.hidden) return [];
+  if (g.dimension?.type === "center") return pcbCenterMarkStrokes(g).flat();
+  if (g.kind === "point") {
+    const { x, y } = g.start;
+    const r = g.width / 2;
+    return [
+      { x: x - r, y: y - r },
+      { x: x + r, y: y + r }
+    ];
+  }
+  if (g.kind === "curve") return pcbBezierBoundsPoints(g);
   if (g.kind === "circle" || g.kind === "arc") {
     const arc = g.kind === "arc" ? pcbArc(g) : null, center = arc?.center ?? g.start, r = arc?.radius ?? Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
     return [
@@ -5929,9 +6106,17 @@ function pcbGraphicPoints(g) {
     ];
   }
   const points = [g.start, g.end, ...g.points ?? [], ...g.mid ? [g.mid] : []];
+  if (g.polygonArcs) {
+    const vertices = [g.start, ...g.points ?? [], g.end];
+    for (const { vertex, mid } of g.polygonArcs)
+      points.push(
+        ...pcbArcBoundsPoints({ start: vertices[vertex], mid, end: vertices[vertex + 1] })
+      );
+  }
   const t = g.text ?? g.dimension?.caption;
   if (t) {
-    const at = g.dimension?.caption ?? g.start, w = Math.max(...t.value.split("\n").map((s) => s.length)) * t.size.x * 0.7, h = t.value.split("\n").length * t.size.y;
+    const lines = pcbTextDisplayValue(t).split("\n");
+    const at = g.dimension?.caption ?? g.start, w = Math.max(...lines.map((s) => s.length)) * t.size.x * 0.7, h = t.size.y + (lines.length - 1) * pcbTextLineAdvance(t);
     const r = Math.hypot(w, h);
     points.push({ x: at.x - r, y: at.y - r }, { x: at.x + r, y: at.y + r });
   }
@@ -5947,6 +6132,43 @@ function pcbPadChamferEndpoints({ x, y }, size, cut) {
   const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
   const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
   return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+var halfPCBUnit = (value) => Math.trunc(Math.round(value * 1e6) / 2);
+var isNativePadDelta = (value) => Number.isFinite(value) && Math.abs(value) <= 1e5 && Math.abs(value - Number(value.toFixed(6))) <= 1e-9;
+function pcbPadTrapezoid({ size, trapezoidDelta }) {
+  const x = halfPCBUnit(size.x), y = halfPCBUnit(size.y);
+  const dx = halfPCBUnit(trapezoidDelta?.x ?? 0), dy = halfPCBUnit(trapezoidDelta?.y ?? 0);
+  return [
+    { x: -x + dy, y: -y - dx },
+    { x: x - dy, y: -y + dx },
+    { x: x + dy, y: y - dx },
+    { x: -x - dy, y: y + dx }
+  ].map((point2) => ({ x: point2.x / 1e6, y: point2.y / 1e6 }));
+}
+function validatePCBPadTrapezoid(pad, fail2) {
+  if (pad.shape !== "trapezoid") {
+    if (pad.trapezoidDelta) fail2("A rect_delta requires a trapezoid pad.");
+    return;
+  }
+  if (pad.trapezoidDelta && ![pad.trapezoidDelta.x, pad.trapezoidDelta.y].every(isNativePadDelta))
+    fail2("The trapezoid pad delta must use native coordinate precision.");
+  const x = halfPCBUnit(pad.size.x), y = halfPCBUnit(pad.size.y);
+  const dx = halfPCBUnit(pad.trapezoidDelta?.x ?? 0), dy = halfPCBUnit(pad.trapezoidDelta?.y ?? 0);
+  if (!(x > 0 && y > 0 && Math.abs(dx) / y + Math.abs(dy) / x < 1))
+    fail2("The trapezoid pad delta must retain a convex four-corner shape.");
+}
+function readPCBPadTrapezoidDelta(record, fail2) {
+  const records2 = children(record, "rect_delta");
+  if (!records2.length) return;
+  const delta = records2[0].slice(1);
+  if (records2.length !== 1 || delta.length !== 2 || !delta.every(
+    (item) => typeof item === "string" && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(item)
+  ))
+    fail2("Invalid native pad rect_delta.");
+  const [x, y] = delta.map(Number);
+  if (![x, y].every(isNativePadDelta))
+    fail2("The native pad rect_delta must use native coordinate precision.");
+  return { x, y };
 }
 
 // lib/pcb-models.ts
@@ -5989,39 +6211,138 @@ function footprintModels(root) {
   });
 }
 
-// lib/pcb-collision.ts
-var squaredDistance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
-function pointSegmentDistance(p, a, b) {
-  const length = squaredDistance(a, b);
-  const t = length ? Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length)) : 0;
-  const x = a.x + t * (b.x - a.x), y = a.y + t * (b.y - a.y);
-  return (p.x - x) ** 2 + (p.y - y) ** 2;
-}
-function segmentDistance(a, b, c, d) {
-  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
-  if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return 0;
-  return Math.min(
-    pointSegmentDistance(a, c, d),
-    pointSegmentDistance(b, c, d),
-    pointSegmentDistance(c, a, b),
-    pointSegmentDistance(d, a, b)
+// lib/pcb-layer-stack.ts
+var innerLayerIndices = [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+];
+var pcbCopperLayers = [
+  "F.Cu",
+  ...innerLayerIndices.map((index) => `In${index}.Cu`),
+  "B.Cu"
+];
+var userLayerIndices = [
+  ...innerLayerIndices,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45
+];
+var pcbUserLayers = userLayerIndices.map((index) => `User.${index}`);
+var pcbBoardLayers = [
+  ...pcbCopperLayers,
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.Adhes",
+  "B.Adhes",
+  "Dwgs.User",
+  "Cmts.User",
+  "Eco1.User",
+  "Eco2.User",
+  "Margin",
+  ...pcbUserLayers
+];
+var pcbCopperStacks = Array.from(
+  { length: pcbCopperLayers.length / 2 },
+  (_, index) => [
+    "F.Cu",
+    ...pcbCopperLayers.slice(1, index * 2 + 1),
+    "B.Cu"
+  ]
+);
+
+// lib/pcb-native-via.ts
+function pcbViaOpeningDiameter(via) {
+  return Math.max(
+    via.drill,
+    via.backdrills?.secondary?.diameter ?? 0,
+    via.backdrills?.tertiary?.diameter ?? 0
   );
 }
-function insideRing(p, ring, spend = () => {
-}) {
-  let result = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    spend();
-    const a = ring[i], b = ring[j];
-    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
-      result = !result;
-  }
-  return result;
+
+// lib/pcb-padstack.ts
+function stackLayer(layer) {
+  return layer.startsWith("In") && layer.endsWith(".Cu") ? "inner" : layer.startsWith("B.") ? "back" : void 0;
 }
-var insidePolygon = (p, polygon, spend) => insideRing(p, polygon.outer, spend) && !polygon.holes.some((hole) => insideRing(p, hole, spend));
-var polygonEdges = (polygon) => [polygon.outer, ...polygon.holes].flatMap(
-  (ring) => ring.map((p, i) => [p, ring[(i + 1) % ring.length]])
-);
+function pcbPadStackShapeOnLayer(pad, layer) {
+  if (!pad.padstack) return;
+  const key = stackLayer(layer);
+  const copperLayer = layer.endsWith(".Cu") ? layer : layer.startsWith("B.") ? "B.Cu" : layer.startsWith("F.") ? "F.Cu" : void 0;
+  return "mode" in pad.padstack ? pad.padstack.layers.find(({ layer: layer2 }) => layer2 === copperLayer) ?? pad.padstack.layers.find(({ layer: layer2 }) => layer2 === "F.Cu") : key && pad.padstack[key];
+}
+function pcbPadWithStackShape(pad, geometry) {
+  const x = geometry.offset?.x ?? 0;
+  const y = geometry.offset?.y ?? 0;
+  const dx = x + (pad.drillOffset?.x ?? 0);
+  const dy = y + (pad.drillOffset?.y ?? 0);
+  const angle2 = -pad.rotation * Math.PI / 180;
+  return {
+    ...pad,
+    shape: geometry.shape,
+    size: geometry.size,
+    ...geometry.zoneConnect === void 0 ? {} : { zoneConnect: geometry.zoneConnect },
+    x: pad.x + dx * Math.cos(angle2) - dy * Math.sin(angle2),
+    y: pad.y + dx * Math.sin(angle2) + dy * Math.cos(angle2),
+    drillOffset: geometry.offset ? { x: -x, y: -y } : void 0,
+    padstack: void 0,
+    roundrectRatio: void 0,
+    trapezoidDelta: void 0,
+    chamferRatio: void 0,
+    chamfer: void 0
+  };
+}
+function pcbPadOnLayer(pad, layer) {
+  const geometry = layer && pcbPadStackShapeOnLayer(pad, layer);
+  return geometry ? pcbPadWithStackShape(pad, geometry) : pad;
+}
 
 // lib/pcb-drill.ts
 function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
@@ -6036,38 +6357,42 @@ function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
 }
 function readPadDrill(node, fail2 = (message) => {
   throw new Error(message);
-}) {
+}, surfaceMount = false) {
   if (!node) return {};
   const oval = val(node) === "oval";
   const offset = child(node, "offset");
-  const dimensions = oval ? 4 : 2;
+  const dimensions = node.slice(1, offset ? -1 : void 0);
+  const validDimensions = surfaceMount ? dimensions.length === 0 && offset : oval ? dimensions.length === 3 : dimensions.length === 1 || dimensions.length === 2;
   const offsetValue = (n, i) => {
     const raw = val(n, i), value = Number(raw);
     if (!raw || !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9)
       fail2("Pad drill needs finite dimensions at 0.000001 mm precision.");
     return value;
   };
-  if (node.length !== dimensions + Number(!!offset) || node.slice(1, dimensions).some(Array.isArray) || offset && (node[dimensions] !== offset || offset.length !== 3 || offset.slice(1).some(Array.isArray)))
+  if (!validDimensions || dimensions.some(Array.isArray) || offset && (node.at(-1) !== offset || offset.length !== 3 || offset.slice(1).some(Array.isArray)))
     fail2("Use a round or oval drill with at most one XY offset.");
-  const x = offsetValue(node, oval ? 2 : 1);
-  const y = oval ? offsetValue(node, 3) : x;
-  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
-    fail2("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
   const drillOffset = offset && {
     x: -offsetValue(offset, 1) || 0,
     y: -offsetValue(offset, 2) || 0
   };
+  if (surfaceMount) return { drillOffset };
+  const x = offsetValue(node, oval ? 2 : 1);
+  const y = dimensions.length > 1 ? offsetValue(node, dimensions.length) : x;
+  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
+    fail2("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
   return {
-    drill: Math.min(x, y),
+    drill: oval ? Math.min(x, y) : x,
     ...oval ? { drillSlot: { length: Math.max(x, y), axis: x > y ? "x" : "y" } } : {},
+    ...!oval && dimensions.length === 2 ? { nativeRoundDrillY: y } : {},
     ...drillOffset ? { drillOffset } : {}
   };
 }
 function padDrillClearance(pad) {
   const [start, end] = localPadDrillLine(pad);
   const drillRadius = pad.drill / 2;
-  if (pad.outline) {
-    const land = { outer: pad.outline, holes: [] };
+  const outline = pad.shape === "trapezoid" ? pcbPadTrapezoid(pad) : pad.outline;
+  if (outline) {
+    const land = { outer: outline, holes: [] };
     if (!insidePolygon(start, land) || !insidePolygon(end, land)) return -drillRadius;
     return Math.sqrt(
       Math.min(...polygonEdges(land).map(([a, b]) => segmentDistance(start, end, a, b)))
@@ -6096,6 +6421,104 @@ var import_clipper_lib = __toESM(require_clipper(), 1);
 
 // lib/pcb-custom-pad-limits.ts
 var customPadVertexLimit = 128;
+
+// lib/pcb-native-custom-pad.ts
+var maxPrimitives = 64;
+var maxPolygonVertices = 512;
+function nativeCustomPadPoint(node, reject) {
+  if (node?.length !== 3) return reject("Invalid native custom pad point.");
+  return { x: nativeCoordinate(node[1], reject), y: nativeCoordinate(node[2], reject) };
+}
+function nativeCoordinate(value, reject) {
+  if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value))
+    return reject("Invalid native custom pad coordinate or width.");
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.abs(n) > 1e5 || Math.abs(n * 1e6 - Math.round(n * 1e6)) > 1e-4)
+    return reject("Native custom pad geometry must use bounded nanometre coordinates.");
+  return n;
+}
+function nativeNumberBox(primitive, reject) {
+  if (primitive.length !== 4 || children(primitive, "start").length !== 1 || children(primitive, "end").length !== 1 || child(primitive, "fill")?.length !== 2 || val(child(primitive, "fill")) !== "no")
+    return reject("Invalid native pad label box.");
+  const start = nativeCustomPadPoint(child(primitive, "start"), reject);
+  const end = nativeCustomPadPoint(child(primitive, "end"), reject);
+  const size = { x: Math.abs(end.x - start.x), y: Math.abs(end.y - start.y) };
+  if (!size.x || !size.y) return reject("Degenerate native pad label box.");
+  return { size, center: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } };
+}
+function nativeCustomPadShapes(record, reject) {
+  if (!["outline", "convexhull"].includes(record.clearance) || record.primitives.length > maxPrimitives)
+    return reject("Unsupported native custom pad clearance or primitive count.");
+  const number = (value) => nativeCoordinate(value, reject);
+  const point2 = (node) => nativeCustomPadPoint(node, reject);
+  const copper = record.primitives.filter((primitive) => {
+    if (primitive[0] !== "gr_bbox") return true;
+    nativeNumberBox(primitive, reject);
+    return false;
+  });
+  return copper.map((primitive) => {
+    const kind = primitive[0];
+    const keys2 = kind === "gr_line" || kind === "gr_rect" ? ["start", "end"] : kind === "gr_arc" ? ["start", "mid", "end"] : kind === "gr_circle" ? ["center", "end"] : kind === "gr_poly" ? ["pts"] : reject(`Unsupported native custom pad primitive ${kind}.`);
+    const fillable = kind === "gr_poly" || kind === "gr_circle" || kind === "gr_rect";
+    const allowed = /* @__PURE__ */ new Set([...keys2, "width", ...fillable ? ["fill"] : []]);
+    const seen = /* @__PURE__ */ new Set();
+    for (const field of primitive.slice(1)) {
+      if (!Array.isArray(field) || typeof field[0] !== "string" || !allowed.has(field[0]) || seen.has(field[0]))
+        return reject("Invalid or repeated native custom pad primitive field.");
+      seen.add(field[0]);
+    }
+    const widthNode = child(primitive, "width");
+    const fillNode = child(primitive, "fill");
+    if (widthNode?.length !== 2 || fillNode && (fillNode.length !== 2 || !["yes", "no"].includes(val(fillNode))))
+      return reject("Invalid native custom pad stroke or fill.");
+    const width = number(widthNode[1]);
+    const fill = val(fillNode) === "yes";
+    if (width < 0 || width > 1e3 || !width && !fill)
+      return reject("Native custom pad strokes need positive width or a solid fill.");
+    if (kind === "gr_poly") {
+      const field = child(primitive, "pts");
+      const coords = field ? children(field, "xy") : [];
+      if (coords.length < 3 || coords.length > maxPolygonVertices || coords.length !== field.length - 1)
+        return reject("Native custom pad polygon exceeds the supported vertex range.");
+      const points = coords.map(point2);
+      if (new Set(points.map(({ x, y }) => `${x},${y}`)).size < 3)
+        return reject("Degenerate native custom pad polygon.");
+      return {
+        kind: "polygon",
+        width,
+        fill,
+        start: points[0],
+        end: points.at(-1),
+        points: points.slice(1, -1)
+      };
+    }
+    const start = point2(child(primitive, kind === "gr_circle" ? "center" : "start"));
+    const end = point2(child(primitive, "end"));
+    if (kind === "gr_rect") {
+      if (start.x === end.x || start.y === end.y)
+        return reject("Degenerate native custom pad rectangle.");
+      return {
+        kind: "polygon",
+        width,
+        fill,
+        start,
+        end: { x: start.x, y: end.y },
+        points: [{ x: end.x, y: start.y }, end]
+      };
+    }
+    if (kind === "gr_arc") {
+      const arc = { kind: "arc", width, start, end, mid: point2(child(primitive, "mid")) };
+      if (!pcbArc(arc)) return reject("Degenerate native custom pad arc.");
+      return arc;
+    }
+    if (kind === "gr_circle") {
+      if (start.x === end.x && start.y === end.y)
+        return reject("Degenerate native custom pad circle.");
+      return { kind: "circle", width, fill, start, end };
+    }
+    return { width, start, end };
+  });
+}
 
 // lib/pcb-custom-pad.ts
 var nmPerMm = 1e6;
@@ -6206,7 +6629,32 @@ function entersAnchor(a, b, half) {
   }
   return start < end;
 }
-function padBoundPoints({ size, outline }) {
+function padBoundPoints(pad) {
+  const { size, outline, nativeCustomPad } = pad;
+  if (pad.shape === "trapezoid") return pcbPadTrapezoid(pad);
+  if (nativeCustomPad) {
+    const shapes = nativeCustomPadShapes(nativeCustomPad, (message) => {
+      throw new Error(message);
+    });
+    const points = [
+      { x: -size.x / 2, y: -size.y / 2 },
+      { x: size.x / 2, y: size.y / 2 },
+      ...shapes.flatMap(
+        (shape) => pcbGraphicPoints({ ...shape, id: "", layer: "F.Cu" }).flatMap(({ x, y }) => [
+          { x: x - shape.width / 2, y: y - shape.width / 2 },
+          { x: x + shape.width / 2, y: y + shape.width / 2 }
+        ])
+      )
+    ];
+    const minX = Math.min(...points.map(({ x }) => x)), maxX = Math.max(...points.map(({ x }) => x));
+    const minY = Math.min(...points.map(({ y }) => y)), maxY = Math.max(...points.map(({ y }) => y));
+    return [
+      { x: minX, y: minY },
+      { x: minX, y: maxY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY }
+    ];
+  }
   return outline ?? [
     { x: -size.x / 2, y: -size.y / 2 },
     { x: size.x / 2, y: -size.y / 2 },
@@ -6220,11 +6668,18 @@ function validateCustomPad({
   size,
   outline,
   customAnchor,
-  drillOffset
+  drillOffset,
+  nativeCustomPad
 }, reject) {
   if (shape !== "custom") {
-    if (outline !== void 0 || customAnchor !== void 0)
+    if (outline !== void 0 || customAnchor !== void 0 || nativeCustomPad !== void 0)
       reject("Custom pad fields require a custom pad.");
+    return;
+  }
+  if (nativeCustomPad) {
+    if (outline || type !== "smd" && type !== "thru_hole" || ![size.x, size.y].every((dimension) => Number.isFinite(dimension) && dimension > 0))
+      reject("Invalid retained native custom pad.");
+    nativeCustomPadShapes(nativeCustomPad, reject);
     return;
   }
   if (type !== "smd" && type !== "thru_hole" || drillOffset)
@@ -6263,24 +6718,6 @@ function validateCustomPad({
     reject("A custom pad polygon must fully enclose its rectangular anchor.");
 }
 
-// lib/pcb-text.ts
-function footprintTextPlacement(node, fail2) {
-  const at = child(node, "at");
-  const inPosition = at?.at(-1) === "unlocked";
-  const flags = children(node, "unlocked");
-  const bare = node.filter((item) => item === "unlocked").length;
-  const [flag] = flags;
-  if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
-    fail2("Invalid footprint text orientation flag.");
-  return {
-    at: inPosition ? at.slice(0, -1) : at,
-    unlocked: inPosition || bare === 1 || val(flag) === "yes",
-    flag,
-    bare: bare === 1,
-    inPosition
-  };
-}
-
 // lib/pcb-pad-role.ts
 function isApertureLayer(layer) {
   return layer === "F.Paste" || layer === "B.Paste" || layer === "F.Mask" || layer === "B.Mask";
@@ -6295,13 +6732,17 @@ function padApertureLayers(pad) {
 function padHasElectricalPin(pad) {
   return pad.type !== "np_thru_hole" && !padApertureLayers(pad);
 }
-function readPadHeatsink(node, fail2) {
+function readPCBPadFabricationProperty(node, fail2) {
   const properties = children(node, "property");
   if (!properties.length) return {};
   const [property] = properties;
-  if (properties.length !== 1 || property.length !== 2 || property[1] !== "pad_prop_heatsink")
+  const kind = property[1];
+  if (properties.length !== 1 || property.length !== 2)
     fail2("Unsupported pad fabrication property.");
-  return { heatsink: true };
+  if (kind === "pad_prop_heatsink") return { heatsink: true };
+  if (kind === "pad_prop_bga" || kind === "pad_prop_mechanical" || kind === "pad_prop_pressfit" || kind === "pad_prop_fiducial_glob" || kind === "pad_prop_fiducial_loc" || kind === "pad_prop_castellated" || kind === "pad_prop_testpoint")
+    return { fabricationProperty: kind };
+  return fail2("Unsupported pad fabrication property.");
 }
 
 // lib/pcb-layout.ts
@@ -6362,6 +6803,7 @@ function flipPCBFootprint(footprint) {
       ...mirror(p),
       rotation: angle(-p.rotation),
       ...p.outline ? { outline: p.outline.map(mirror) } : {},
+      ...p.trapezoidDelta ? { trapezoidDelta: mirror(p.trapezoidDelta) } : {},
       ...p.drillOffset ? { drillOffset: mirror(p.drillOffset) } : {},
       ...p.layers ? {
         layers: p.layers.map(
@@ -6383,7 +6825,7 @@ function flipPCBFootprint(footprint) {
       referencePoints: footprint.referencePoints.map((p) => ({
         ...p,
         ...mirror(p),
-        layer: p.layer === "F.Fab" ? "B.Fab" : "F.Fab"
+        layer: p.layer.startsWith("F.") ? p.layer.replace(/^F\./, "B.") : p.layer.replace(/^B\./, "F.")
       }))
     } : {},
     ...footprint.zones ? {
@@ -6453,7 +6895,7 @@ function sourceFootprintText(node, graphicLayers) {
     fail("The text effects contain unsupported flags.");
   const font = child(effects, "font");
   if (!font) fail("The footprint text has no font geometry.");
-  allowedChildren(font, ["size", "thickness", "bold", "italic"], "The text font");
+  allowedChildren(font, ["size", "thickness", "line_spacing", "bold", "italic"], "The text font");
   if (font.slice(1).some((item) => !Array.isArray(item) && item !== "bold" && item !== "italic"))
     fail("The footprint text uses an unsupported font.");
   tuple(child(font, "size"), 2, 2, "Text size");
@@ -6484,6 +6926,7 @@ function sourceFootprintText(node, graphicLayers) {
       rotation: angle(sourceNumber(at, 3, "Text rotation", true)),
       size,
       thickness,
+      ...readPCBTextLineSpacing(font, fail),
       ...justify ? { justify } : {},
       ...hidden ? { hidden: true } : {},
       ...bold ? { bold: true } : {},
@@ -6577,6 +7020,7 @@ function readLibraryFootprint(detail) {
           "tstamp",
           "remove_unused_layers",
           "roundrect_rratio",
+          "rect_delta",
           "chamfer_ratio",
           "chamfer",
           "options",
@@ -6593,23 +7037,11 @@ function readLibraryFootprint(detail) {
       const type = val(node, 2), shape = val(node, 3), number = val(node);
       if (type !== "smd" && type !== "thru_hole" && type !== "np_thru_hole")
         fail(`Pad type ${type} is not supported.`);
-      if (!["rect", "circle", "oval", "roundrect", "custom"].includes(shape))
+      if (!["rect", "circle", "oval", "roundrect", "trapezoid", "custom"].includes(shape))
         fail(`Pad shape ${shape} is not supported.`);
       const customPad = readCustomPad(node, fail);
       const { outline } = customPad;
-      const ratioNode = child(node, "roundrect_rratio");
-      if (shape === "roundrect" !== Boolean(ratioNode))
-        fail(
-          "Rounded rectangular pads require an explicit corner ratio; other pad shapes cannot use it."
-        );
-      let roundrectRatio;
-      if (ratioNode) {
-        tuple(ratioNode, 1, 1, "Pad corner ratio");
-        const rawRatio = val(ratioNode);
-        roundrectRatio = Number(rawRatio);
-        if (!rawRatio || !Number.isFinite(roundrectRatio) || roundrectRatio < 0 || roundrectRatio > 0.5)
-          fail("Pad corner ratio must be between 0 and 0.5.");
-      }
+      const roundrectRatio = readPCBPadRoundRectRatio(node, fail);
       const chamferNode = child(node, "chamfer");
       const chamferRatioNode = child(node, "chamfer_ratio");
       let chamfer;
@@ -6692,11 +7124,13 @@ function readLibraryFootprint(detail) {
       const remove = child(node, "remove_unused_layers");
       if (remove && val(remove) !== "no")
         fail("Pads that remove unused copper layers are not supported.");
-      const drill = readPadDrill(child(node, "drill"), fail);
+      const drill = readPadDrill(child(node, "drill"), fail, type === "smd");
       if (!!drill.drill !== (type !== "smd")) fail("Pad drill does not match its type.");
       if (drill.drill !== void 0 && drill.drill < 1e-4)
         fail("Pad drill must be at least 0.0001 mm.");
       const padShape = shape;
+      const trapezoidDelta = readPCBPadTrapezoidDelta(node, fail);
+      validatePCBPadTrapezoid({ shape: padShape, size, trapezoidDelta }, fail);
       validateCustomPad(
         { shape: padShape, type, size, ...customPad, drillOffset: drill.drillOffset },
         fail
@@ -6705,6 +7139,7 @@ function readLibraryFootprint(detail) {
         ...drill,
         size,
         shape: padShape,
+        trapezoidDelta,
         roundrectRatio,
         chamferRatio,
         chamfer,
@@ -6730,12 +7165,13 @@ function readLibraryFootprint(detail) {
         rotation,
         type,
         shape: padShape,
+        ...trapezoidDelta ? { trapezoidDelta } : {},
         ...retainedLayers ? { layers: retainedLayers } : {},
         ...roundrectRatio === void 0 ? {} : { roundrectRatio },
         ...chamfer ? { chamfer, chamferRatio } : {},
         ...customPad,
         ...attributes,
-        ...readPadHeatsink(node, fail),
+        ...readPCBPadFabricationProperty(node, fail),
         size,
         ...drill,
         netId: null
@@ -7187,25 +7623,37 @@ function pcbBounds(board) {
   const add = (p, radius = 0) => points.push({ x: p.x - radius, y: p.y - radius }, { x: p.x + radius, y: p.y + radius });
   for (const f of board.footprints) {
     add(f);
-    for (const p of f.pads) {
-      const center = padPosition(f, p), radians = -padRotation(f, p) * Math.PI / 180;
-      for (const { x, y } of padBoundPoints(p))
-        add({
-          x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
-          y: center.y + x * Math.sin(radians) + y * Math.cos(radians)
-        });
+    for (const source of f.pads) {
+      const pads = source.padstack ? board.layers.map((layer) => pcbPadOnLayer(source, layer)) : [source];
+      for (const pad of pads) {
+        const center = padPosition(f, pad);
+        const radians = -padRotation(f, pad) * Math.PI / 180;
+        for (const { x, y } of padBoundPoints(pad))
+          add({
+            x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
+            y: center.y + x * Math.sin(radians) + y * Math.cos(radians)
+          });
+      }
     }
     for (const g of f.graphics) {
-      for (const p of pcbGraphicPoints(g)) add(footprintPoint(f, p), g.width / 2);
+      if (g.kind === "curve") {
+        const world = transformPCBGraphic(g, (p) => footprintPoint(f, p));
+        for (const p of pcbGraphicPoints(world)) add(p, g.width / 2);
+      } else {
+        for (const p of pcbGraphicPoints(g)) add(footprintPoint(f, p), g.width / 2);
+      }
+      for (const point2 of f.referencePoints ?? []) add(footprintPoint(f, point2), point2.size / 2);
     }
   }
   for (const item of board.tracks) {
     add(item.start, item.width / 2);
     add(item.end, item.width / 2);
   }
+  for (const item of board.arcTracks ?? [])
+    for (const p of pcbArcBoundsPoints(item)) add(p, item.width / 2);
   for (const g of board.graphics) for (const p of pcbGraphicPoints(g)) add(p, g.width / 2);
-  for (const v of board.vias) add(v, v.diameter / 2);
-  for (const z of board.zones) for (const p of z.outline) add(p);
+  for (const v of board.vias) add(v, Math.max(v.diameter, pcbViaOpeningDiameter(v)) / 2);
+  for (const zone of board.zones) for (const p of pcbZoneOutlineBoundsPoints(zone)) add(p);
   if (!points.length) return { minX: 0, minY: 0, maxX: 80, maxY: 60 };
   return points.reduce(
     (b, p) => ({

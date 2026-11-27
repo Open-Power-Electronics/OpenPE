@@ -9,6 +9,8 @@ import {
 } from './pcb-collision';
 import { customPadVertexLimit } from './pcb-custom-pad-limits';
 import { child, children, val, type SExpr } from './sexpr';
+import { nativeCustomPadShapes, type NativeCustomPad } from './pcb-native-custom-pad';
+import { pcbGraphicPoints, pcbPadTrapezoid } from './pcb-geometry';
 
 type Reject = (message: string) => never;
 
@@ -140,6 +142,48 @@ export function readCustomPad(pad: SExpr, reject: Reject): Pick<Pad, 'outline' |
   return { outline, ...(anchorShape === 'circle' ? { customAnchor: 'circle' } : {}) };
 }
 
+/** Board import also retains checked KiCad primitives beyond the editable polygon subset. */
+export function readBoardCustomPad(
+  pad: SExpr,
+  geometry: Pick<Pad, 'shape' | 'type' | 'size' | 'drillOffset'>,
+  reject: Reject,
+): Pick<Pad, 'outline' | 'customAnchor' | 'nativeCustomPad'> {
+  if (val(pad, 3) !== 'custom') return readCustomPad(pad, reject);
+  const options = children(pad, 'options');
+  const primitives = children(pad, 'primitives');
+  const option = options[0];
+  const anchor = child(option ?? [], 'anchor');
+  const clearanceField = child(option ?? [], 'clearance');
+  const clearance = val(clearanceField);
+  const circular = val(anchor) === 'circle';
+  if (
+    options.length !== 1 ||
+    option.length !== 3 ||
+    anchor?.length !== 2 ||
+    (!circular && val(anchor) !== 'rect') ||
+    clearanceField?.length !== 2 ||
+    (clearance !== 'outline' && clearance !== 'convexhull') ||
+    primitives.length !== 1
+  )
+    return reject('Invalid native custom pad options.');
+  const records = primitives[0]
+    .slice(1)
+    .map((record) =>
+      Array.isArray(record) ? record : reject('Invalid native custom pad primitive.'),
+    );
+  const nativeCustomPad: NativeCustomPad = { clearance, primitives: records };
+  if (!records.length) return { nativeCustomPad, ...(circular ? { customAnchor: 'circle' } : {}) };
+  try {
+    const simple = readCustomPad(pad, reject);
+    validateCustomPad({ ...geometry, ...simple }, reject);
+    return simple;
+  } catch {
+    // The wider native representation receives its own strict grammar below.
+  }
+  nativeCustomPadShapes(nativeCustomPad, reject);
+  return { nativeCustomPad, ...(circular ? { customAnchor: 'circle' } : {}) };
+}
+
 /** Intersect the segment parameter with the rectangle's open interior. */
 function entersAnchor(a: Point, b: Point, half: Point): boolean {
   let start = 0;
@@ -158,7 +202,36 @@ function entersAnchor(a: Point, b: Point, half: Point): boolean {
   return start < end;
 }
 
-export function padBoundPoints({ size, outline }: Pick<Pad, 'size' | 'outline'>): Point[] {
+type PadBounds = Pick<Pad, 'size' | 'outline' | 'nativeCustomPad' | 'shape' | 'trapezoidDelta'>;
+
+export function padBoundPoints(pad: PadBounds): Point[] {
+  const { size, outline, nativeCustomPad } = pad;
+  if (pad.shape === 'trapezoid') return pcbPadTrapezoid(pad);
+  if (nativeCustomPad) {
+    const shapes = nativeCustomPadShapes(nativeCustomPad, (message) => {
+      throw new Error(message);
+    });
+    const points = [
+      { x: -size.x / 2, y: -size.y / 2 },
+      { x: size.x / 2, y: size.y / 2 },
+      ...shapes.flatMap((shape) =>
+        pcbGraphicPoints({ ...shape, id: '', layer: 'F.Cu' }).flatMap(({ x, y }) => [
+          { x: x - shape.width / 2, y: y - shape.width / 2 },
+          { x: x + shape.width / 2, y: y + shape.width / 2 },
+        ]),
+      ),
+    ];
+    const minX = Math.min(...points.map(({ x }) => x)),
+      maxX = Math.max(...points.map(({ x }) => x));
+    const minY = Math.min(...points.map(({ y }) => y)),
+      maxY = Math.max(...points.map(({ y }) => y));
+    return [
+      { x: minX, y: minY },
+      { x: minX, y: maxY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY },
+    ];
+  }
   return (
     outline ?? [
       { x: -size.x / 2, y: -size.y / 2 },
@@ -169,13 +242,18 @@ export function padBoundPoints({ size, outline }: Pick<Pad, 'size' | 'outline'>)
   );
 }
 
-export function padReach({ size, outline }: Pick<Pad, 'size' | 'outline'>): number {
+export function padReach(pad: PadBounds): number {
+  const { size, outline, nativeCustomPad } = pad;
+  if (nativeCustomPad || pad.shape === 'trapezoid')
+    return Math.max(...padBoundPoints(pad).map(({ x, y }) => Math.hypot(x, y)));
   return outline
     ? Math.max(...outline.map(({ x, y }) => Math.hypot(x, y)))
     : Math.hypot(size.x, size.y) / 2;
 }
 
-export function padExtent({ size, outline }: Pick<Pad, 'size' | 'outline'>): Point {
+export function padExtent(pad: Omit<PadBounds, 'nativeCustomPad'>): Point {
+  const { size } = pad;
+  const outline = pad.shape === 'trapezoid' ? pcbPadTrapezoid(pad) : pad.outline;
   if (!outline) return size;
   const x = outline.map((point) => point.x);
   const y = outline.map((point) => point.y);
@@ -190,12 +268,26 @@ export function validateCustomPad(
     outline,
     customAnchor,
     drillOffset,
-  }: Pick<Pad, 'shape' | 'type' | 'size' | 'outline' | 'customAnchor' | 'drillOffset'>,
+    nativeCustomPad,
+  }: Pick<
+    Pad,
+    'shape' | 'type' | 'size' | 'outline' | 'customAnchor' | 'drillOffset' | 'nativeCustomPad'
+  >,
   reject: Reject,
 ) {
   if (shape !== 'custom') {
-    if (outline !== undefined || customAnchor !== undefined)
+    if (outline !== undefined || customAnchor !== undefined || nativeCustomPad !== undefined)
       reject('Custom pad fields require a custom pad.');
+    return;
+  }
+  if (nativeCustomPad) {
+    if (
+      outline ||
+      (type !== 'smd' && type !== 'thru_hole') ||
+      ![size.x, size.y].every((dimension) => Number.isFinite(dimension) && dimension > 0)
+    )
+      reject('Invalid retained native custom pad.');
+    nativeCustomPadShapes(nativeCustomPad, reject);
     return;
   }
   if ((type !== 'smd' && type !== 'thru_hole') || drillOffset)

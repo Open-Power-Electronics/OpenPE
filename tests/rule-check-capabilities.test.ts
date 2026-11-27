@@ -110,6 +110,53 @@ test('human and Agent rule queries return the same read-only report for their ex
   }
 });
 
+test('an admitted board with unsupported copper returns a DRC report and runs independent checks', async () => {
+  const name = 'Press fit.kicad_pcb';
+  const source = `(kicad_pcb (version 20260206) (generator pcbnew)
+    (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+    (gr_rect (start 0 0) (end 20 20) (stroke (width 0.05) (type default)) (fill no) (layer "Edge.Cuts"))
+    (footprint "Connector" (layer "F.Cu") (at 10 10)
+      (pad "1" thru_hole circle (at 0 0) (size 2 2) (drill 1)
+        (layers "*.Cu" "*.Mask") (property pad_prop_pressfit)))
+    (segment (start 2 2) (end 4 2) (width 0.1) (layer "F.Cu") (net "Signal")))`;
+  const core = new ProjectCore(projectFromNativeFiles({ entry: name, files: [{ name, source }] }));
+  const snapshot = core.getSnapshot();
+  const board = snapshot.project!.pcb!;
+  const host = createCapabilityHost({ revision: () => String(core.getSnapshot().revision) });
+  const dispose = registerProjectCapabilities(host, core);
+  try {
+    const report = (await host.query('layout.drc', { boardId: board.id })) as RuleCheckResult;
+    assert.equal(report.complete, false);
+    assert.equal(report.truncated, false);
+    assert.ok(report.checkedRules.includes('pcb.outline'));
+    assert.ok(report.checkedRules.includes('pcb.courtyard-overlap'));
+    assert.ok(!report.checkedRules.includes('pcb.short'));
+    assert.ok(!report.checkedRules.includes('pcb.copper-edge'));
+    assert.ok(!report.checkedRules.includes('pcb.unrouted'));
+    assert.match(
+      report.issues.find(({ ruleId }) => ruleId === 'pcb.coverage')?.message ?? '',
+      /pad machining or press-fit/,
+    );
+    assert.deepEqual(report.issues.find(({ ruleId }) => ruleId === 'pcb.track-width')?.objectIds, [
+      board.tracks[0].id,
+    ]);
+    const outline = (await host.query('layout.drc', {
+      boardId: board.id,
+      settings: { scopes: ['edge'], severities: { 'pcb.copper-edge': 'ignore' } },
+    })) as RuleCheckResult;
+    assert.deepEqual(outline.checkedRules, ['pcb.outline']);
+    assert.deepEqual(outline.issues, []);
+    assert.equal(core.getSnapshot(), snapshot);
+    assert.equal(
+      core.getNativeFiles().files.find(({ name: file }) => file === name)?.source,
+      source,
+    );
+  } finally {
+    dispose();
+    host.dispose();
+  }
+});
+
 test('rule queries reject pending Source, closed documents, wrong targets and malformed thresholds', async () => {
   const core = fixture();
   const project = core.getSnapshot().project!;

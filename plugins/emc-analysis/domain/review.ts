@@ -1,7 +1,15 @@
 import { compileCapabilitySchema } from '../../../api/capability-schema';
 import type { Point } from '../../../lib/circuit';
-import type { BoardLine, CopperLayer, Footprint, Pad, PCB } from '../../../lib/pcb';
+import {
+  requireSupportedPCBCopper,
+  type BoardLine,
+  type CopperLayer,
+  type Footprint,
+  type Pad,
+  type PCB,
+} from '../../../lib/pcb';
 import { padPosition } from '../../../lib/pcb-layout';
+import { pcbCopperLayers } from '../../../lib/pcb-layer-stack';
 import { segmentDistance } from '../../../lib/pcb-collision';
 import {
   closedGraphicContours,
@@ -129,7 +137,7 @@ export const EMC_REVIEW_INPUT_SCHEMA = {
           netId: identity,
           role: { enum: ['fast', 'switching', 'sensitive', 'supply'] },
           referenceNetId: identity,
-          referenceLayer: { enum: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] },
+          referenceLayer: { enum: [...pcbCopperLayers] },
         },
       },
     },
@@ -473,6 +481,7 @@ function resolvedOutline(board: PCB, spend: WorkBudget): Polygon[] {
 /** Original, bounded geometric evidence against explicit user design intent.
  * Measurements describe geometry only; they never qualify emissions or a return path. */
 export function reviewEmcLayout(board: PCB, raw: unknown): EmcReviewResult {
+  requireSupportedPCBCopper(board, 'PCB EMC review');
   boundBoard(board);
   const input = currentInput(board, raw);
   const spend = workBudget(EMC_REVIEW_LIMITS.operations);

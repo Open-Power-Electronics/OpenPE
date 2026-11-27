@@ -103,12 +103,16 @@ import {
   resolvePCBGraphic,
   type PCB,
   type Footprint,
+  hasNativePCBPadPruning,
+  hasPCBTrackMask,
+  hasNativePCBPadMachining,
   type CopperLayer,
   type BoardLayer,
 } from '@/lib/pcb';
 import { padCopperLayers, type Airwire } from '@/lib/pcb-connectivity';
 import { createPCBRouter } from '@/lib/pcb-routing';
 import { createPCBViaValidator } from '@/lib/pcb-via-routing';
+import { pcbViaCopperLayers } from '@/lib/pcb-native-via';
 import { insidePolygon } from '@/lib/pcb-collision';
 import { createPCBRouteAnchorResolver, type PCBRouteAnchorResult } from '@/lib/pcb-route-anchor';
 import {
@@ -127,6 +131,11 @@ import {
   type PCBInactiveLayerMode,
 } from '@/lib/pcb-display';
 import { padReach } from '@/lib/pcb-custom-pad';
+import { pcbReferenceImages } from '@/lib/pcb-reference-image';
+import { pcbBarcodes } from '@/lib/pcb-barcode';
+import LayoutBarcode from './LayoutBarcode';
+import { pcbTableDrawings } from '@/lib/kicad-pcb';
+import PCBGraphic from './PCBGraphic';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
 import { useDrawingImageExport } from './useDrawingImageExport';
 import { preparePCBFillPreview } from './pcbFillPreview';
@@ -137,12 +146,15 @@ import {
   defaultCopperFillClearance,
   fillCopperZone,
   fillCopperZones,
+  pcbSavedZoneDisplayPath,
   polygonPath,
   worldZones,
   type Polygon,
 } from '@/lib/pcb-polygons';
 import {
   LayoutTrackDrawing,
+  LayoutArcTrackDrawing,
+  LayoutTrackMaskDrawing,
   LayoutViaDrawing,
   LayoutViaDrillDrawing,
   LayoutZoneFillDrawing,
@@ -501,6 +513,12 @@ function LayoutEditor({
     [visibleLayers, inactiveLayerMode, activeLayer],
   );
   const layers = inactiveLayerMode === 'Hide' ? selectionLayers : visibleLayers;
+  const referenceImages = useMemo(
+    () => pcbReferenceImages(pcb.referenceImages),
+    [pcb.referenceImages],
+  );
+  const nativeTables = useMemo(() => pcbTableDrawings(pcb.nativeTables), [pcb.nativeTables]);
+  const barcodes = useMemo(() => pcbBarcodes(pcb.barcodes), [pcb.barcodes]);
   const analysisProbing = Boolean(onAnalysisProbe || parasiticsProbe);
   const [appearanceTab, setAppearanceTab] = useState<LayoutAppearanceTab>('layers');
   const [visualizationExpanded, setVisualizationExpanded] = useState(true);
@@ -1242,19 +1260,42 @@ function LayoutEditor({
     [pcb, route?.legs, route?.netId, routeClearance],
   );
   const netNames = useMemo(() => new Map(pcb.nets.map((n) => [n.id, n.name])), [pcb.nets]);
+  const nativeZones = useMemo(() => worldZones(pcb), [pcb.footprints, pcb.zones]);
+  const exceedsFillAnalysis = useMemo(
+    () =>
+      nativeZones.reduce(
+        (total, zone) =>
+          total +
+          (zone.layer.endsWith('.Cu')
+            ? (zone.filledPolygons ?? []).reduce(
+                (count, polygon) => count + polygon.points.length,
+                0,
+              )
+            : 0),
+        0,
+      ) > 60000,
+    [nativeZones],
+  );
   const [emptyCopper] = useState(() => ({ fills: new Map<string, Polygon[]>(), error: '' }));
   const baselineCopper = useMemo(() => {
-    if (!layers.copper) return emptyCopper;
+    if (!layers.copper || exceedsFillAnalysis) return emptyCopper;
     try {
       const fills = presentationAnalysis.copper(pcb);
       return fills.size ? { fills, error: '' } : emptyCopper;
     } catch (e) {
       return { fills: new Map<string, Polygon[]>(), error: (e as Error).message };
     }
-  }, [pcb, layers.copper, emptyCopper]);
+  }, [pcb, layers.copper, emptyCopper, exceedsFillAnalysis]);
   const baselineCopperPaths = useMemo(
-    () => new Map([...baselineCopper.fills].map(([id, polygons]) => [id, polygonPath(polygons)])),
-    [baselineCopper.fills],
+    () =>
+      exceedsFillAnalysis
+        ? new Map(
+            nativeZones
+              .filter((zone) => zone.layer.endsWith('.Cu') && zone.filledPolygons?.length)
+              .map((zone) => [zone.id, pcbSavedZoneDisplayPath(zone)]),
+          )
+        : new Map([...baselineCopper.fills].map(([id, polygons]) => [id, polygonPath(polygons)])),
+    [baselineCopper.fills, exceedsFillAnalysis, nativeZones],
   );
   const copper = baselineCopper;
   const copperPaths = useMemo(
@@ -1264,7 +1305,17 @@ function LayoutEditor({
         : baselineCopperPaths,
     [backgroundFill.completed, baselineCopperPaths],
   );
-  const nativeZones = useMemo(() => worldZones(pcb), [pcb.footprints, pcb.zones]);
+  const technicalZoneDrawing = useMemo(
+    () =>
+      nativeZones
+        .filter(
+          (zone) =>
+            (zone.layer.endsWith('.Mask') || zone.layer === 'Edge.Cuts') &&
+            zone.filledPolygons?.length,
+        )
+        .map((zone) => ({ id: zone.id, layer: zone.layer, path: pcbSavedZoneDisplayPath(zone) })),
+    [nativeZones],
+  );
   const selectionZones = useMemo(
     () => new Map(nativeZones.map((zone) => [zone.id, zone])),
     [nativeZones],
@@ -1290,15 +1341,20 @@ function LayoutEditor({
       previous.every((layer, index) => layer === next[index])
       ? previous
       : next;
-  }, [pcb.layers, pcb.graphics, pcb.zones, pcb.footprints]);
+  }, [
+    pcb.layers,
+    pcb.graphics,
+    pcb.zones,
+    pcb.footprints,
+    pcb.referenceImages,
+    pcb.barcodes,
+    pcb.nativeTables,
+  ]);
   useLayoutEffect(() => {
     committedDisplayLayers.current = displayLayers;
   }, [displayLayers]);
   const physicalLayerOrder = useMemo(
-    () =>
-      pcbDisplayLayerPaintOrder(layers).filter(
-        (name) => !name.endsWith('.Cu') || copperLayers.includes(name as CopperLayer),
-      ),
+    () => pcbDisplayLayerPaintOrder(layers, copperLayers),
     [layers, copperLayers],
   );
   const paintLayerOrder = useMemo(
@@ -1915,10 +1971,7 @@ function LayoutEditor({
         points = [track.start, track.end];
         padding += track.width;
       } else if (via) {
-        if (
-          !(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] as const).some((layer) => selectionLayers[layer])
-        )
-          return false;
+        if (!copperLayers.some((layer) => selectionLayers[layer])) return false;
         target = { kind: 'via', id };
         points = [via];
         padding += via.diameter;
@@ -2515,7 +2568,7 @@ function LayoutEditor({
       padId: id,
     }));
     const uniqueObjects = selectPCBPoint(pcb, selectionLayers, filters, raw, margin, {
-      preparedFills: placed === pcb ? copper.fills : undefined,
+      preparedFills: placed === pcb && !exceedsFillAnalysis ? copper.fills : undefined,
       includeFills,
       includeRegionInteriors: tool === 'select',
       excludeOutlineInteriors,
@@ -2547,7 +2600,7 @@ function LayoutEditor({
       onAmbiguous,
       layerOrder: paintLayerOrder,
       filters,
-      preparedFills: placed === pcb ? copper.fills : undefined,
+      preparedFills: placed === pcb && !exceedsFillAnalysis ? copper.fills : undefined,
       includeRegionInteriors: tool === 'select',
       footprintTextValues,
     });
@@ -3775,7 +3828,7 @@ function LayoutEditor({
             filters,
             marquee.start,
             end,
-            placed === pcb ? copper.fills : undefined,
+            placed === pcb && !exceedsFillAnalysis ? copper.fills : undefined,
             footprintTextValues,
           )
         : [];
@@ -3838,7 +3891,7 @@ function LayoutEditor({
                 filters,
                 gesture.start,
                 gesture.end,
-                placed === pcb ? copper.fills : undefined,
+                placed === pcb && !exceedsFillAnalysis ? copper.fills : undefined,
                 footprintTextValues,
               ).map((item) => item.id)
             : [];
@@ -4326,6 +4379,7 @@ function LayoutEditor({
     selectionPaint,
     highlightNets,
     motionBoard.tracks,
+    motionBoard.arcTracks,
     motionBoard.zones,
     netNames,
   ];
@@ -4368,6 +4422,7 @@ function LayoutEditor({
   const viaInputs = [
     copperLayers,
     motionBoard.vias,
+    layer,
     layers,
     selectionPaint,
     highlightNets,
@@ -4381,6 +4436,7 @@ function LayoutEditor({
   const drillInputs = [
     drillFootprints,
     copperLayers,
+    layer,
     layers,
     selectionPaint,
     placement?.id,
@@ -4489,9 +4545,30 @@ function LayoutEditor({
               ),
             ),
         )}
+        {motionBoard.arcTracks
+          ?.filter((track) => track.layer === copperLayer)
+          .map((track) => (
+            <LayoutArcTrackDrawing
+              key={track.id}
+              track={track}
+              netName={netNames.get(track.netId)}
+              highlightNets={highlightNets}
+            />
+          ))}
       </g>
     ));
-    return new Map(drawings.map((drawing) => [drawing.key as BoardLayer, drawing]));
+    const result = new Map<BoardLayer, ReactNode>(
+      drawings.map((drawing) => [drawing.key as BoardLayer, drawing]),
+    );
+    for (const layer of ['F.Mask', 'B.Mask'] as const)
+      if (visibleLayer(layer))
+        result.set(
+          layer,
+          [...motionBoard.tracks, ...(motionBoard.arcTracks ?? [])]
+            .filter((track) => track.maskLayer === layer)
+            .map((track) => <LayoutTrackMaskDrawing key={track.id} track={track} />),
+        );
+    return result;
   }, copperInputs);
   const footprintDrawing = useMemo(() => {
     const drawings = new Map<BoardLayer, ReactNode[]>();
@@ -4530,20 +4607,27 @@ function LayoutEditor({
   const viaDrawing = useMemo(
     () => (
       <>
-        {copperLayers.some(visibleLayer) &&
-          motionBoard.vias.map((via) =>
-            retainVia(
-              {
-                key: via.id,
-                via,
-                netName: netNames.get(via.netId),
-                selection: selectionPaint,
-                highlightNets,
-                deferDrills: true,
-              },
-              ({ key, ...props }) => <LayoutViaDrawing key={key} {...props} />,
-            ),
-          )}
+        {motionBoard.vias.map((via) => {
+          const viaLayers = pcbViaCopperLayers(copperLayers, via);
+          const paintLayer =
+            viaLayers.find((candidate) => candidate === layer && visibleLayer(candidate)) ??
+            viaLayers.find(visibleLayer);
+          return paintLayer
+            ? retainVia(
+                {
+                  key: via.id,
+                  via,
+                  netName: netNames.get(via.netId),
+                  copperLayers: viaLayers,
+                  paintLayer,
+                  selection: selectionPaint,
+                  highlightNets,
+                  deferDrills: true,
+                },
+                ({ key, ...props }) => <LayoutViaDrawing key={key} {...props} />,
+              )
+            : null;
+        })}
       </>
     ),
     viaInputs,
@@ -4556,6 +4640,7 @@ function LayoutEditor({
             key: footprint.id,
             copperLayers: pcb.layers,
             footprint,
+            layer,
             layers,
             selection: selectionPaint,
             placement: footprint.id === placement?.id,
@@ -4573,13 +4658,14 @@ function LayoutEditor({
   );
   const viaDrillDrawing = useMemo(
     () =>
-      copperLayers.some(visibleLayer) &&
-      motionBoard.vias.map((via) =>
-        retainViaDrill(
-          { key: via.id, via, selection: selectionPaint, highlightNets },
-          ({ key, ...props }) => <LayoutViaDrillDrawing key={key} {...props} />,
+      motionBoard.vias
+        .filter((via) => pcbViaCopperLayers(copperLayers, via).some(visibleLayer))
+        .map((via) =>
+          retainViaDrill(
+            { key: via.id, via, selection: selectionPaint, highlightNets },
+            ({ key, ...props }) => <LayoutViaDrillDrawing key={key} {...props} />,
+          ),
         ),
-      ),
     viaInputs,
   );
   const graphicDrawing = useMemo(() => {
@@ -4815,6 +4901,7 @@ function LayoutEditor({
                 <LayoutFootprintDrills
                   copperLayers={pcb.layers}
                   footprint={footprint}
+                  layer={layer}
                   layers={layers}
                   selection={selectionPaint}
                   placement={false}
@@ -4892,6 +4979,23 @@ function LayoutEditor({
             {footprintDrawing.get(name)}
             {name === viaLayer && viaDrawing}
             {graphicDrawing.get(name)}
+            {barcodes
+              .filter((barcode) => barcode.layer === name)
+              .map((barcode) => (
+                <LayoutBarcode key={barcode.id} barcode={barcode} />
+              ))}
+            {technicalZoneDrawing
+              .filter((zone) => zone.layer === name)
+              .map(({ id, path }) => (
+                <path
+                  key={id}
+                  data-layout-mask-zone={name.endsWith('.Mask') ? id : undefined}
+                  data-layout-edge-zone={name === 'Edge.Cuts' ? id : undefined}
+                  d={path}
+                  fill={pcbLayerColor(name)}
+                  fillRule="evenodd"
+                />
+              ))}
             {captionDrawing.get(name)}
           </g>
         ))}
@@ -4906,6 +5010,8 @@ function LayoutEditor({
       footprintDrawing,
       viaDrawing,
       graphicDrawing,
+      barcodes,
+      technicalZoneDrawing,
       airwireDrawing,
       captionDrawing,
       activeLayer,
@@ -5239,7 +5345,7 @@ function LayoutEditor({
   );
   const propertiesActions = !inspectedPad && selection.length > 0 && (
     <>
-      {selectedZone && !selectedZone.keepout && (
+      {selectedZone && copperPour(selectedZone) && (
         <button
           type="button"
           className="tool-button property-fill-action"
@@ -5321,6 +5427,24 @@ function LayoutEditor({
               </div>
             )}
           </div>
+          {pcb && hasNativePCBPadPruning(pcb) && (
+            <div className="layout-sync-status" role="status">
+              Connection-dependent pads show the rings confirmed by native settings. KiCad resolves
+              additional rings through connectivity.
+            </div>
+          )}
+          {pcb && hasPCBTrackMask(pcb) && (
+            <div className="layout-sync-status" role="status">
+              Track mask openings show explicit local margins. KiCad resolves inherited margins and
+              project rules.
+            </div>
+          )}
+          {pcb && hasNativePCBPadMachining(pcb) && (
+            <div className="layout-sync-status" role="status">
+              Layout shows machining openings on their entry surfaces. KiCad resolves depth cuts and
+              press-fit fabrication.
+            </div>
+          )}
           {syncStatus?.pending && (
             <div className="layout-sync-status" role="status">
               Loading assigned footprints…
@@ -5445,6 +5569,24 @@ function LayoutEditor({
                   pointerEvents="none"
                 />
               )}
+              {referenceImages
+                .filter((image) => layers[image.layer])
+                .map(({ id, layer: imageLayer, href, x, y, width, height }) => (
+                  <image
+                    key={id}
+                    data-layout-reference-image={id}
+                    href={href}
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    opacity={
+                      inactiveLayerMode === 'Dim' && imageLayer !== activeLayer ? 0.25 : undefined
+                    }
+                    pointerEvents="none"
+                    aria-hidden="true"
+                  />
+                ))}
               {grid && (
                 <rect
                   data-layout-grid
@@ -5460,6 +5602,30 @@ function LayoutEditor({
                 {/* Body targets stay behind every footprint's visible artwork and pads. */}
                 {footprintBodyDrawing}
                 {detailDrawing}
+                {nativeTables
+                  .filter((table) => layers[table.layer])
+                  .map((table) => (
+                    <g
+                      key={table.id}
+                      data-layout-native-table={table.id}
+                      opacity={
+                        inactiveLayerMode === 'Dim' && table.layer !== activeLayer
+                          ? 0.25
+                          : undefined
+                      }
+                      pointerEvents="none"
+                      aria-hidden="true"
+                    >
+                      {table.graphics.map((graphic) => (
+                        <PCBGraphic
+                          key={graphic.id}
+                          graphic={graphic}
+                          color={layerColor(table.layer)}
+                          nativeRenderCache
+                        />
+                      ))}
+                    </g>
+                  ))}
                 {footprintMotionDrawing}
               </g>
               {suggestion && (
@@ -6079,8 +6245,15 @@ function LayoutEditor({
               </div>
             )}
             {copper.error && !error && (
-              <div className="layout-error" role="status">
+              <div className="layout-error" role="status" data-layout-copper-error>
                 {copper.error}
+              </div>
+            )}
+            {!!(pcb.arcTracks?.length || pcb.tuningPatterns?.length) && !error && !copper.error && (
+              <div className="layout-error" role="status">
+                Copper edits on boards with{' '}
+                {pcb.arcTracks?.length ? 'imported arc tracks' : 'native tuning patterns'} require
+                native Source.
               </div>
             )}
             <LayoutCameraScaleRender camera={camera}>

@@ -1,5 +1,9 @@
 import type { Circuit, Point } from './circuit';
 import type { BoardLine, PCB } from './pcb';
+import { requireSupportedPCBCopper } from './pcb';
+import { pcbPadCopperClearance } from './pcb-zone-settings';
+import { pcbBarcodes } from './pcb-barcode';
+import { child, val } from './sexpr';
 import {
   defaultPCBRuleSeverity,
   pcbDesignRuleScopes,
@@ -16,30 +20,49 @@ import {
   type PCBDesignRuleSources,
 } from './pcb-clearance-sources';
 import { footprintPoint, padDrillLine, padDrillPosition, padPosition } from './pcb-layout';
-import { borrowPCBPadCopperContour, borrowPCBPadOutline } from './pcb-pad-contour';
-import { transformPCBGraphic } from './pcb-geometry';
+import {
+  borrowPCBPadCopperContour,
+  borrowPCBPadOutline,
+  inspectPCBPadLand,
+} from './pcb-pad-contour';
+import { pcbZoneCircle, transformPCBGraphic } from './pcb-geometry';
 import { pcbSilkscreen } from './pcb-silkscreen';
+import { padSilkscreenLayers } from './pcb-pad-role';
 import { pcbStrokeText } from './pcb-stroke-text';
+import { pcbPadCopperSections, pcbViaLayerSections } from './pcb-padstack';
+import { resolvePCBPrunedCopper } from './pcb-pruned-copper';
+import { preparePCBNetTies } from './pcb-net-ties';
 import {
   borrowFilledCopperPolygons,
   circlePolygon,
   closedGraphicContours,
   graphicVertices,
   intersectPolygons,
+  nativeCustomPadCopperPolygons,
+  nativeCustomPadCopperTolerance,
+  pcbOutlineGraphics,
   offsetPolygons,
   polygonResolution,
   polygonsFromContours,
   pourKeepoutPolygons,
   prepareBoardOutline,
+  prepareBoardOutlineBoundary,
+  ruleAreaPolygon,
   worldZones,
   type Polygon,
 } from './pcb-polygons';
 import {
+  edgeBounds,
   insidePolygon,
+  makeBoundsIndex as makeIndex,
+  overlapsBounds,
   pointSegmentDistance,
   polygonEdges,
+  queryBoundsIndex,
   segmentDistance,
   squaredDistance,
+  type BoundsIndex,
+  type GeometryBounds as Bounds,
 } from './pcb-collision';
 
 export { defaultPCBDesignRules, type PCBDesignRuleConfig } from './design-rule-checks';
@@ -55,7 +78,9 @@ type Body = {
   edges: [Point, Point][];
   polygon?: Polygon;
   radius: number;
+  precision?: number;
   clearance?: number;
+  localClearance?: number;
   clearanceLabel?: string;
   at: Point;
   minX: number;
@@ -64,7 +89,6 @@ type Body = {
   maxY: number;
   disk?: { at: Point; outer: number; inner: number };
 };
-type Bounds = Pick<Body, 'minX' | 'minY' | 'maxX' | 'maxY'>;
 type Hole = Bounds & {
   id: string;
   at: Point;
@@ -72,12 +96,51 @@ type Hole = Bounds & {
   radius: number;
   netId: string | null;
   plated: boolean;
+  primaryRoundDrill?: 'mechanical' | 'laser';
+  layers: readonly PCB['layers'][number][];
 };
 type IndexedEdge = Bounds & { line: [Point, Point]; ring: number };
-type BoundsIndex<T> = Bounds & { items?: T[]; left?: BoundsIndex<T>; right?: BoundsIndex<T> };
+type OutlineStroke = Bounds & { line: [Point, Point] };
+type OutlineIndex = ReturnType<typeof prepareBoardOutlineBoundary>['index'];
 const epsilon = 0.00001;
+const curvedContourTolerance = 0.0005;
+const drillCoLocationTolerance = 0.0005;
 const maxIssues = 1000;
 const courtyardLayers = ['F.CrtYd', 'B.CrtYd'] as const;
+const independentPCBChecks = new Set<PCBDesignRuleId>([
+  'pcb.track-width',
+  'pcb.outline',
+  ...pcbDesignRuleScopes.courtyards,
+  ...pcbDesignRuleScopes.silkscreen,
+]);
+const curvedArtwork = (graphic: BoardLine) =>
+  graphic.kind === 'arc' ||
+  graphic.kind === 'circle' ||
+  graphic.kind === 'curve' ||
+  graphic.roundedRectRadius !== undefined ||
+  Boolean(graphic.polygonArcs);
+
+function silkOutlineStrokes(board: PCB, spend: (count: number) => void) {
+  const strokes: OutlineStroke[] = [];
+  let vertexCount = 0;
+  let precision = 0;
+  for (const graphic of pcbOutlineGraphics(board)) {
+    if (graphic.kind === 'text' || graphic.kind === 'dimension' || graphic.kind === 'point')
+      continue;
+    const points = graphicVertices(graphic, curvedContourTolerance);
+    vertexCount += points.length;
+    if (vertexCount > 20000)
+      throw new Error('Silkscreen edge strokes exceed the contour vertex limit.');
+    spend(points.length);
+    if (curvedArtwork(graphic)) precision = curvedContourTolerance;
+    if (graphic.kind === 'circle' || graphic.kind === 'polygon') points.push(points[0]);
+    for (let i = 1; i < points.length; i++) {
+      const line: [Point, Point] = [points[i - 1], points[i]];
+      if (squaredDistance(...line) > 0) strokes.push({ line, ...edgeBounds(line) });
+    }
+  }
+  return strokes.length ? { index: makeIndex(strokes), precision } : undefined;
+}
 function pointBounds(points: Point[], radius = 0): Bounds {
   let minX = Infinity;
   let minY = Infinity;
@@ -129,21 +192,55 @@ export function runPCBDesignRules(
 ): RuleCheckResult {
   const settings = resolvePCBDesignRules(config);
   const scopedRules = settings.scopes.flatMap((scope) => pcbDesignRuleScopes[scope]);
-  const checkedRules = scopedRules.filter((id) => settings.severities[id] !== 'ignore');
+  const requestedRules = scopedRules.filter((id) => settings.severities[id] !== 'ignore');
+  const unsupported = new Map<PCBDesignRuleId, string>();
+  const copperRules = requestedRules.filter((id) => !independentPCBChecks.has(id));
+  if (copperRules.length) {
+    try {
+      requireSupportedPCBCopper(board, 'Copper inspection', 'inspection');
+    } catch (error) {
+      for (const rule of copperRules) unsupported.set(rule, (error as Error).message);
+    }
+  }
+  const barcodes = pcbBarcodes(board.barcodes);
+  const unmeasuredEdges =
+    barcodes.some(({ layer }) => layer === 'Edge.Cuts') ||
+    board.nativeTables?.some((table) => val(child(table, 'layer')) === 'Edge.Cuts');
+  if (unmeasuredEdges) {
+    const reason = 'Board-edge checks cannot measure native barcodes or tables on Edge.Cuts.';
+    for (const rule of [...pcbDesignRuleScopes.edge, 'pcb.silk-edge'] as const)
+      if (requestedRules.includes(rule)) unsupported.set(rule, reason);
+  }
+  if (board.nativeTables?.some((table) => val(child(table, 'layer')).endsWith('.SilkS'))) {
+    for (const rule of pcbDesignRuleScopes.silkscreen)
+      if (requestedRules.includes(rule))
+        unsupported.set(rule, 'Silkscreen checks cannot measure native tables.');
+  }
+  const checkedRules = requestedRules.filter((rule) => !unsupported.has(rule));
   const enabled = new Set(checkedRules);
-  const hasIgnoredRules = checkedRules.length !== scopedRules.length;
+  const hasIgnoredRules = requestedRules.length !== scopedRules.length;
   const dimensions = pcbDesignRuleScopes.dimensions.some((id) => enabled.has(id));
   const annular = enabled.has('pcb.annular-ring');
-  const edge = enabled.has('pcb.copper-edge');
-  const outline = edge || enabled.has('pcb.outline');
+  const castellatedEdge =
+    enabled.has('pcb.copper-edge') &&
+    board.footprints.some((footprint) =>
+      footprint.pads.some((pad) => pad.fabricationProperty === 'pad_prop_castellated'),
+    );
+  const edge = enabled.has('pcb.copper-edge') && !castellatedEdge;
+  const silkEdge = enabled.has('pcb.silk-edge');
+  const outline = edge || silkEdge || enabled.has('pcb.outline');
   const copperHoles = enabled.has('pcb.copper-hole');
   const holeSpacing = enabled.has('pcb.hole-spacing') && settings.holeToHole > 0;
-  const holesEnabled = copperHoles || holeSpacing;
+  const coLocatedHoles = enabled.has('pcb.holes-co-located');
+  const holesEnabled = copperHoles || holeSpacing || coLocatedHoles;
   const clearance = enabled.has('pcb.short') || enabled.has('pcb.clearance');
   const courtyardsEnabled =
     enabled.has('pcb.courtyard-malformed') || enabled.has('pcb.courtyard-overlap');
   const keepouts = enabled.has('pcb.keepout');
   const connectivityEnabled = enabled.has('pcb.unrouted');
+  const netTieChecks =
+    (clearance || copperHoles) &&
+    board.footprints.some((footprint) => footprint.netTiePadGroups?.length);
   const needsCopper = edge || copperHoles || clearance || keepouts;
   const completeScope = settings.scopes.length === Object.keys(pcbDesignRuleScopes).length;
   const references = new Map(schematic?.parts.map((part) => [part.id, part.ref]));
@@ -151,16 +248,24 @@ export function runPCBDesignRules(
     kind: 'drc',
     complete: completeScope && !hasIgnoredRules,
     truncated: false,
-    checkedRules,
+    checkedRules: castellatedEdge
+      ? checkedRules.filter((id) => id !== 'pcb.copper-edge')
+      : checkedRules,
     issues: [],
     notes: [
-      'Checks use the supported pads, tracks, through vias, copper graphics, saved fills and closed Edge.Cuts. Curves use the editor’s bounded polygon approximation.',
+      'Checks use the supported pad shapes, straight and arc tracks, native via spans, copper graphics, saved fills and closed Edge.Cuts. Curved contours use bounded approximations.',
       'Footprint courtyards are checked at zero minimum spacing on each courtyard layer. Missing courtyards and custom courtyard constraints are not checked.',
       'Unrouted checks use assigned-pad copper connectivity. Solder mask, creepage, impedance and differential pairs are outside the checker.',
       ...(completeScope ? [] : ['The report covers the selected rule groups.']),
       ...(hasIgnoredRules ? ['Rules set to Ignore are omitted from the report.'] : []),
     ],
   };
+  if (castellatedEdge) {
+    result.complete = false;
+    result.notes.push(
+      'Copper-to-edge clearance on castellated boards requires the native KiCad check.',
+    );
+  }
   let operations = 0;
   let phase = 'the board outline';
   const spend = (count = 1) => {
@@ -178,7 +283,8 @@ export function runPCBDesignRules(
     if (configured === 'ignore') return;
     if (result.issues.length >= maxIssues) {
       result.truncated = true;
-      throw new Error('PCB DRC reached the 1000-issue report limit.');
+      result.complete = false;
+      return;
     }
     result.issues.push({
       id: `${ruleId}:${objectIds.join(':')}:${result.issues.length}`,
@@ -193,6 +299,7 @@ export function runPCBDesignRules(
     result.complete = false;
     issue(rule, message, ids, at, 'warning');
   };
+  for (const reason of new Set(unsupported.values())) coverage('pcb.coverage', reason, [board.id]);
   const overrides = new Map(
     settings.clearanceOverrides.map((override) => [override.key, override]),
   );
@@ -210,40 +317,7 @@ export function runPCBDesignRules(
     );
     result.notes.push(...sources.notes);
   }
-  const overlapsBounds = (a: Bounds, b: Bounds, margin: number) =>
-    a.minX <= b.maxX + margin &&
-    b.minX <= a.maxX + margin &&
-    a.minY <= b.maxY + margin &&
-    b.minY <= a.maxY + margin;
-  const edgeBounds = ([a, b]: [Point, Point]): Bounds => ({
-    minX: Math.min(a.x, b.x),
-    maxX: Math.max(a.x, b.x),
-    minY: Math.min(a.y, b.y),
-    maxY: Math.max(a.y, b.y),
-  });
   const indexes = new WeakMap<Body, BoundsIndex<IndexedEdge>>();
-  const makeIndex = <T extends Bounds>(items: T[]): BoundsIndex<T> => {
-    const bounds = items.reduce(
-      (value, item) => ({
-        minX: Math.min(value.minX, item.minX),
-        maxX: Math.max(value.maxX, item.maxX),
-        minY: Math.min(value.minY, item.minY),
-        maxY: Math.max(value.maxY, item.maxY),
-      }),
-      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-    );
-    if (items.length <= 8) return { ...bounds, items };
-    const x = bounds.maxX - bounds.minX >= bounds.maxY - bounds.minY;
-    items.sort((a, b) =>
-      x ? a.minX + a.maxX - b.minX - b.maxX : a.minY + a.maxY - b.minY - b.maxY,
-    );
-    const middle = Math.floor(items.length / 2);
-    return {
-      ...bounds,
-      left: makeIndex(items.slice(0, middle)),
-      right: makeIndex(items.slice(middle)),
-    };
-  };
   const index = (value: Body) => {
     let prepared = indexes.get(value);
     if (!prepared) {
@@ -270,19 +344,7 @@ export function runPCBDesignRules(
     bounds: Bounds,
     margin: number,
     visit: (item: T) => void,
-  ) => {
-    spend();
-    if (!overlapsBounds(node, bounds, margin)) return;
-    if (node.items)
-      for (const item of node.items) {
-        spend();
-        if (overlapsBounds(item, bounds, margin)) visit(item);
-      }
-    else {
-      query(node.left!, bounds, margin, visit);
-      query(node.right!, bounds, margin, visit);
-    }
-  };
+  ) => queryBoundsIndex(node, bounds, margin, visit, spend);
   // The same ray-cast as insidePolygon, visiting only possible ray crossings.
   // Ring tags preserve outer-minus-holes semantics, including offset drill holes.
   const insideBody = (p: Point, value: Body) => {
@@ -399,39 +461,38 @@ export function runPCBDesignRules(
       ? [
           ...board.graphics.filter(copperGraphic),
           ...board.footprints.flatMap((f) =>
-              f.graphics
-                .filter(copperGraphic)
-                .map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
+            f.graphics
+              .filter(copperGraphic)
+              .map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
           ),
         ]
       : [];
     let boundary: Polygon[] = [];
+    let boundaryIndex: OutlineIndex | undefined;
+    let boundaryPrecision = 0;
     try {
-      const prepared = outline ? prepareBoardOutline(board) : undefined;
-      boundary = prepared?.polygons ?? [];
-      const outlineEdges =
-        prepared?.edges.flatMap((g) => {
-          const points = graphicVertices(g);
-          return (g.kind === 'circle' || g.kind === 'polygon' ? [...points, points[0]] : points)
-            .slice(1)
-            .map((p, i): [Point, Point] => [points[i], p]);
-        }) ?? [];
-      for (let i = 0; i < outlineEdges.length; i++)
-        for (let j = i + 1; j < outlineEdges.length; j++) {
-          spend();
-          const [a, b] = outlineEdges[i],
-            [c, d] = outlineEdges[j];
-          if ([a, b].some((p) => [c, d].some((q) => squaredDistance(p, q) < 1e-8))) continue;
-          if (segmentDistance(a, b, c, d) < epsilon ** 2)
-            throw new Error('The board outline intersects itself or another Edge.Cuts contour.');
-        }
+      if (outline) {
+        const prepared = prepareBoardOutline(board, curvedContourTolerance);
+        boundary = prepared.polygons;
+        const preparedBoundary = prepareBoardOutlineBoundary(
+          prepared,
+          curvedContourTolerance,
+          spend,
+        );
+        boundaryIndex = preparedBoundary.index;
+        boundaryPrecision = preparedBoundary.precision;
+      }
     } catch (error) {
       boundary = [];
+      boundaryIndex = undefined;
       result.complete = false;
-      issue('pcb.outline', (error as Error).message, [board.id]);
-      result.notes.push(
-        'Copper-to-edge clearance could not be checked without a valid closed outline.',
-      );
+      if (enabled.has('pcb.outline')) issue('pcb.outline', (error as Error).message, [board.id]);
+      else coverage('pcb.coverage', (error as Error).message, [board.id]);
+      result.checkedRules = result.checkedRules.filter((rule) => rule !== 'pcb.copper-edge');
+      if (edge)
+        result.notes.push(
+          'Copper-to-edge clearance could not be checked without a valid closed outline.',
+        );
     }
     phase = 'footprint courtyards';
     for (const layer of courtyardsEnabled ? courtyardLayers : []) {
@@ -514,6 +575,17 @@ export function runPCBDesignRules(
         }
       }
     }
+    phase = 'connection-dependent copper layers';
+    const pruning =
+      needsCopper || annular || connectivityEnabled || enabled.has('pcb.via-diameter')
+        ? resolvePCBPrunedCopper(board, spend)
+        : undefined;
+    if (pruning?.unresolved.length)
+      coverage(
+        'pcb.geometry-limit',
+        'Some connection-dependent copper layers are too close to resolve at the native curve precision.',
+        pruning.unresolved.slice(0, 64),
+      );
     phase = 'copper shapes and minimum dimensions';
     for (const f of dimensions || needsCopper || holesEnabled ? board.footprints : [])
       for (const p of f.pads) {
@@ -540,55 +612,96 @@ export function runPCBDesignRules(
             ...pointBounds(line, p.drill / 2),
             netId: p.netId,
             plated: p.type === 'thru_hole',
+            primaryRoundDrill: p.drillSlot ? undefined : 'mechanical',
+            layers: board.layers,
           });
-        const layers = padCopperLayers(board, f, p);
+        const layers = pruning?.pads.get(p) ?? padCopperLayers(board, f, p);
         if (!layers.length) continue;
         if (!needsCopper && !(annular && p.type === 'thru_hole' && p.drill)) continue;
         const plated = p.type === 'thru_hole' && p.drill;
-        if (annular && plated) {
-          let ring = Infinity;
-          if (p.shape === 'circle') {
-            ring =
-              p.size.x / 2 -
-              Math.sqrt(Math.max(...line.map((end) => squaredDistance(at, end)))) -
-              plated / 2;
-          } else {
-            const outer = borrowPCBPadOutline(f, p);
-            for (const [a, b] of polygonEdges(outer)) {
-              spend();
-              ring = Math.min(ring, Math.sqrt(segmentDistance(...line, a, b)) - plated / 2);
+        let ring = Infinity;
+        for (const { pad: land, layers: landLayers } of pcbPadCopperSections(p, layers)) {
+          const center = land === p ? at : padPosition(f, land);
+          const outlines = land.nativeCustomPad
+            ? nativeCustomPadCopperPolygons(f, land)
+            : [borrowPCBPadOutline(f, land)];
+          let hasDrillOutline = false;
+          for (const outline of outlines) {
+            if (
+              annular &&
+              plated &&
+              (!land.nativeCustomPad || line.every((point) => insidePolygon(point, outline, spend)))
+            ) {
+              hasDrillOutline = true;
+              if (land.shape === 'circle') {
+                ring = Math.min(
+                  ring,
+                  land.size.x / 2 -
+                    Math.sqrt(Math.max(...line.map((end) => squaredDistance(center, end)))) -
+                    plated / 2,
+                );
+              } else {
+                for (const [a, b] of polygonEdges(outline)) {
+                  spend();
+                  ring = Math.min(ring, Math.sqrt(segmentDistance(...line, a, b)) - plated / 2);
+                }
+                if (
+                  !land.nativeCustomPad &&
+                  line.some((end) => !insidePolygon(end, outline, spend))
+                )
+                  ring = Math.min(ring, -plated / 2);
+              }
             }
-            if (line.some((end) => !insidePolygon(end, outer, spend))) ring = -plated / 2;
+            if (!needsCopper) continue;
+            const polygons =
+              p.padstack || land.nativeCustomPad
+                ? inspectPCBPadLand(f, land, outline)
+                : [plated ? borrowPCBPadCopperContour(f, land) : outline];
+            for (const polygon of polygons) {
+              const copper = body(
+                p.id,
+                'pad',
+                `${f.reference ?? 'Footprint'} pad ${p.number}`,
+                p.netId,
+                landLayers,
+                polygon.outer,
+                0,
+                polygon,
+              );
+              if (land.nativeCustomPad) copper.precision = nativeCustomPadCopperTolerance;
+              if (settings.useKiCadClearance && enabled.has('pcb.clearance'))
+                copper.localClearance = pcbPadCopperClearance(f, p);
+              if (
+                land.shape === 'circle' &&
+                !p.drillSlot &&
+                (!p.drill || squaredDistance(center, drill) < epsilon ** 2)
+              )
+                copper.disk = { at: center, outer: land.size.x / 2, inner: (p.drill ?? 0) / 2 };
+              bodies.push(copper);
+            }
           }
-          if (ring + epsilon < settings.minAnnularRing)
-            issue(
-              'pcb.annular-ring',
-              `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
-              [f.id, p.id],
-              at,
-            );
+          if (annular && plated && land.nativeCustomPad && !hasDrillOutline)
+            ring = Math.min(ring, -plated / 2);
         }
-        if (!needsCopper) continue;
-        const polygon = plated ? borrowPCBPadCopperContour(f, p) : borrowPCBPadOutline(f, p);
-        const copper = body(
-          p.id,
-          'pad',
-          `${f.reference ?? 'Footprint'} pad ${p.number}`,
-          p.netId,
-          layers,
-          polygon.outer,
-          0,
-          polygon,
-        );
-        if (
-          p.shape === 'circle' &&
-          !p.drillSlot &&
-          (!p.drill || squaredDistance(at, drill) < epsilon ** 2)
-        )
-          copper.disk = { at, outer: p.size.x / 2, inner: p.drill ? p.drill / 2 : 0 };
-        bodies.push(copper);
+        const precision = p.nativeCustomPad ? nativeCustomPadCopperTolerance : 0;
+        if (ring + epsilon + precision < settings.minAnnularRing)
+          issue(
+            'pcb.annular-ring',
+            `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
+            [f.id, p.id],
+            at,
+          );
+        else if (ring + epsilon - precision < settings.minAnnularRing)
+          coverage(
+            'pcb.geometry-limit',
+            'The native custom pad annular ring is too close to the limit to resolve.',
+            [f.id, p.id],
+            at,
+          );
       }
-    for (const track of dimensions || needsCopper ? board.tracks : []) {
+    const checkedTracks: (PCB['tracks'][number] & { mid?: Point })[] =
+      dimensions || needsCopper ? [...board.tracks, ...(board.arcTracks ?? [])] : [];
+    for (const track of checkedTracks) {
       if (
         enabled.has('pcb.track-width') &&
         nanometres(track.width) < nanometres(settings.minTrackWidth)
@@ -605,14 +718,27 @@ export function runPCBDesignRules(
             track.id,
             'track',
             'Track',
-            track.netId,
+            track.netId || null,
             [track.layer],
-            [track.start, track.end],
+            track.mid ? graphicVertices({ ...track, kind: 'arc' }) : [track.start, track.end],
             track.width / 2,
           ),
         );
     }
     for (const via of dimensions || needsCopper || holesEnabled ? board.vias : []) {
+      const sections = pcbViaLayerSections(board.layers, via, pruning?.vias.get(via));
+      const cuts = Object.values(via.backdrills ?? {});
+      if (enabled.has('pcb.via-drill') && cuts.length) {
+        if (cuts.some((cut) => cut.diameter <= via.drill))
+          issue(
+            'pcb.via-drill',
+            'Via backdrill cutter must be larger than the plated primary drill.',
+            [via.id],
+            via,
+          );
+        else if (sections.every((section) => !section.plated))
+          issue('pcb.via-drill', 'Via backdrills remove the entire plated barrel.', [via.id], via);
+      }
       if (
         enabled.has('pcb.via-drill') &&
         nanometres(via.drill) < nanometres(settings.minThroughHole)
@@ -623,17 +749,25 @@ export function runPCBDesignRules(
           [via.id],
           via,
         );
+      const flashedSections = sections.filter((section) => section.diameter > 0);
+      const smallestFlash = Math.min(...flashedSections.map((section) => section.diameter));
       if (
         enabled.has('pcb.via-diameter') &&
-        nanometres(via.diameter) < nanometres(settings.minViaDiameter)
+        nanometres(smallestFlash) < nanometres(settings.minViaDiameter)
       )
         issue(
           'pcb.via-diameter',
-          `Via diameter ${mm(via.diameter)} is below ${mm(settings.minViaDiameter)}.`,
+          `Via diameter ${mm(smallestFlash)} is below ${mm(settings.minViaDiameter)}.`,
           [via.id],
           via,
         );
-      const ring = Math.floor((nanometres(via.diameter) - nanometres(via.drill)) / 2);
+      const ring = Math.min(
+        ...flashedSections
+          .filter((section) => section.plated)
+          .map((section) =>
+            Math.floor((nanometres(section.diameter) - nanometres(section.drill)) / 2),
+          ),
+      );
       if (annular && ring < nanometres(settings.minAnnularRing))
         issue(
           'pcb.annular-ring',
@@ -641,36 +775,49 @@ export function runPCBDesignRules(
           [via.id],
           via,
         );
-      if (holesEnabled)
-        holes.push({
-          id: via.id,
-          at: via,
-          line: [via, via],
-          radius: via.drill / 2,
-          netId: via.netId,
-          plated: true,
-          ...pointBounds([via], via.drill / 2),
-        });
-      if (!needsCopper) continue;
-      const polygon = {
-        outer: circlePolygon(via, via.diameter / 2),
-        holes: [circlePolygon(via, via.drill / 2)],
-      };
-      const copper = body(
-        via.id,
-        'via',
-        'Via',
-        via.netId,
-        [...board.layers],
-        polygon.outer,
-        0,
-        polygon,
-      );
-      copper.disk = { at: via, outer: via.diameter / 2, inner: via.drill / 2 };
-      bodies.push(copper);
+      for (const group of Object.values(
+        Object.groupBy(
+          sections,
+          (section) => `${section.diameter}:${section.drill}:${section.plated}`,
+        ),
+      )) {
+        if (!group?.length) continue;
+        const [{ diameter, drill, plated }] = group;
+        const layers = group.map(({ layer }) => layer);
+        if (holesEnabled)
+          holes.push({
+            id: via.id,
+            at: via,
+            line: [via, via],
+            radius: drill / 2,
+            netId: via.netId || null,
+            plated,
+            primaryRoundDrill: via.span?.kind === 'micro' ? 'laser' : 'mechanical',
+            layers,
+            ...pointBounds([via], drill / 2),
+          });
+        if (!needsCopper || diameter <= drill) continue;
+        const polygon = {
+          outer: circlePolygon(via, diameter / 2),
+          holes: [circlePolygon(via, drill / 2)],
+        };
+        const copper = body(
+          via.id,
+          'via',
+          'Via',
+          via.netId || null,
+          layers,
+          polygon.outer,
+          0,
+          polygon,
+        );
+        copper.disk = { at: via, outer: diameter / 2, inner: drill / 2 };
+        bodies.push(copper);
+      }
     }
     for (const g of graphics) {
       if (g.kind === 'text' || g.kind === 'dimension') {
+        if (g.text?.hidden || g.dimension?.caption?.hidden) continue;
         coverage(
           'pcb.unsupported-copper',
           'Copper text/dimension strokes are not included in clearance checks.',
@@ -689,8 +836,8 @@ export function runPCBDesignRules(
         body(
           g.id,
           'graphic',
-          'Unassigned copper graphic',
-          null,
+          g.netId ? 'Copper graphic' : 'Unassigned copper graphic',
+          g.netId || null,
           [g.layer],
           polygon
             ? points
@@ -744,6 +891,23 @@ export function runPCBDesignRules(
         }
       }
     }
+    const netTies = netTieChecks
+      ? preparePCBNetTies(
+          board,
+          bodies,
+          (a, b) => overlapsBounds(a, b, epsilon) && distance(a, b, 0) <= epsilon,
+          spend,
+          (footprint, first, second, bridge) => {
+            if (enabled.has('pcb.short'))
+              issue(
+                'pcb.short',
+                `${footprint.reference ?? footprint.libraryId} pads ${first.number} and ${second.number} touch outside their declared net-tie group.`,
+                bridge ? [first.id, second.id, bridge.id] : [first.id, second.id],
+                bridge?.at ?? padPosition(footprint, second),
+              );
+          },
+        )
+      : undefined;
     const sorted = clearance ? [...bodies].sort((a, b) => a.minX - b.minX) : [];
     const netClasses = new Map(sorted.map(({ netId }) => [netId, pcbRuleNetClass(sources, netId)]));
     if (settings.useKiCadClearance && enabled.has('pcb.clearance')) {
@@ -761,7 +925,7 @@ export function runPCBDesignRules(
       }
     }
     const searchClearance = sorted.reduce(
-      (maximum, copper) => Math.max(maximum, copper.clearance ?? 0),
+      (maximum, copper) => Math.max(maximum, copper.clearance ?? 0, copper.localClearance ?? 0),
       customRules.reduce(
         (maximum, rule) => Math.max(maximum, overrides.get(rule.key)?.clearance ?? rule.clearance),
         enabled.has('pcb.clearance') ? settings.clearance : 0,
@@ -815,11 +979,15 @@ export function runPCBDesignRules(
       intersectsCourtyard: (reference: string) => intersectsCourtyard(copper, reference),
     });
     const reported = new Set<string>();
+    const contactPrecision = bodies.some((copper) => copper.precision)
+      ? 2 * nativeCustomPadCopperTolerance
+      : 0;
     phase = 'copper contact and clearance';
     for (let i = 0; i < sorted.length; i++)
       for (
         let j = i + 1;
-        j < sorted.length && sorted[j].minX <= sorted[i].maxX + searchClearance + epsilon;
+        j < sorted.length &&
+        sorted[j].minX <= sorted[i].maxX + searchClearance + epsilon + contactPrecision;
         j++
       ) {
         spend();
@@ -829,12 +997,22 @@ export function runPCBDesignRules(
           a.id === b.id ||
           (a.netId !== null && a.netId === b.netId) ||
           !a.layers.some((layer) => b.layers.includes(layer)) ||
-          !overlapsBounds(a, b, searchClearance + epsilon)
+          !overlapsBounds(a, b, searchClearance + epsilon + contactPrecision) ||
+          netTies?.allows(a, b)
         )
           continue;
         let required = enabled.has('pcb.clearance') ? settings.clearance : 0;
         let clearanceLabel = '';
-        if (customRules.length) {
+        const local = Math.max(a.localClearance ?? 0, b.localClearance ?? 0);
+        if (local > 0) {
+          required = Math.max(
+            required,
+            local,
+            a.kind === 'zone' ? (a.clearance ?? 0) : 0,
+            b.kind === 'zone' ? (b.clearance ?? 0) : 0,
+          );
+          clearanceLabel = 'pad or footprint override';
+        } else if (customRules.length) {
           const left = ruleOperand(a),
             right = ruleOperand(b);
           const rule = matchingPCBClearanceRule(customRules, left, right, spend);
@@ -855,13 +1033,29 @@ export function runPCBDesignRules(
           required = settings.clearance;
           clearanceLabel = '';
         }
-        if (!overlapsBounds(a, b, required + epsilon)) continue;
-        const gap = distance(a, b, required);
-        if (gap > epsilon && gap + epsilon >= required) continue;
-        const knownNets = a.netId !== null && b.netId !== null;
+        const precision = (a.precision ?? 0) + (b.precision ?? 0);
+        if (!overlapsBounds(a, b, required + epsilon + precision)) continue;
+        const gap = distance(a, b, required + precision);
+        if (gap > epsilon && gap + epsilon >= required + precision) continue;
+        if (precision && (gap <= epsilon || gap + epsilon + precision >= required)) {
+          const key = `uncertain:${[a.id, b.id].sort().join(':')}`;
+          if (!reported.has(key)) {
+            reported.add(key);
+            coverage(
+              'pcb.geometry-limit',
+              'Native custom pad geometry is too close to resolve contact or the clearance limit.',
+              [a.id, b.id],
+              a.at,
+            );
+          }
+          if (gap + epsilon + precision >= required) continue;
+        }
+        const knownNets = netTies
+          ? netTies.hasKnownNet(a, b) && netTies.hasKnownNet(b, a)
+          : a.netId !== null && b.netId !== null;
         const rule = !knownNets
           ? 'pcb.unassigned-copper'
-          : gap <= epsilon
+          : gap <= epsilon && !precision
             ? 'pcb.short'
             : 'pcb.clearance';
         const key = `${rule}:${[a.id, b.id].sort().join(':')}`;
@@ -880,83 +1074,105 @@ export function runPCBDesignRules(
           knownNets ? defaultPCBRuleSeverity : 'warning',
         );
       }
-    const boundaryEdges = boundary.flatMap(polygonEdges);
-    const boundaryEdgeBounds = boundaryEdges.map(edgeBounds);
-    const boundaryMargin = Math.max(settings.copperToEdge, epsilon);
-    const reachesBoundary = (bounds: Bounds) =>
-      boundaryEdgeBounds.some((edge) => overlapsBounds(bounds, edge, boundaryMargin));
+    const boundaryHoles = boundary.flatMap((polygon) => polygon.holes);
     phase = 'copper-to-edge and copper-to-hole clearance';
-    const onBoard = (p: Point) =>
-      boundary.some((polygon) => insidePolygon(p, polygon, spend)) ||
-      boundaryEdges.some(([a, b]) => {
-        spend();
-        return pointSegmentDistance(p, a, b) <= epsilon ** 2;
-      });
+    const boardPoint = (p: Point, edges: OutlineIndex, precision: number) => {
+      let inside = false;
+      let separation = Infinity;
+      const margin = Math.max(epsilon, precision);
+      query(
+        edges,
+        { minX: p.x, maxX: Math.max(p.x, edges.maxX), minY: p.y, maxY: p.y },
+        margin,
+        ({ line: [a, b], minX }) => {
+          if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
+            inside = !inside;
+          if (minX <= p.x + margin)
+            separation = Math.min(separation, pointSegmentDistance(p, a, b));
+        },
+      );
+      return {
+        inside: inside || separation <= epsilon ** 2,
+        uncertain: precision > 0 && separation <= precision ** 2,
+      };
+    };
     const holeIndex =
       copperHoles && holes.length
         ? makeIndex(holes.map((hole, order) => ({ ...hole, order })))
         : null;
     const nearbyHoles: (Hole & { order: number })[] = [];
     for (const copper of bodies) {
-      if (edge && boundary.length) {
+      const copperPrecision = copper.precision ?? 0;
+      if (edge && boundaryIndex) {
+        const edges = boundaryIndex;
+        const precision = boundaryPrecision + copperPrecision;
+        const boundaryMargin = Math.max(settings.copperToEdge, epsilon) + precision;
         let gap = Infinity;
-        let outside =
-          !onBoard(copper.points[0]) ||
-          Boolean(
-            copper.polygon &&
-            boundary.some((polygon) => polygon.holes.some((hole) => insideBody(hole[0], copper))),
-          );
-        // A non-centered drill can reach beyond its pad's outer bounds.
-        const nearBoundary = copper.disk
-          ? reachesBoundary(pointBounds([copper.disk.at], copper.disk.outer))
-          : reachesBoundary(copper) ||
-            copper.polygon?.holes.some((hole) => reachesBoundary(pointBounds(hole, copper.radius)));
-        if (!nearBoundary) {
-          // No boundary can touch this body or violate its clearance. Retain
-          // the same work-limit accounting without visiting every edge pair.
-          spend(boundaryEdges.length * (copper.disk ? 1 : copper.edges.length));
-        } else if (copper.disk) {
+        let outside = false;
+        let uncertain = false;
+        const checkPoint = (point: Point) => {
+          const status = boardPoint(point, edges, precision);
+          uncertain ||= status.uncertain;
+          outside ||= !status.inside && !status.uncertain;
+        };
+        checkPoint(copper.points[0]);
+        if (copper.polygon)
+          for (const hole of boundaryHoles) {
+            if (!insideBody(hole[0], copper)) continue;
+            let near = false;
+            if (precision)
+              query(index(copper), pointBounds([hole[0]]), precision, ({ line: [a, b] }) => {
+                near ||= pointSegmentDistance(hole[0], a, b) <= precision ** 2;
+              });
+            uncertain ||= near;
+            outside ||= !near;
+            if (outside) break;
+          }
+        if (copper.disk) {
           // A circular annulus has one exact radial interval. Repeating this
           // calculation for every display polygon edge only spends the budget.
-          for (const [c, d] of boundaryEdges) {
-            spend();
-            const nearest = Math.sqrt(pointSegmentDistance(copper.disk.at, c, d));
-            const farthest = Math.sqrt(
-              Math.max(squaredDistance(copper.disk.at, c), squaredDistance(copper.disk.at, d)),
-            );
-            gap = Math.min(
-              gap,
-              Math.max(0, nearest - copper.disk.outer, copper.disk.inner - farthest),
-            );
-            if (nearest < copper.disk.outer - epsilon && farthest > copper.disk.inner + epsilon)
+          const { at, outer, inner } = copper.disk;
+          query(edges, pointBounds([at], outer), boundaryMargin, ({ line: [c, d] }) => {
+            const nearest = Math.sqrt(pointSegmentDistance(at, c, d));
+            const farthest = Math.sqrt(Math.max(squaredDistance(at, c), squaredDistance(at, d)));
+            gap = Math.min(gap, Math.max(0, nearest - outer, inner - farthest));
+            if (
+              nearest + boundaryPrecision < outer - epsilon &&
+              farthest - boundaryPrecision > inner + epsilon
+            )
               outside = true;
-          }
+            else if (
+              boundaryPrecision &&
+              nearest - boundaryPrecision < outer - epsilon &&
+              farthest + boundaryPrecision > inner + epsilon
+            )
+              uncertain = true;
+          });
         } else
           for (const [a, b] of copper.edges) {
             const cuts = [0, 1];
             let touchesBoundary = false;
             const dx = b.x - a.x,
               dy = b.y - a.y;
-            for (const [c, d] of boundaryEdges) {
-              spend();
+            query(edges, edgeBounds([a, b]), boundaryMargin + copper.radius, ({ line: [c, d] }) => {
               const separation = segmentDistance(a, b, c, d);
               touchesBoundary ||= separation <= epsilon ** 2;
               gap = Math.min(gap, Math.sqrt(separation) - copper.radius);
               const ex = d.x - c.x,
                 ey = d.y - c.y;
               const cross = dx * ey - dy * ex;
-              if (Math.abs(cross) < 1e-12) continue;
+              if (Math.abs(cross) < 1e-12) return;
               const t = ((c.x - a.x) * ey - (c.y - a.y) * ex) / cross;
               const u = ((c.x - a.x) * dy - (c.y - a.y) * dx) / cross;
               if (t > 0 && t < 1 && u >= -epsilon && u <= 1 + epsilon) cuts.push(t);
-            }
+            });
             cuts.sort((x, y) => x - y);
             for (let i = 1; touchesBoundary && i < cuts.length && !outside; i++) {
               const t = (cuts[i - 1] + cuts[i]) / 2;
-              outside = !onBoard({ x: a.x + dx * t, y: a.y + dy * t });
+              checkPoint({ x: a.x + dx * t, y: a.y + dy * t });
             }
           }
-        if (outside || gap + epsilon < settings.copperToEdge)
+        if (outside || gap + epsilon + precision < settings.copperToEdge)
           issue(
             'pcb.copper-edge',
             outside
@@ -965,11 +1181,26 @@ export function runPCBDesignRules(
             [copper.id],
             copper.at,
           );
+        else if (precision && (uncertain || gap + epsilon - precision < settings.copperToEdge))
+          coverage(
+            'pcb.geometry-limit',
+            `${copper.label} is too close to the board edge to resolve the clearance at the contour precision.`,
+            [copper.id],
+            copper.at,
+          );
       }
       if (!holeIndex) continue;
       nearbyHoles.length = 0;
-      query(holeIndex, copper, settings.copperToHole, (hole) => {
-        if (hole.id !== copper.id && !(hole.plated && hole.netId && hole.netId === copper.netId))
+      query(holeIndex, copper, settings.copperToHole + copperPrecision, (hole) => {
+        if (
+          hole.id !== copper.id &&
+          copper.layers.some((layer) => hole.layers.some((key) => key === layer)) &&
+          !(
+            hole.plated &&
+            ((hole.netId && hole.netId === copper.netId) ||
+              netTies?.allowsPlatedHole(copper, hole.id, hole.layers))
+          )
+        )
           nearbyHoles.push(hole);
       });
       // Keep report ordering independent of the spatial tree split order.
@@ -986,7 +1217,7 @@ export function runPCBDesignRules(
           query(
             index(copper),
             pointBounds(hole.line),
-            copper.radius + hole.radius + settings.copperToHole + epsilon,
+            copper.radius + hole.radius + settings.copperToHole + epsilon + copperPrecision,
             ({ line: [a, b] }) => {
               gap = Math.min(
                 gap,
@@ -995,26 +1226,59 @@ export function runPCBDesignRules(
             },
           );
         }
-        if (gap + epsilon < settings.copperToHole)
+        if (gap + epsilon + copperPrecision < settings.copperToHole)
           issue(
             'pcb.copper-hole',
             `${copper.label} to ${hole.plated ? 'foreign-net plated' : 'non-plated'} hole clearance is ${mm(Math.max(0, gap))}; requires ${mm(settings.copperToHole)}.`,
             [copper.id, hole.id],
             hole.at,
           );
+        else if (copperPrecision && gap + epsilon - copperPrecision < settings.copperToHole)
+          coverage(
+            'pcb.geometry-limit',
+            'Native custom pad geometry is too close to resolve the copper-to-hole clearance.',
+            [copper.id, hole.id],
+            hole.at,
+          );
       }
     }
-    if (holeSpacing) {
+    if (holeSpacing || coLocatedHoles) {
       phase = 'drill-to-drill clearance';
       const ordered = holes.toSorted((a, b) => a.minX - b.minX);
+      const reportedHoles = new Set<string>();
+      const search = Math.max(holeSpacing ? settings.holeToHole : 0, drillCoLocationTolerance);
       for (let i = 0; i < ordered.length; i++) {
         const a = ordered[i];
         for (let j = i + 1; j < ordered.length; j++) {
           const b = ordered[j];
-          if (b.minX > a.maxX + settings.holeToHole) break;
+          if (b.minX > a.maxX + search) break;
           spend();
-          const gap = Math.sqrt(segmentDistance(...a.line, ...b.line)) - a.radius - b.radius;
-          if (gap + epsilon < settings.holeToHole)
+          if (a.id === b.id || !a.layers.some((layer) => b.layers.includes(layer))) continue;
+          const coLocated =
+            a.primaryRoundDrill &&
+            b.primaryRoundDrill &&
+            (a.primaryRoundDrill === 'mechanical' || b.primaryRoundDrill === 'mechanical') &&
+            (nanometres(a.at.x) - nanometres(b.at.x)) ** 2 +
+              (nanometres(a.at.y) - nanometres(b.at.y)) ** 2 <
+              nanometres(drillCoLocationTolerance) ** 2;
+          if (coLocated ? !coLocatedHoles : !holeSpacing) continue;
+          const gap = coLocated
+            ? 0
+            : Math.sqrt(segmentDistance(...a.line, ...b.line)) - a.radius - b.radius;
+          if (!coLocated && gap + epsilon >= settings.holeToHole) continue;
+          const ids = [a.id, b.id].sort();
+          const key = ids.join(':');
+          if (reportedHoles.has(key)) continue;
+          reportedHoles.add(key);
+          if (coLocated)
+            issue(
+              'pcb.holes-co-located',
+              'Primary round drills share the same centre.',
+              ids,
+              a.at,
+              'warning',
+            );
+          else
             issue(
               'pcb.hole-spacing',
               `Drill-to-drill clearance is ${mm(Math.max(0, gap))}; requires ${mm(settings.holeToHole)}.`,
@@ -1025,10 +1289,42 @@ export function runPCBDesignRules(
       }
     }
     const silkClearance = enabled.has('pcb.silk-clearance') && settings.minSilkClearance > 0;
+    phase = 'silkscreen';
+    let outlineStrokes: ReturnType<typeof silkOutlineStrokes>;
+    if (silkEdge && !boundaryIndex) {
+      try {
+        outlineStrokes = silkOutlineStrokes(board, spend);
+      } catch (error) {
+        coverage('pcb.coverage', (error as Error).message, [board.id]);
+      }
+    }
+    const silkEdgeIndex: BoundsIndex<OutlineStroke> | undefined = silkEdge
+      ? (boundaryIndex ?? outlineStrokes?.index)
+      : undefined;
+    if (silkEdge && !silkEdgeIndex)
+      result.checkedRules = result.checkedRules.filter((rule) => rule !== 'pcb.silk-edge');
+    const inspectSilkStrokes = silkClearance || Boolean(silkEdgeIndex);
     const silkHeight = enabled.has('pcb.silk-text-height') && settings.minTextHeight > 0;
     const silkThickness = enabled.has('pcb.silk-text-thickness') && settings.minTextThickness > 0;
-    if (silkClearance || silkHeight || silkThickness) {
-      phase = 'silkscreen';
+    if (inspectSilkStrokes || silkHeight || silkThickness) {
+      if (
+        inspectSilkStrokes &&
+        board.footprints.some((footprint) =>
+          footprint.pads.some((pad) => padSilkscreenLayers(pad).length),
+        )
+      )
+        coverage(
+          'pcb.unsupported-silkscreen',
+          'Silkscreen clearance cannot measure native pad artwork.',
+          [board.id],
+        );
+      for (const barcode of barcodes.filter(({ layer }) => layer.endsWith('.SilkS')))
+        coverage(
+          'pcb.unsupported-silkscreen',
+          'Silkscreen checks cannot measure native barcodes.',
+          [barcode.id],
+          { x: barcode.x, y: barcode.y },
+        );
       const silkBodies: Body[] = [];
       const owners = new Map<string, string>();
       if (silkClearance)
@@ -1042,7 +1338,8 @@ export function runPCBDesignRules(
         const { id, kind, layer, start, text } = graphic;
         if (
           kind === 'dimension' ||
-          (silkClearance && graphic.stroke && !['solid', 'default'].includes(graphic.stroke))
+          graphic.textBox ||
+          (inspectSilkStrokes && graphic.stroke && !['solid', 'default'].includes(graphic.stroke))
         ) {
           coverage(
             'pcb.unsupported-silkscreen',
@@ -1054,6 +1351,15 @@ export function runPCBDesignRules(
         }
         if (text) {
           if (!text.value.trim()) continue;
+          if (text.fontFace || text.knockout) {
+            coverage(
+              'pcb.unsupported-silkscreen',
+              'Silkscreen checks cannot measure native font faces or knockout text.',
+              [id],
+              start,
+            );
+            continue;
+          }
           const width = text.thickness || Math.min(text.size.x, text.size.y) / (text.bold ? 5 : 8);
           for (const [check, actual, minimum, rule, label] of [
             [silkHeight, text.size.y, settings.minTextHeight, 'pcb.silk-text-height', 'height'],
@@ -1073,7 +1379,7 @@ export function runPCBDesignRules(
                 start,
               );
           }
-          if (!silkClearance) continue;
+          if (!inspectSilkStrokes) continue;
           spend(text.value.length);
           const stroke = pcbStrokeText(text, start);
           if ('unsupported' in stroke) {
@@ -1100,28 +1406,80 @@ export function runPCBDesignRules(
             path.slice(1).map((p, i) => [path[i], p] as [Point, Point]),
           );
           silkBodies.push(shape);
-        } else if (silkClearance) {
-          const points = graphicVertices(graphic);
+        } else if (inspectSilkStrokes) {
+          const points = graphicVertices(
+            graphic,
+            silkEdgeIndex ? curvedContourTolerance : undefined,
+          );
           const closed = kind === 'polygon' || kind === 'circle';
           const polygon = graphic.fill && closed ? { outer: points, holes: [] } : undefined;
           if (!polygon && graphic.width === 0) continue;
           plainSilk.add(id);
-          silkBodies.push(
-            body(
-              id,
-              'graphic',
-              'Silkscreen graphic',
-              null,
-              [layer],
-              closed && !polygon ? [...points, points[0]] : points,
-              graphic.width / 2,
-              polygon,
-            ),
+          const shape = body(
+            id,
+            'graphic',
+            'Silkscreen graphic',
+            null,
+            [layer],
+            closed && !polygon ? [...points, points[0]] : points,
+            graphic.width / 2,
+            polygon,
           );
+          if (silkEdgeIndex && curvedArtwork(graphic)) shape.precision = curvedContourTolerance;
+          silkBodies.push(shape);
         }
       }
+      if (silkEdgeIndex)
+        for (const silk of silkBodies) {
+          const precision =
+            (outlineStrokes?.precision ?? boundaryPrecision) + (silk.precision ?? 0);
+          const limit = silk.radius + settings.minSilkClearance;
+          const margin = limit + precision + epsilon;
+          if (!overlapsBounds(silk, silkEdgeIndex, margin)) continue;
+          let gap = Infinity;
+          let near = silk.at;
+          let boundaryInArtwork = false;
+          for (const [a, b] of silk.edges)
+            query(silkEdgeIndex, edgeBounds([a, b]), margin, ({ line: [c, d] }) => {
+              const distance = Math.sqrt(segmentDistance(a, b, c, d));
+              if (distance < gap) {
+                gap = distance;
+                near = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+              }
+            });
+          if (silk.polygon)
+            query(silkEdgeIndex, silk, 0, ({ line: [a] }) => {
+              boundaryInArtwork ||= insideBody(a, silk);
+            });
+          if (!boundaryInArtwork && gap > margin) continue;
+          const crosses = gap <= epsilon;
+          const strokeMayReachBoard = gap - precision < silk.radius;
+          if (
+            boundaryIndex &&
+            !boundaryInArtwork &&
+            !crosses &&
+            !strokeMayReachBoard &&
+            !silk.points.some((point) => boardPoint(point, boundaryIndex!, precision).inside)
+          )
+            continue;
+          if (boundaryInArtwork || gap + precision + epsilon < limit || (crosses && !precision))
+            issue(
+              'pcb.silk-edge',
+              'Silkscreen is clipped by or too close to the board edge.',
+              [silk.id],
+              near,
+              'warning',
+            );
+          else if (precision && gap - precision <= limit)
+            coverage(
+              'pcb.geometry-limit',
+              'Silkscreen is too close to a curved contour to resolve board-edge clearance.',
+              [silk.id],
+              near,
+            );
+        }
       silkBodies.sort((a, b) => a.minX - b.minX);
-      for (let i = 0; i < silkBodies.length; i++) {
+      for (let i = 0; silkClearance && i < silkBodies.length; i++) {
         const a = silkBodies[i];
         for (let j = i + 1; j < silkBodies.length; j++) {
           const b = silkBodies[j];
@@ -1144,6 +1502,35 @@ export function runPCBDesignRules(
     }
     phase = 'copper keepouts';
     const holeBounds = new WeakMap<Point[], Bounds>();
+    type KeepoutInterior = { polygons: Polygon[]; bounds: Bounds; edgeCount: number };
+    const prepareInterior = (polygons: Polygon[]): KeepoutInterior => {
+      const edgeCount = polygons.reduce(
+        (n, p) => n + p.outer.length + p.holes.reduce((m, h) => m + h.length, 0),
+        0,
+      );
+      spend(edgeCount);
+      return { polygons, bounds: pointBounds(polygons.flatMap((p) => p.outer)), edgeCount };
+    };
+    const pourEnters = (copper: Body, pour: Polygon, interior: KeepoutInterior) => {
+      const { bounds, polygons } = interior;
+      if (!polygons.length || !overlapsBounds(copper, bounds, polygonResolution)) return false;
+      // Holes outside the clipping bounds cannot affect the intersection.
+      let edgeCount = pour.outer.length;
+      const holes = pour.holes.filter((hole) => {
+        spend();
+        let bounds = holeBounds.get(hole);
+        if (!bounds) {
+          spend(hole.length);
+          bounds = pointBounds(hole);
+          holeBounds.set(hole, bounds);
+        }
+        if (!overlapsBounds(bounds, interior.bounds, polygonResolution)) return false;
+        edgeCount += hole.length;
+        return true;
+      });
+      spend(edgeCount * interior.edgeCount);
+      return intersectPolygons([{ outer: pour.outer, holes }], polygons).length > 0;
+    };
     for (const zone of keepouts ? zones.filter((z) => z.keepout) : []) {
       if (zone.keepout!.footprints)
         coverage(
@@ -1152,10 +1539,24 @@ export function runPCBDesignRules(
           [zone.id],
           zone.outline[0],
         );
-      const polygon = { outer: zone.outline, holes: zone.holes ?? [] };
-      const area = body(zone.id, 'zone', 'Keepout', null, [zone.layer], zone.outline, 0, polygon);
-      let pourInterior: { polygons: Polygon[]; bounds: Bounds; edgeCount: number } | undefined;
+      const circle = pcbZoneCircle(zone);
+      const curved = Boolean(circle || zone.nativeOutlineArcs);
+      const polygon = ruleAreaPolygon(zone, curvedContourTolerance);
+      const keepoutBody = (outline: Polygon) =>
+        body(zone.id, 'zone', 'Keepout', null, [zone.layer], outline.outer, 0, outline);
+      const area = keepoutBody(polygon);
+      spend(area.edges.length);
+      if (circle && !polygon.holes.length)
+        area.disk = { at: circle.center, outer: circle.radius, inner: 0 };
+      // Include the contour chord error, clipping-grid rounding and offset chord error.
+      const precision = curved ? 2 * (curvedContourTolerance + polygonResolution) : 0;
+      const curvedOffset = (amount: number) =>
+        offsetPolygons([polygon], amount, curvedContourTolerance);
+      let pourInterior: KeepoutInterior | undefined;
+      let possiblePourInterior: KeepoutInterior | undefined;
+      let certainBodies: Body[] | undefined;
       for (const copper of bodies) {
+        spend();
         const blocked =
           copper.kind === 'track'
             ? zone.keepout!.tracks
@@ -1168,49 +1569,35 @@ export function runPCBDesignRules(
         if (
           !blocked ||
           !copper.layers.includes(zone.layer) ||
-          !overlapsBounds(copper, area, pour ? zone.clearance : 0)
+          !overlapsBounds(copper, area, (pour ? zone.clearance : epsilon) + precision)
         )
           continue;
         // Rounding a shared sloped edge and its split vertices onto the clipping
         // grid can create slivers. Allow one grid cell at the keepout boundary,
         // while retaining even tiny copper areas farther inside it.
         let enters: boolean;
+        let uncertain = false;
         if (pour) {
-          if (!pourInterior) {
-            spend(area.edges.length);
-            const polygons = offsetPolygons(pourKeepoutPolygons(zone), -polygonResolution);
-            const edgeCount = polygons.reduce(
-              (n, p) => n + p.outer.length + p.holes.reduce((m, h) => m + h.length, 0),
-              0,
+          pourInterior ??= prepareInterior(
+            curved
+              ? curvedOffset(zone.clearance - polygonResolution - precision)
+              : offsetPolygons(pourKeepoutPolygons(zone), -polygonResolution),
+          );
+          enters = pourEnters(copper, pour, pourInterior);
+          if (!enters && curved) {
+            possiblePourInterior ??= prepareInterior(
+              curvedOffset(zone.clearance - polygonResolution + precision),
             );
-            spend(edgeCount);
-            pourInterior = {
-              polygons,
-              bounds: pointBounds(polygons.flatMap((p) => p.outer)),
-              edgeCount,
-            };
+            uncertain = pourEnters(copper, pour, possiblePourInterior);
           }
-          const { bounds: interiorBounds, polygons } = pourInterior;
-          if (!polygons.length || !overlapsBounds(copper, interiorBounds, polygonResolution))
-            continue;
-          // Holes outside the clipping bounds cannot affect the intersection.
-          // Include one grid cell in the bounds test for coordinate rounding.
-          let edgeCount = pour.outer.length;
-          const holes = pour.holes.filter((hole) => {
-            spend();
-            let bounds = holeBounds.get(hole);
-            if (!bounds) {
-              spend(hole.length);
-              bounds = pointBounds(hole);
-              holeBounds.set(hole, bounds);
-            }
-            if (!overlapsBounds(bounds, interiorBounds, polygonResolution)) return false;
-            edgeCount += hole.length;
-            return true;
-          });
-          spend(edgeCount * pourInterior.edgeCount);
-          enters = intersectPolygons([{ outer: pour.outer, holes }], polygons).length > 0;
-        } else enters = distance(copper, area) <= epsilon;
+        } else if (!curved || area.disk) {
+          enters = distance(copper, area) <= epsilon;
+        } else {
+          if (distance(copper, area, precision) > precision + epsilon) continue;
+          certainBodies ??= curvedOffset(-precision).map(keepoutBody);
+          enters = certainBodies.some((interior) => distance(copper, interior) <= epsilon);
+          uncertain = !enters;
+        }
         if (enters)
           issue(
             'pcb.keepout',
@@ -1218,10 +1605,19 @@ export function runPCBDesignRules(
             [copper.id, zone.id],
             copper.at,
           );
+        else if (uncertain)
+          coverage(
+            'pcb.geometry-limit',
+            `${copper.label} is too close to the curved rule-area boundary to resolve the keepout check.`,
+            [copper.id, zone.id],
+            copper.at,
+          );
       }
     }
     if (connectivityEnabled) {
-      const connectivity = analyzePCBConnectivity(board);
+      const connectivity = analyzePCBConnectivity(board, 'inspection', {
+        pruning,
+      });
       const names = new Map(board.nets.map((net) => [net.id, net.name]));
       for (const connection of connectivity.edges)
         issue(

@@ -203,24 +203,38 @@ export default function LayoutGraphicProperties({
     };
   };
   const dimension = graphic.dimension;
+  const dimensionCaption = dimension?.caption;
+  const dimensionFormat = dimension?.format;
+  const centerMark = dimension?.type === 'center';
+  const controlPoints = graphic.kind === 'curve' ? graphic.points : undefined;
   const updateDimension = (changes: Partial<NonNullable<BoardLine['dimension']>>) =>
     dimension ? update({ dimension: { ...dimension, ...changes } }) : false;
 
   const geometryFields = geometry ? (
     <PropertySection title="Geometry" showTitle={false}>
       {point(
-        graphic.kind === 'text' ? 'Position' : graphic.kind === 'circle' ? 'Center' : 'Start',
+        graphic.kind === 'text' ? 'Position' : graphic.kind === 'circle' || centerMark ? 'Center' : 'Start',
         graphic.start,
         (start) => update(graphic.kind === 'text' ? { start, end: { ...start } } : { start }),
       )}
       {graphic.kind !== 'text' &&
-        point(graphic.kind === 'circle' ? 'Radius point' : 'End', graphic.end, (end) =>
+        point(graphic.kind === 'circle' ? 'Radius point' : centerMark ? 'Arm endpoint' : 'End', graphic.end, (end) =>
           update({ end }),
         )}
       {graphic.mid && point('Middle', graphic.mid, (mid) => update({ mid }))}
-      {dimension &&
-        point('Text position', dimension.caption, (position) =>
-          updateDimension({ caption: { ...dimension.caption, ...position } }),
+      {controlPoints && (
+        <>
+          {point('First control point', controlPoints[0], (control) =>
+            update({ points: [control, controlPoints[1]] }),
+          )}
+          {point('Second control point', controlPoints[1], (control) =>
+            update({ points: [controlPoints[0], control] }),
+          )}
+        </>
+      )}
+      {dimensionCaption &&
+        point('Text position', dimensionCaption, (position) =>
+          updateDimension({ caption: { ...dimensionCaption, ...position } }),
         )}
     </PropertySection>
   ) : null;
@@ -236,10 +250,10 @@ export default function LayoutGraphicProperties({
           : (value) => update({ text: { ...graphicText, value } }),
         geometryFields,
       )
-    : dimension
+    : dimensionCaption
       ? textFields(
-          dimension.caption,
-          (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),
+          dimensionCaption,
+          (caption) => updateDimension({ caption: { ...dimensionCaption, ...caption } }),
           false,
           undefined,
         )
@@ -292,14 +306,16 @@ export default function LayoutGraphicProperties({
               <PropertyRow
                 label="Dimension type"
                 value={
-                  dimension.type === 'aligned'
-                    ? 'Aligned'
-                    : dimension.type === 'radial'
-                      ? 'Radial'
-                      : 'Leader'
+                  centerMark ? 'Center mark' : dimension.type === 'orthogonal'
+                    ? 'Orthogonal'
+                    : dimension.type === 'aligned'
+                      ? 'Aligned'
+                      : dimension.type === 'radial'
+                        ? 'Radial'
+                        : 'Leader'
                 }
               />
-              <TextField
+              {!centerMark && <TextField
                 {...field}
                 label="Override value"
                 value={pcbDimensionOverrideValue(dimension)}
@@ -312,7 +328,7 @@ export default function LayoutGraphicProperties({
                   }
                 }}
                 multiline
-              />
+              />}
               {dimension.type === 'aligned' &&
                 number('Dimension height (mm)', dimension.height ?? 0, (height) =>
                   updateDimension({ height }),
@@ -336,23 +352,23 @@ export default function LayoutGraphicProperties({
           {text.style}
         </PropertyTab>
       )}
-      {dimension && (
+      {dimensionFormat && (
         <PropertyTab label="Format" icon={Hash}>
           <PropertySection title="Dimension format" showTitle={false}>
-            <PropertyRow label="Prefix" value={dimension.format.prefix || 'None'} />
-            <PropertyRow label="Suffix" value={dimension.format.suffix || 'None'} />
+            <PropertyRow label="Prefix" value={dimensionFormat.prefix || 'None'} />
+            <PropertyRow label="Suffix" value={dimensionFormat.suffix || 'None'} />
             <PropertyRow
               label="Units"
-              value={['Inches', 'Mils', 'Millimeters', 'Automatic'][dimension.format.units]}
+              value={['Inches', 'Mils', 'Millimeters', 'Automatic'][dimensionFormat.units]}
             />
             <PropertyRow
               label="Precision"
-              value={dimension.format.precision === 6 ? 'By unit' : dimension.format.precision}
+              value={dimensionFormat.precision === 6 ? 'By unit' : dimensionFormat.precision}
             />
           </PropertySection>
         </PropertyTab>
       )}
-      {dimension && (
+      {dimension && !centerMark && (
         <PropertyTab label="Style" icon={Ruler}>
           <PropertySection title="Dimension style" showTitle={false}>
             {number(

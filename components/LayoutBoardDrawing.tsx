@@ -1,6 +1,10 @@
 import { memo } from 'react';
-import type { PCB, BoardLayer, BoardLine } from '@/lib/pcb';
+import { pcbTrackMaskOpeningWidth, type PCB, type BoardLayer, type BoardLine } from '@/lib/pcb';
+import type { Point } from '@/lib/circuit';
 import { boardOutlineMinWidth, pcbLayerColor, copperFillOpacity } from '@/lib/pcb-display';
+import { pcbGraphicPath } from '@/lib/pcb-geometry';
+import { pcbViaDiameter } from '@/lib/pcb-padstack';
+import { pcbViaOpeningDiameter } from '@/lib/pcb-native-via';
 import PCBGraphic from './PCBGraphic';
 import PCBSelectionPaint from './PCBSelectionPaint';
 import { useLayoutSelection, type LayoutSelection } from './LayoutSelection';
@@ -58,23 +62,80 @@ export const LayoutTrackDrawing = memo(function LayoutTrackDrawing({
   );
 });
 
+export const LayoutArcTrackDrawing = memo(function LayoutArcTrackDrawing({
+  track,
+  netName,
+  highlightNets,
+}: Pick<Paint, 'highlightNets'> & {
+  track: NonNullable<PCB['arcTracks']>[number];
+  netName: string | undefined;
+}) {
+  const opacity = netOpacity(track.netId, highlightNets);
+  return (
+    <path
+      data-layout-arc-track={track.id}
+      aria-label={`Arc track · ${netName ?? ''} · ${track.layer}`}
+      data-net-id={track.netId}
+      data-export-opacity={opacity}
+      opacity={opacity}
+      d={pcbGraphicPath({ ...track, kind: 'arc' })}
+      fill="none"
+      stroke={pcbLayerColor(track.layer)}
+      strokeWidth={track.width}
+      strokeLinecap="round"
+      pointerEvents="none"
+    />
+  );
+});
+
+export const LayoutTrackMaskDrawing = memo(function LayoutTrackMaskDrawing({
+  track,
+}: {
+  track: PCB['tracks'][number] & { mid?: Point };
+}) {
+  const layer = track.maskLayer;
+  const width = pcbTrackMaskOpeningWidth(track);
+  if (!layer || width <= 0) return null;
+  return (
+    <path
+      data-layout-track-mask={track.id}
+      aria-label={`Track mask opening · ${layer}`}
+      d={pcbGraphicPath({ ...track, kind: track.mid ? 'arc' : undefined })}
+      fill="none"
+      stroke={pcbLayerColor(layer)}
+      strokeWidth={width}
+      strokeLinecap="round"
+      pointerEvents="none"
+    />
+  );
+});
+
 export const LayoutViaDrawing = memo(function LayoutViaDrawing({
   via,
   netName,
+  copperLayers,
+  paintLayer,
   selection,
   highlightNets,
   deferDrills = false,
 }: Paint & {
   via: PCB['vias'][number];
   netName: string | undefined;
+  copperLayers?: readonly PCB['layers'][number][];
+  paintLayer?: PCB['layers'][number];
   deferDrills?: boolean;
 }) {
   const selected = useLayoutSelection(selection, via.id);
+  const kind = via.span?.kind ?? 'through';
+  const title = `${kind[0].toUpperCase()}${kind.slice(1)} via`;
+  const diameter = pcbViaDiameter(via, paintLayer);
+  const hitRadius = Math.max(diameter, pcbViaOpeningDiameter(via)) / 2;
   return (
     <g
       data-selection-id={via.id}
-      aria-label={`Through via · ${netName ?? 'Unassigned'} · All copper layers`}
-      data-via-type="through"
+      aria-label={`${title} · ${netName ?? 'Unassigned'} · ${via.span ? copperLayers?.join(', ') : 'All copper layers'}`}
+      data-via-type={kind}
+      data-via-layers={copperLayers?.join(' ')}
       data-net-id={via.netId}
       opacity={netOpacity(via.netId, highlightNets, selected)}
       data-export-opacity={netOpacity(via.netId, highlightNets)}
@@ -82,18 +143,58 @@ export const LayoutViaDrawing = memo(function LayoutViaDrawing({
       <circle
         cx={via.x}
         cy={via.y}
-        data-layout-via-target={via.diameter / 2}
-        r={via.diameter / 2}
+        data-layout-via-target={hitRadius}
+        r={hitRadius}
         fill="transparent"
         aria-hidden="true"
       />
-      <PCBSelectionPaint color="var(--pcb-through)" selected={selected} locked={via.locked}>
-        {(color) => <circle cx={via.x} cy={via.y} r={via.diameter / 2} fill={color} />}
-      </PCBSelectionPaint>
-      {!deferDrills && <circle cx={via.x} cy={via.y} r={via.drill / 2} fill="var(--pcb-hole)" />}
+      {diameter > 0 && (
+        <PCBSelectionPaint
+          color={
+            (via.span || via.padstack) && paintLayer
+              ? pcbLayerColor(paintLayer)
+              : 'var(--pcb-through)'
+          }
+          selected={selected}
+          locked={via.locked}
+        >
+          {(color) => <circle cx={via.x} cy={via.y} r={diameter / 2} fill={color} />}
+        </PCBSelectionPaint>
+      )}
+      {!deferDrills && (
+        <>
+          <circle cx={via.x} cy={via.y} r={via.drill / 2} fill="var(--pcb-hole)" />
+          {via.backdrills && <ViaBackdrillIndicators via={via} />}
+        </>
+      )}
     </g>
   );
 });
+
+function ViaBackdrillIndicators({ via }: { via: PCB['vias'][number] }) {
+  return Object.entries(via.backdrills ?? {}).map(([slot, drill]) => {
+    const r = drill.diameter / 2;
+    const half = (sweep: number) => `M${-r} 0 A${r} ${r} 0 0 ${sweep} ${r} 0`;
+    return (
+      <g
+        key={slot}
+        data-layout-via-backdrill={via.id}
+        data-backdrill-slot={slot}
+        data-backdrill-diameter={drill.diameter}
+        data-backdrill-start={drill.start}
+        data-backdrill-end={drill.end}
+        transform={`translate(${via.x} ${via.y})`}
+        fill="none"
+        strokeWidth={Math.min(0.05, drill.diameter / 4)}
+        pointerEvents="none"
+        aria-hidden="true"
+      >
+        <path d={half(1)} stroke={pcbLayerColor(drill.start)} />
+        <path d={half(0)} stroke={pcbLayerColor(drill.end)} />
+      </g>
+    );
+  });
+}
 
 export const LayoutViaDrillDrawing = memo(function LayoutViaDrillDrawing({
   via,
@@ -101,17 +202,32 @@ export const LayoutViaDrillDrawing = memo(function LayoutViaDrillDrawing({
   highlightNets,
 }: Paint & { via: PCB['vias'][number] }) {
   const selected = useLayoutSelection(selection, via.id);
+  const opacity = netOpacity(via.netId, highlightNets, selected);
+  const exportOpacity = netOpacity(via.netId, highlightNets);
+  if (!via.backdrills) {
+    return (
+      <circle
+        data-via-drill={via.id}
+        cx={via.x}
+        cy={via.y}
+        r={via.drill / 2}
+        fill="var(--pcb-hole)"
+        pointerEvents="none"
+        opacity={opacity}
+        data-export-opacity={exportOpacity}
+      />
+    );
+  }
   return (
-    <circle
+    <g
       data-via-drill={via.id}
-      cx={via.x}
-      cy={via.y}
-      r={via.drill / 2}
-      fill="var(--pcb-hole)"
       pointerEvents="none"
-      opacity={netOpacity(via.netId, highlightNets, selected)}
-      data-export-opacity={netOpacity(via.netId, highlightNets)}
-    />
+      opacity={opacity}
+      data-export-opacity={exportOpacity}
+    >
+      <circle cx={via.x} cy={via.y} r={via.drill / 2} fill="var(--pcb-hole)" />
+      <ViaBackdrillIndicators via={via} />
+    </g>
   );
 });
 
@@ -241,7 +357,7 @@ export const LayoutGraphicDrawing = memo(function LayoutGraphicDrawing({
   return (
     <g data-selection-id={graphic.id}>
       <g data-layout-graphic-target={graphic.width} aria-hidden="true">
-        <PCBGraphic graphic={graphic} color="transparent" width={graphic.width} />
+        <PCBGraphic graphic={graphic} color="transparent" width={graphic.width} nativeRenderCache />
       </g>
       <PCBSelectionPaint
         color={pcbLayerColor(graphic.layer)}
@@ -252,6 +368,7 @@ export const LayoutGraphicDrawing = memo(function LayoutGraphicDrawing({
           <PCBGraphic
             graphic={graphic}
             color={color}
+            nativeRenderCache
             width={
               graphic.layer === 'Edge.Cuts'
                 ? Math.max(graphic.width, boardOutlineMinWidth)

@@ -1,6 +1,6 @@
 import { compileCapabilitySchema, type CapabilityValidation } from '../api/capability-schema';
 import type { CapabilityLevel } from '../api/capabilities';
-import { assertPCBLockedEdits } from '../lib/pcb-lock';
+import { assertPCBGroupLockEdits, assertPCBLockedEdits } from '../lib/pcb-lock';
 import { type Circuit, type Point, uid } from '../lib/circuit';
 import {
   appendSchematic,
@@ -15,7 +15,8 @@ import {
   schematicSnapshot,
   serializeProject,
 } from '../lib/project';
-import { type PCB, invalidatePCBFill } from '../lib/pcb';
+import { assertImportedPCBCopperUnchanged, type PCB, invalidatePCBFill } from '../lib/pcb';
+import { assertNativePCBArtworkUnchanged } from '../lib/pcb-text';
 import { refreshPCBFill } from '../lib/pcb-polygons';
 import { pcbFillRuleContext } from '../lib/pcb-clearance-sources';
 import { partFields, displayPartValue } from '../lib/library';
@@ -805,6 +806,11 @@ export class ProjectCore {
       next = ownProject(prepared, next);
       serializeProject(next);
     }
+    if (origin !== 'source' && origin !== 'history-file') {
+      assertImportedPCBCopperUnchanged(this.project?.pcb, next.pcb);
+      assertPCBGroupLockEdits(this.project?.pcb, next.pcb);
+      assertNativePCBArtworkUnchanged(this.project, next);
+    }
     // Ordinary geometry edits refresh accepted copper in the same transaction.
     // GUI footprint positioning, native Source and history files retain their contours.
     if (origin === 'edit' && this.project?.pcb && next.pcb) {
@@ -1060,6 +1066,9 @@ export class ProjectCore {
     if (this.project !== basis || this.sourceDraft !== null) return false;
     next = ownProject(next, basis);
     serializeProject(next);
+    assertImportedPCBCopperUnchanged(basis.pcb, next.pcb);
+    assertPCBGroupLockEdits(basis.pcb, next.pcb);
+    assertNativePCBArtworkUnchanged(basis, next);
     if (basis.pcb && next.pcb) {
       const pcb = refreshPCBFill(
         basis.pcb,

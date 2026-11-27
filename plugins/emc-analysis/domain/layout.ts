@@ -1,6 +1,11 @@
 import { compileCapabilitySchema } from '../../../api/capability-schema';
 import type { Point } from '../../../lib/circuit';
-import type { BoardZone, CopperLayer, PCB } from '../../../lib/pcb';
+import {
+  requireSupportedPCBCopper,
+  type BoardZone,
+  type CopperLayer,
+  type PCB,
+} from '../../../lib/pcb';
 
 export const EMC_LAYOUT_LIMITS = {
   selectedNets: 32,
@@ -66,7 +71,6 @@ export type EmcLayoutResult = {
 };
 
 const validateInput = compileCapabilitySchema(EMC_LAYOUT_INPUT_SCHEMA);
-const copperLayers = new Set(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu']);
 const limitMessage = 'This PCB exceeds the EMC layout inspection limit.';
 
 /**
@@ -77,6 +81,8 @@ const limitMessage = 'This PCB exceeds the EMC layout inspection limit.';
  * rejects invalid measurements rather than publishing nonfinite evidence.
  */
 export function inspectEmcLayout(board: PCB, input: EmcLayoutInput): EmcLayoutResult {
+  requireSupportedPCBCopper(board, 'PCB EMC inspection');
+  const copperLayers = new Set<string>(board.layers);
   const check = validateInput(input);
   if (!check.valid) throw new Error(`EMC layout input: ${check.error}`);
   if (board.nets.length > EMC_LAYOUT_LIMITS.boardNets) throw new Error(limitMessage);

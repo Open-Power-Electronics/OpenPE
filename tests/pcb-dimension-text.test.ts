@@ -11,9 +11,10 @@ import {
   pcbDimensionOverrideValue,
   pcbDimensionUnitSuffix,
   setPCBDimensionOverrideValue,
+  type FormattedPCBDimension,
 } from '../lib/pcb-dimension-text';
 
-function dimension(): NonNullable<BoardLine['dimension']> {
+function dimension(): FormattedPCBDimension {
   return {
     type: 'aligned',
     height: 5,

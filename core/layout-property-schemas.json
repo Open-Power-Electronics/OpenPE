@@ -64,6 +64,34 @@
           "F.Cu",
           "In1.Cu",
           "In2.Cu",
+          "In3.Cu",
+          "In4.Cu",
+          "In5.Cu",
+          "In6.Cu",
+          "In7.Cu",
+          "In8.Cu",
+          "In9.Cu",
+          "In10.Cu",
+          "In11.Cu",
+          "In12.Cu",
+          "In13.Cu",
+          "In14.Cu",
+          "In15.Cu",
+          "In16.Cu",
+          "In17.Cu",
+          "In18.Cu",
+          "In19.Cu",
+          "In20.Cu",
+          "In21.Cu",
+          "In22.Cu",
+          "In23.Cu",
+          "In24.Cu",
+          "In25.Cu",
+          "In26.Cu",
+          "In27.Cu",
+          "In28.Cu",
+          "In29.Cu",
+          "In30.Cu",
           "B.Cu",
           "F.SilkS",
           "B.SilkS",
@@ -86,16 +114,75 @@
           "User.1",
           "User.2",
           "User.3",
-          "User.4"
+          "User.4",
+          "User.5",
+          "User.6",
+          "User.7",
+          "User.8",
+          "User.9",
+          "User.10",
+          "User.11",
+          "User.12",
+          "User.13",
+          "User.14",
+          "User.15",
+          "User.16",
+          "User.17",
+          "User.18",
+          "User.19",
+          "User.20",
+          "User.21",
+          "User.22",
+          "User.23",
+          "User.24",
+          "User.25",
+          "User.26",
+          "User.27",
+          "User.28",
+          "User.29",
+          "User.30",
+          "User.31",
+          "User.32",
+          "User.33",
+          "User.34",
+          "User.35",
+          "User.36",
+          "User.37",
+          "User.38",
+          "User.39",
+          "User.40",
+          "User.41",
+          "User.42",
+          "User.43",
+          "User.44",
+          "User.45"
         ]
+      },
+      "netId": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "maskLayer": {
+        "enum": [
+          "F.Mask",
+          "B.Mask"
+        ]
+      },
+      "solderMaskMargin": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000,
+        "multipleOf": 0.000001
       },
       "kind": {
         "enum": [
           "arc",
           "circle",
+          "curve",
           "polygon",
           "text",
-          "dimension"
+          "dimension",
+          "point"
         ]
       },
       "mid": {
@@ -146,6 +233,57 @@
         },
         "maxItems": 10000
       },
+      "roundedRectRadius": {
+        "type": "number",
+        "minimum": 0.000001,
+        "maximum": 1000,
+        "multipleOf": 0.000001
+      },
+      "polygonArcs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "vertex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "mid": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "vertex",
+            "mid"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 1024,
+        "minItems": 1
+      },
+      "nativeNoStroke": {
+        "const": true
+      },
       "fill": {
         "type": "boolean"
       },
@@ -165,6 +303,24 @@
           "value": {
             "type": "string",
             "maxLength": 4096
+          },
+          "nativeExpansion": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "source",
+              "value"
+            ],
+            "additionalProperties": false
           },
           "rotation": {
             "type": "number",
@@ -200,6 +356,11 @@
             "maximum": 1000,
             "multipleOf": 0.000001
           },
+          "lineSpacing": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
           "justify": {
             "type": "array",
             "items": {
@@ -226,6 +387,45 @@
           "property": {
             "type": "string",
             "maxLength": 4096
+          },
+          "fontFace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x1f]+$"
+          },
+          "knockout": {
+            "const": true
+          },
+          "renderCache": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "rotation": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360,
+                "multipleOf": 0.000001
+              },
+              "polygons": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 131072,
+                  "pattern": "^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$"
+                },
+                "maxItems": 4096
+              }
+            },
+            "required": [
+              "value",
+              "rotation",
+              "polygons"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -233,6 +433,64 @@
           "rotation",
           "size",
           "thickness"
+        ],
+        "additionalProperties": false
+      },
+      "textBox": {
+        "type": "object",
+        "properties": {
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 256,
+            "minItems": 3
+          },
+          "margins": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000,
+              "multipleOf": 0.000001
+            },
+            "maxItems": 4,
+            "minItems": 4
+          },
+          "border": {
+            "type": "boolean"
+          },
+          "strokeWidth": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "multipleOf": 0.000001
+          }
+        },
+        "required": [
+          "margins",
+          "border",
+          "strokeWidth"
         ],
         "additionalProperties": false
       },
@@ -245,8 +503,10 @@
           "type": {
             "enum": [
               "aligned",
+              "orthogonal",
               "radial",
-              "leader"
+              "leader",
+              "center"
             ]
           },
           "height": {
@@ -254,6 +514,12 @@
             "minimum": -100000,
             "maximum": 100000,
             "multipleOf": 0.000001
+          },
+          "orientation": {
+            "enum": [
+              0,
+              1
+            ]
           },
           "leaderLength": {
             "type": "number",
@@ -290,6 +556,9 @@
               "overrideValue": {
                 "type": "string",
                 "maxLength": 4096
+              },
+              "suppressZeroes": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -368,11 +637,28 @@
                 "type": "string",
                 "maxLength": 4096
               },
+              "nativeExpansion": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "source",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
               "rotation": {
                 "type": "number",
                 "minimum": -360,
-                "maximum": 360,
-                "multipleOf": 0.000001
+                "maximum": 360
               },
               "size": {
                 "type": "object",
@@ -402,6 +688,11 @@
                 "maximum": 1000,
                 "multipleOf": 0.000001
               },
+              "lineSpacing": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000
+              },
               "justify": {
                 "type": "array",
                 "items": {
@@ -428,6 +719,45 @@
               "property": {
                 "type": "string",
                 "maxLength": 4096
+              },
+              "fontFace": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\x00-\\x1f]+$"
+              },
+              "knockout": {
+                "const": true
+              },
+              "renderCache": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "rotation": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360,
+                    "multipleOf": 0.000001
+                  },
+                  "polygons": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 131072,
+                      "pattern": "^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$"
+                    },
+                    "maxItems": 4096
+                  }
+                },
+                "required": [
+                  "value",
+                  "rotation",
+                  "polygons"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -443,9 +773,7 @@
         },
         "required": [
           "type",
-          "format",
-          "style",
-          "caption"
+          "style"
         ],
         "additionalProperties": false
       }
@@ -485,6 +813,34 @@
           "F.Cu",
           "In1.Cu",
           "In2.Cu",
+          "In3.Cu",
+          "In4.Cu",
+          "In5.Cu",
+          "In6.Cu",
+          "In7.Cu",
+          "In8.Cu",
+          "In9.Cu",
+          "In10.Cu",
+          "In11.Cu",
+          "In12.Cu",
+          "In13.Cu",
+          "In14.Cu",
+          "In15.Cu",
+          "In16.Cu",
+          "In17.Cu",
+          "In18.Cu",
+          "In19.Cu",
+          "In20.Cu",
+          "In21.Cu",
+          "In22.Cu",
+          "In23.Cu",
+          "In24.Cu",
+          "In25.Cu",
+          "In26.Cu",
+          "In27.Cu",
+          "In28.Cu",
+          "In29.Cu",
+          "In30.Cu",
           "B.Cu",
           "F.SilkS",
           "B.SilkS",
@@ -507,7 +863,48 @@
           "User.1",
           "User.2",
           "User.3",
-          "User.4"
+          "User.4",
+          "User.5",
+          "User.6",
+          "User.7",
+          "User.8",
+          "User.9",
+          "User.10",
+          "User.11",
+          "User.12",
+          "User.13",
+          "User.14",
+          "User.15",
+          "User.16",
+          "User.17",
+          "User.18",
+          "User.19",
+          "User.20",
+          "User.21",
+          "User.22",
+          "User.23",
+          "User.24",
+          "User.25",
+          "User.26",
+          "User.27",
+          "User.28",
+          "User.29",
+          "User.30",
+          "User.31",
+          "User.32",
+          "User.33",
+          "User.34",
+          "User.35",
+          "User.36",
+          "User.37",
+          "User.38",
+          "User.39",
+          "User.40",
+          "User.41",
+          "User.42",
+          "User.43",
+          "User.44",
+          "User.45"
         ]
       },
       "outline": {
@@ -534,8 +931,52 @@
           ],
           "additionalProperties": false
         },
-        "maxItems": 10000,
-        "minItems": 3
+        "maxItems": 10000
+      },
+      "nativeCircularOutline": {
+        "const": true
+      },
+      "nativeOutlineArcs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "vertex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "mid": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "vertex",
+            "mid"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 1024,
+        "minItems": 1
       },
       "holes": {
         "type": "array",
@@ -567,6 +1008,9 @@
           "minItems": 3
         },
         "maxItems": 100
+      },
+      "nativeUnassignedFill": {
+        "const": true
       },
       "filledPolygons": {
         "type": "array",
@@ -619,7 +1063,7 @@
       },
       "minThickness": {
         "type": "number",
-        "minimum": 0.000001,
+        "minimum": 0,
         "maximum": 1000,
         "multipleOf": 0.000001
       },
@@ -638,7 +1082,13 @@
       "priority": {
         "type": "integer",
         "minimum": 0,
-        "maximum": 10000
+        "maximum": 2147483647
+      },
+      "teardrop": {
+        "enum": [
+          "padvia",
+          "track_end"
+        ]
       },
       "padConnection": {
         "enum": [
@@ -651,6 +1101,132 @@
         "type": "integer",
         "minimum": 0,
         "maximum": 2
+      },
+      "islandAreaMin": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 2147.483647,
+        "multipleOf": 0.000001
+      },
+      "cornerSmoothing": {
+        "type": "object",
+        "properties": {
+          "style": {
+            "enum": [
+              "chamfer",
+              "fillet"
+            ]
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          }
+        },
+        "required": [
+          "style"
+        ],
+        "additionalProperties": false
+      },
+      "hatchPosition": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "multipleOf": 0.000001
+          },
+          "y": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "multipleOf": 0.000001
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "additionalProperties": false
+      },
+      "hatchFill": {
+        "type": "object",
+        "properties": {
+          "thickness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          },
+          "gap": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          },
+          "orientation": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360,
+            "multipleOf": 0.000001
+          },
+          "minHoleArea": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          },
+          "borderAlgorithm": {
+            "enum": [
+              "hatch_thickness",
+              "min_thickness"
+            ]
+          },
+          "smoothingLevel": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          },
+          "smoothingValue": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.000001
+          }
+        },
+        "required": [
+          "thickness",
+          "gap",
+          "orientation",
+          "minHoleArea",
+          "borderAlgorithm"
+        ],
+        "additionalProperties": false
+      },
+      "nativePlacement": {
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "enum": [
+              "sheetname",
+              "component_class",
+              "group"
+            ]
+          },
+          "sourceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "sourceKind",
+          "sourceName"
+        ],
+        "additionalProperties": false
       },
       "fillEnabled": {
         "type": "boolean"
@@ -741,6 +1317,7 @@
           "circle",
           "oval",
           "roundrect",
+          "trapezoid",
           "custom"
         ]
       },
@@ -766,8 +1343,33 @@
         ],
         "additionalProperties": false
       },
+      "trapezoidDelta": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "multipleOf": 0.000001
+          },
+          "y": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "multipleOf": 0.000001
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "additionalProperties": false
+      },
       "customAnchor": {
         "const": "circle"
+      },
+      "nativeConnect": {
+        "const": true
       },
       "outline": {
         "type": "array",
@@ -820,6 +1422,34 @@
             "F.Cu",
             "In1.Cu",
             "In2.Cu",
+            "In3.Cu",
+            "In4.Cu",
+            "In5.Cu",
+            "In6.Cu",
+            "In7.Cu",
+            "In8.Cu",
+            "In9.Cu",
+            "In10.Cu",
+            "In11.Cu",
+            "In12.Cu",
+            "In13.Cu",
+            "In14.Cu",
+            "In15.Cu",
+            "In16.Cu",
+            "In17.Cu",
+            "In18.Cu",
+            "In19.Cu",
+            "In20.Cu",
+            "In21.Cu",
+            "In22.Cu",
+            "In23.Cu",
+            "In24.Cu",
+            "In25.Cu",
+            "In26.Cu",
+            "In27.Cu",
+            "In28.Cu",
+            "In29.Cu",
+            "In30.Cu",
             "B.Cu",
             "F.SilkS",
             "B.SilkS",
@@ -843,13 +1473,54 @@
             "User.2",
             "User.3",
             "User.4",
+            "User.5",
+            "User.6",
+            "User.7",
+            "User.8",
+            "User.9",
+            "User.10",
+            "User.11",
+            "User.12",
+            "User.13",
+            "User.14",
+            "User.15",
+            "User.16",
+            "User.17",
+            "User.18",
+            "User.19",
+            "User.20",
+            "User.21",
+            "User.22",
+            "User.23",
+            "User.24",
+            "User.25",
+            "User.26",
+            "User.27",
+            "User.28",
+            "User.29",
+            "User.30",
+            "User.31",
+            "User.32",
+            "User.33",
+            "User.34",
+            "User.35",
+            "User.36",
+            "User.37",
+            "User.38",
+            "User.39",
+            "User.40",
+            "User.41",
+            "User.42",
+            "User.43",
+            "User.44",
+            "User.45",
             "*.Cu",
             "F&B.Cu",
-            "*.Mask"
+            "*.Mask",
+            "*.SilkS"
           ]
         },
         "maxItems": 8,
-        "minItems": 1,
         "uniqueItems": true
       },
       "drillOffset": {
@@ -943,16 +1614,90 @@
         "maximum": 360,
         "multipleOf": 0.000001
       },
+      "teardrops": {
+        "type": "object",
+        "properties": {
+          "bestLengthRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "maxLength": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "bestWidthRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "maxWidth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "filterRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "curvedEdges": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowTwoSegments": {
+            "type": "boolean"
+          },
+          "preferZoneConnections": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "copperClearance": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1000,
+        "multipleOf": 0.000001
+      },
       "zoneConnect": {
         "type": "integer",
-        "minimum": 0,
+        "minimum": -1,
         "maximum": 3
+      },
+      "thermalGap": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1000,
+        "multipleOf": 0.000001
+      },
+      "thermalBridge": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1000,
+        "multipleOf": 0.000001
       },
       "removeUnusedLayers": {
         "type": "boolean"
       },
       "heatsink": {
         "const": true
+      },
+      "fabricationProperty": {
+        "enum": [
+          "pad_prop_bga",
+          "pad_prop_mechanical",
+          "pad_prop_pressfit",
+          "pad_prop_fiducial_glob",
+          "pad_prop_fiducial_loc",
+          "pad_prop_castellated",
+          "pad_prop_testpoint"
+        ]
       },
       "unconnected": {
         "const": true
@@ -991,8 +1736,7 @@
       },
       "libraryId": {
         "type": "string",
-        "maxLength": 4096,
-        "minLength": 1
+        "maxLength": 4096
       },
       "locked": {
         "const": true
@@ -1014,6 +1758,17 @@
         "minimum": -100000,
         "maximum": 100000,
         "multipleOf": 0.000001
+      },
+      "copperClearance": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1000,
+        "multipleOf": 0.000001
+      },
+      "zoneConnect": {
+        "type": "integer",
+        "minimum": -1,
+        "maximum": 3
       },
       "x": {
         "type": "number",
@@ -1086,6 +1841,7 @@
                 "circle",
                 "oval",
                 "roundrect",
+                "trapezoid",
                 "custom"
               ]
             },
@@ -1111,8 +1867,33 @@
               ],
               "additionalProperties": false
             },
+            "trapezoidDelta": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
             "customAnchor": {
               "const": "circle"
+            },
+            "nativeConnect": {
+              "const": true
             },
             "outline": {
               "type": "array",
@@ -1165,6 +1946,34 @@
                   "F.Cu",
                   "In1.Cu",
                   "In2.Cu",
+                  "In3.Cu",
+                  "In4.Cu",
+                  "In5.Cu",
+                  "In6.Cu",
+                  "In7.Cu",
+                  "In8.Cu",
+                  "In9.Cu",
+                  "In10.Cu",
+                  "In11.Cu",
+                  "In12.Cu",
+                  "In13.Cu",
+                  "In14.Cu",
+                  "In15.Cu",
+                  "In16.Cu",
+                  "In17.Cu",
+                  "In18.Cu",
+                  "In19.Cu",
+                  "In20.Cu",
+                  "In21.Cu",
+                  "In22.Cu",
+                  "In23.Cu",
+                  "In24.Cu",
+                  "In25.Cu",
+                  "In26.Cu",
+                  "In27.Cu",
+                  "In28.Cu",
+                  "In29.Cu",
+                  "In30.Cu",
                   "B.Cu",
                   "F.SilkS",
                   "B.SilkS",
@@ -1188,13 +1997,54 @@
                   "User.2",
                   "User.3",
                   "User.4",
+                  "User.5",
+                  "User.6",
+                  "User.7",
+                  "User.8",
+                  "User.9",
+                  "User.10",
+                  "User.11",
+                  "User.12",
+                  "User.13",
+                  "User.14",
+                  "User.15",
+                  "User.16",
+                  "User.17",
+                  "User.18",
+                  "User.19",
+                  "User.20",
+                  "User.21",
+                  "User.22",
+                  "User.23",
+                  "User.24",
+                  "User.25",
+                  "User.26",
+                  "User.27",
+                  "User.28",
+                  "User.29",
+                  "User.30",
+                  "User.31",
+                  "User.32",
+                  "User.33",
+                  "User.34",
+                  "User.35",
+                  "User.36",
+                  "User.37",
+                  "User.38",
+                  "User.39",
+                  "User.40",
+                  "User.41",
+                  "User.42",
+                  "User.43",
+                  "User.44",
+                  "User.45",
                   "*.Cu",
                   "F&B.Cu",
-                  "*.Mask"
+                  "*.Mask",
+                  "*.SilkS"
                 ]
               },
               "maxItems": 8,
-              "minItems": 1,
               "uniqueItems": true
             },
             "drillOffset": {
@@ -1288,16 +2138,90 @@
               "maximum": 360,
               "multipleOf": 0.000001
             },
+            "teardrops": {
+              "type": "object",
+              "properties": {
+                "bestLengthRatio": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "maxLength": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "bestWidthRatio": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "maxWidth": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "filterRatio": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
+                "curvedEdges": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "allowTwoSegments": {
+                  "type": "boolean"
+                },
+                "preferZoneConnections": {
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "additionalProperties": false,
+              "minProperties": 1
+            },
+            "copperClearance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            },
             "zoneConnect": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": -1,
               "maximum": 3
+            },
+            "thermalGap": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            },
+            "thermalBridge": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1000,
+              "multipleOf": 0.000001
             },
             "removeUnusedLayers": {
               "type": "boolean"
             },
             "heatsink": {
               "const": true
+            },
+            "fabricationProperty": {
+              "enum": [
+                "pad_prop_bga",
+                "pad_prop_mechanical",
+                "pad_prop_pressfit",
+                "pad_prop_fiducial_glob",
+                "pad_prop_fiducial_loc",
+                "pad_prop_castellated",
+                "pad_prop_testpoint"
+              ]
             },
             "unconnected": {
               "const": true
@@ -1385,6 +2309,34 @@
                 "F.Cu",
                 "In1.Cu",
                 "In2.Cu",
+                "In3.Cu",
+                "In4.Cu",
+                "In5.Cu",
+                "In6.Cu",
+                "In7.Cu",
+                "In8.Cu",
+                "In9.Cu",
+                "In10.Cu",
+                "In11.Cu",
+                "In12.Cu",
+                "In13.Cu",
+                "In14.Cu",
+                "In15.Cu",
+                "In16.Cu",
+                "In17.Cu",
+                "In18.Cu",
+                "In19.Cu",
+                "In20.Cu",
+                "In21.Cu",
+                "In22.Cu",
+                "In23.Cu",
+                "In24.Cu",
+                "In25.Cu",
+                "In26.Cu",
+                "In27.Cu",
+                "In28.Cu",
+                "In29.Cu",
+                "In30.Cu",
                 "B.Cu",
                 "F.SilkS",
                 "B.SilkS",
@@ -1407,16 +2359,75 @@
                 "User.1",
                 "User.2",
                 "User.3",
-                "User.4"
+                "User.4",
+                "User.5",
+                "User.6",
+                "User.7",
+                "User.8",
+                "User.9",
+                "User.10",
+                "User.11",
+                "User.12",
+                "User.13",
+                "User.14",
+                "User.15",
+                "User.16",
+                "User.17",
+                "User.18",
+                "User.19",
+                "User.20",
+                "User.21",
+                "User.22",
+                "User.23",
+                "User.24",
+                "User.25",
+                "User.26",
+                "User.27",
+                "User.28",
+                "User.29",
+                "User.30",
+                "User.31",
+                "User.32",
+                "User.33",
+                "User.34",
+                "User.35",
+                "User.36",
+                "User.37",
+                "User.38",
+                "User.39",
+                "User.40",
+                "User.41",
+                "User.42",
+                "User.43",
+                "User.44",
+                "User.45"
               ]
+            },
+            "netId": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "maskLayer": {
+              "enum": [
+                "F.Mask",
+                "B.Mask"
+              ]
+            },
+            "solderMaskMargin": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000,
+              "multipleOf": 0.000001
             },
             "kind": {
               "enum": [
                 "arc",
                 "circle",
+                "curve",
                 "polygon",
                 "text",
-                "dimension"
+                "dimension",
+                "point"
               ]
             },
             "mid": {
@@ -1467,6 +2478,57 @@
               },
               "maxItems": 10000
             },
+            "roundedRectRadius": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            },
+            "polygonArcs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "vertex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "mid": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "vertex",
+                  "mid"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 1024,
+              "minItems": 1
+            },
+            "nativeNoStroke": {
+              "const": true
+            },
             "fill": {
               "type": "boolean"
             },
@@ -1486,6 +2548,24 @@
                 "value": {
                   "type": "string",
                   "maxLength": 4096
+                },
+                "nativeExpansion": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 4096
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "value"
+                  ],
+                  "additionalProperties": false
                 },
                 "rotation": {
                   "type": "number",
@@ -1521,6 +2601,11 @@
                   "maximum": 1000,
                   "multipleOf": 0.000001
                 },
+                "lineSpacing": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000
+                },
                 "justify": {
                   "type": "array",
                   "items": {
@@ -1547,6 +2632,45 @@
                 "property": {
                   "type": "string",
                   "maxLength": 4096
+                },
+                "fontFace": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[^\\x00-\\x1f]+$"
+                },
+                "knockout": {
+                  "const": true
+                },
+                "renderCache": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "rotation": {
+                      "type": "number",
+                      "minimum": -360,
+                      "maximum": 360,
+                      "multipleOf": 0.000001
+                    },
+                    "polygons": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 131072,
+                        "pattern": "^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$"
+                      },
+                      "maxItems": 4096
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "rotation",
+                    "polygons"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -1554,6 +2678,64 @@
                 "rotation",
                 "size",
                 "thickness"
+              ],
+              "additionalProperties": false
+            },
+            "textBox": {
+              "type": "object",
+              "properties": {
+                "outline": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 256,
+                  "minItems": 3
+                },
+                "margins": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "maxItems": 4,
+                  "minItems": 4
+                },
+                "border": {
+                  "type": "boolean"
+                },
+                "strokeWidth": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "margins",
+                "border",
+                "strokeWidth"
               ],
               "additionalProperties": false
             },
@@ -1566,8 +2748,10 @@
                 "type": {
                   "enum": [
                     "aligned",
+                    "orthogonal",
                     "radial",
-                    "leader"
+                    "leader",
+                    "center"
                   ]
                 },
                 "height": {
@@ -1575,6 +2759,12 @@
                   "minimum": -100000,
                   "maximum": 100000,
                   "multipleOf": 0.000001
+                },
+                "orientation": {
+                  "enum": [
+                    0,
+                    1
+                  ]
                 },
                 "leaderLength": {
                   "type": "number",
@@ -1611,6 +2801,9 @@
                     "overrideValue": {
                       "type": "string",
                       "maxLength": 4096
+                    },
+                    "suppressZeroes": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1689,11 +2882,28 @@
                       "type": "string",
                       "maxLength": 4096
                     },
+                    "nativeExpansion": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "value": {
+                          "type": "string",
+                          "maxLength": 4096
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
                     "rotation": {
                       "type": "number",
                       "minimum": -360,
-                      "maximum": 360,
-                      "multipleOf": 0.000001
+                      "maximum": 360
                     },
                     "size": {
                       "type": "object",
@@ -1723,6 +2933,11 @@
                       "maximum": 1000,
                       "multipleOf": 0.000001
                     },
+                    "lineSpacing": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
                     "justify": {
                       "type": "array",
                       "items": {
@@ -1749,6 +2964,45 @@
                     "property": {
                       "type": "string",
                       "maxLength": 4096
+                    },
+                    "fontFace": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^[^\\x00-\\x1f]+$"
+                    },
+                    "knockout": {
+                      "const": true
+                    },
+                    "renderCache": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "rotation": {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360,
+                          "multipleOf": 0.000001
+                        },
+                        "polygons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 131072,
+                            "pattern": "^-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)(?: -?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000),-?(?:[0-9]{1,5}(?:\\.[0-9]{1,6})?|100000)){2,4095}$"
+                          },
+                          "maxItems": 4096
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "rotation",
+                        "polygons"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -1764,9 +3018,7 @@
               },
               "required": [
                 "type",
-                "format",
-                "style",
-                "caption"
+                "style"
               ],
               "additionalProperties": false
             }
@@ -1809,8 +3061,101 @@
             },
             "layer": {
               "enum": [
+                "F.Cu",
+                "In1.Cu",
+                "In2.Cu",
+                "In3.Cu",
+                "In4.Cu",
+                "In5.Cu",
+                "In6.Cu",
+                "In7.Cu",
+                "In8.Cu",
+                "In9.Cu",
+                "In10.Cu",
+                "In11.Cu",
+                "In12.Cu",
+                "In13.Cu",
+                "In14.Cu",
+                "In15.Cu",
+                "In16.Cu",
+                "In17.Cu",
+                "In18.Cu",
+                "In19.Cu",
+                "In20.Cu",
+                "In21.Cu",
+                "In22.Cu",
+                "In23.Cu",
+                "In24.Cu",
+                "In25.Cu",
+                "In26.Cu",
+                "In27.Cu",
+                "In28.Cu",
+                "In29.Cu",
+                "In30.Cu",
+                "B.Cu",
+                "F.SilkS",
+                "B.SilkS",
                 "F.Fab",
-                "B.Fab"
+                "B.Fab",
+                "F.CrtYd",
+                "B.CrtYd",
+                "Edge.Cuts",
+                "F.Mask",
+                "B.Mask",
+                "F.Paste",
+                "B.Paste",
+                "F.Adhes",
+                "B.Adhes",
+                "Dwgs.User",
+                "Cmts.User",
+                "Eco1.User",
+                "Eco2.User",
+                "Margin",
+                "User.1",
+                "User.2",
+                "User.3",
+                "User.4",
+                "User.5",
+                "User.6",
+                "User.7",
+                "User.8",
+                "User.9",
+                "User.10",
+                "User.11",
+                "User.12",
+                "User.13",
+                "User.14",
+                "User.15",
+                "User.16",
+                "User.17",
+                "User.18",
+                "User.19",
+                "User.20",
+                "User.21",
+                "User.22",
+                "User.23",
+                "User.24",
+                "User.25",
+                "User.26",
+                "User.27",
+                "User.28",
+                "User.29",
+                "User.30",
+                "User.31",
+                "User.32",
+                "User.33",
+                "User.34",
+                "User.35",
+                "User.36",
+                "User.37",
+                "User.38",
+                "User.39",
+                "User.40",
+                "User.41",
+                "User.42",
+                "User.43",
+                "User.44",
+                "User.45"
               ]
             }
           },
@@ -1832,6 +3177,32 @@
       "value": {
         "type": "string",
         "maxLength": 4096
+      },
+      "nativeMissingReference": {
+        "const": true
+      },
+      "nativeMissingValue": {
+        "const": true
+      },
+      "netTiePadGroups": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "maxItems": 128
+      },
+      "jumperPadGroups": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "maxItems": 128
+        },
+        "maxItems": 128
       },
       "zones": {
         "type": "array",
@@ -1861,6 +3232,34 @@
                 "F.Cu",
                 "In1.Cu",
                 "In2.Cu",
+                "In3.Cu",
+                "In4.Cu",
+                "In5.Cu",
+                "In6.Cu",
+                "In7.Cu",
+                "In8.Cu",
+                "In9.Cu",
+                "In10.Cu",
+                "In11.Cu",
+                "In12.Cu",
+                "In13.Cu",
+                "In14.Cu",
+                "In15.Cu",
+                "In16.Cu",
+                "In17.Cu",
+                "In18.Cu",
+                "In19.Cu",
+                "In20.Cu",
+                "In21.Cu",
+                "In22.Cu",
+                "In23.Cu",
+                "In24.Cu",
+                "In25.Cu",
+                "In26.Cu",
+                "In27.Cu",
+                "In28.Cu",
+                "In29.Cu",
+                "In30.Cu",
                 "B.Cu",
                 "F.SilkS",
                 "B.SilkS",
@@ -1883,7 +3282,48 @@
                 "User.1",
                 "User.2",
                 "User.3",
-                "User.4"
+                "User.4",
+                "User.5",
+                "User.6",
+                "User.7",
+                "User.8",
+                "User.9",
+                "User.10",
+                "User.11",
+                "User.12",
+                "User.13",
+                "User.14",
+                "User.15",
+                "User.16",
+                "User.17",
+                "User.18",
+                "User.19",
+                "User.20",
+                "User.21",
+                "User.22",
+                "User.23",
+                "User.24",
+                "User.25",
+                "User.26",
+                "User.27",
+                "User.28",
+                "User.29",
+                "User.30",
+                "User.31",
+                "User.32",
+                "User.33",
+                "User.34",
+                "User.35",
+                "User.36",
+                "User.37",
+                "User.38",
+                "User.39",
+                "User.40",
+                "User.41",
+                "User.42",
+                "User.43",
+                "User.44",
+                "User.45"
               ]
             },
             "outline": {
@@ -1910,8 +3350,52 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 10000,
-              "minItems": 3
+              "maxItems": 10000
+            },
+            "nativeCircularOutline": {
+              "const": true
+            },
+            "nativeOutlineArcs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "vertex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "mid": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "vertex",
+                  "mid"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 1024,
+              "minItems": 1
             },
             "holes": {
               "type": "array",
@@ -1943,6 +3427,9 @@
                 "minItems": 3
               },
               "maxItems": 100
+            },
+            "nativeUnassignedFill": {
+              "const": true
             },
             "filledPolygons": {
               "type": "array",
@@ -1995,7 +3482,7 @@
             },
             "minThickness": {
               "type": "number",
-              "minimum": 0.000001,
+              "minimum": 0,
               "maximum": 1000,
               "multipleOf": 0.000001
             },
@@ -2014,7 +3501,13 @@
             "priority": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 10000
+              "maximum": 2147483647
+            },
+            "teardrop": {
+              "enum": [
+                "padvia",
+                "track_end"
+              ]
             },
             "padConnection": {
               "enum": [
@@ -2027,6 +3520,132 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 2
+            },
+            "islandAreaMin": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2147.483647,
+              "multipleOf": 0.000001
+            },
+            "cornerSmoothing": {
+              "type": "object",
+              "properties": {
+                "style": {
+                  "enum": [
+                    "chamfer",
+                    "fillet"
+                  ]
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "style"
+              ],
+              "additionalProperties": false
+            },
+            "hatchPosition": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -100000,
+                  "maximum": 100000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "hatchFill": {
+              "type": "object",
+              "properties": {
+                "thickness": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                },
+                "gap": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                },
+                "orientation": {
+                  "type": "number",
+                  "minimum": -360,
+                  "maximum": 360,
+                  "multipleOf": 0.000001
+                },
+                "minHoleArea": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                },
+                "borderAlgorithm": {
+                  "enum": [
+                    "hatch_thickness",
+                    "min_thickness"
+                  ]
+                },
+                "smoothingLevel": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                },
+                "smoothingValue": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "multipleOf": 0.000001
+                }
+              },
+              "required": [
+                "thickness",
+                "gap",
+                "orientation",
+                "minHoleArea",
+                "borderAlgorithm"
+              ],
+              "additionalProperties": false
+            },
+            "nativePlacement": {
+              "type": "object",
+              "properties": {
+                "sourceKind": {
+                  "enum": [
+                    "sheetname",
+                    "component_class",
+                    "group"
+                  ]
+                },
+                "sourceName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "sourceKind",
+                "sourceName"
+              ],
+              "additionalProperties": false
             },
             "fillEnabled": {
               "type": "boolean"
@@ -2091,20 +3710,17 @@
                 "x": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 },
                 "y": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 },
                 "z": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 }
               },
               "required": [
@@ -2146,20 +3762,17 @@
                 "x": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 },
                 "y": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 },
                 "z": {
                   "type": "number",
                   "minimum": -100000,
-                  "maximum": 100000,
-                  "multipleOf": 0.000001
+                  "maximum": 100000
                 }
               },
               "required": [
@@ -2234,11 +3847,408 @@
         "multipleOf": 0.000001
       },
       "netId": {
-        "type": "string",
-        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          {
+            "const": ""
+          }
+        ]
       },
       "locked": {
         "const": true
+      },
+      "teardrops": {
+        "type": "object",
+        "properties": {
+          "bestLengthRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "maxLength": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "bestWidthRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "maxWidth": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "filterRatio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "curvedEdges": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowTwoSegments": {
+            "type": "boolean"
+          },
+          "preferZoneConnections": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "tenting": {
+        "type": "object",
+        "properties": {
+          "front": {
+            "type": "boolean"
+          },
+          "back": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "span": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "blind",
+              "buried",
+              "micro"
+            ]
+          },
+          "start": {
+            "enum": [
+              "F.Cu",
+              "In1.Cu",
+              "In2.Cu",
+              "In3.Cu",
+              "In4.Cu",
+              "In5.Cu",
+              "In6.Cu",
+              "In7.Cu",
+              "In8.Cu",
+              "In9.Cu",
+              "In10.Cu",
+              "In11.Cu",
+              "In12.Cu",
+              "In13.Cu",
+              "In14.Cu",
+              "In15.Cu",
+              "In16.Cu",
+              "In17.Cu",
+              "In18.Cu",
+              "In19.Cu",
+              "In20.Cu",
+              "In21.Cu",
+              "In22.Cu",
+              "In23.Cu",
+              "In24.Cu",
+              "In25.Cu",
+              "In26.Cu",
+              "In27.Cu",
+              "In28.Cu",
+              "In29.Cu",
+              "In30.Cu",
+              "B.Cu"
+            ]
+          },
+          "end": {
+            "enum": [
+              "F.Cu",
+              "In1.Cu",
+              "In2.Cu",
+              "In3.Cu",
+              "In4.Cu",
+              "In5.Cu",
+              "In6.Cu",
+              "In7.Cu",
+              "In8.Cu",
+              "In9.Cu",
+              "In10.Cu",
+              "In11.Cu",
+              "In12.Cu",
+              "In13.Cu",
+              "In14.Cu",
+              "In15.Cu",
+              "In16.Cu",
+              "In17.Cu",
+              "In18.Cu",
+              "In19.Cu",
+              "In20.Cu",
+              "In21.Cu",
+              "In22.Cu",
+              "In23.Cu",
+              "In24.Cu",
+              "In25.Cu",
+              "In26.Cu",
+              "In27.Cu",
+              "In28.Cu",
+              "In29.Cu",
+              "In30.Cu",
+              "B.Cu"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false
+      },
+      "backdrills": {
+        "type": "object",
+        "properties": {
+          "secondary": {
+            "type": "object",
+            "properties": {
+              "diameter": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "start": {
+                "enum": [
+                  "F.Cu",
+                  "B.Cu"
+                ]
+              },
+              "end": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "In3.Cu",
+                  "In4.Cu",
+                  "In5.Cu",
+                  "In6.Cu",
+                  "In7.Cu",
+                  "In8.Cu",
+                  "In9.Cu",
+                  "In10.Cu",
+                  "In11.Cu",
+                  "In12.Cu",
+                  "In13.Cu",
+                  "In14.Cu",
+                  "In15.Cu",
+                  "In16.Cu",
+                  "In17.Cu",
+                  "In18.Cu",
+                  "In19.Cu",
+                  "In20.Cu",
+                  "In21.Cu",
+                  "In22.Cu",
+                  "In23.Cu",
+                  "In24.Cu",
+                  "In25.Cu",
+                  "In26.Cu",
+                  "In27.Cu",
+                  "In28.Cu",
+                  "In29.Cu",
+                  "In30.Cu",
+                  "B.Cu"
+                ]
+              }
+            },
+            "required": [
+              "diameter",
+              "start",
+              "end"
+            ],
+            "additionalProperties": false
+          },
+          "tertiary": {
+            "type": "object",
+            "properties": {
+              "diameter": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "start": {
+                "enum": [
+                  "F.Cu",
+                  "B.Cu"
+                ]
+              },
+              "end": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "In3.Cu",
+                  "In4.Cu",
+                  "In5.Cu",
+                  "In6.Cu",
+                  "In7.Cu",
+                  "In8.Cu",
+                  "In9.Cu",
+                  "In10.Cu",
+                  "In11.Cu",
+                  "In12.Cu",
+                  "In13.Cu",
+                  "In14.Cu",
+                  "In15.Cu",
+                  "In16.Cu",
+                  "In17.Cu",
+                  "In18.Cu",
+                  "In19.Cu",
+                  "In20.Cu",
+                  "In21.Cu",
+                  "In22.Cu",
+                  "In23.Cu",
+                  "In24.Cu",
+                  "In25.Cu",
+                  "In26.Cu",
+                  "In27.Cu",
+                  "In28.Cu",
+                  "In29.Cu",
+                  "In30.Cu",
+                  "B.Cu"
+                ]
+              }
+            },
+            "required": [
+              "diameter",
+              "start",
+              "end"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "treatment": {
+        "type": "object",
+        "properties": {
+          "capping": {
+            "type": "boolean"
+          },
+          "covering": {
+            "type": "object",
+            "properties": {
+              "front": {
+                "type": "boolean"
+              },
+              "back": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "plugging": {
+            "type": "object",
+            "properties": {
+              "front": {
+                "type": "boolean"
+              },
+              "back": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "filling": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "free": {
+        "type": "boolean"
+      },
+      "padstack": {
+        "type": "object",
+        "properties": {
+          "inner": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "back": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "inner",
+          "back"
+        ],
+        "additionalProperties": false
+      },
+      "removeUnusedLayers": {
+        "type": "boolean"
+      },
+      "keepEndLayers": {
+        "type": "boolean"
+      },
+      "startEndOnly": {
+        "type": "boolean"
+      },
+      "zoneLayerConnections": {
+        "type": "array",
+        "items": {
+          "enum": [
+            "F.Cu",
+            "In1.Cu",
+            "In2.Cu",
+            "In3.Cu",
+            "In4.Cu",
+            "In5.Cu",
+            "In6.Cu",
+            "In7.Cu",
+            "In8.Cu",
+            "In9.Cu",
+            "In10.Cu",
+            "In11.Cu",
+            "In12.Cu",
+            "In13.Cu",
+            "In14.Cu",
+            "In15.Cu",
+            "In16.Cu",
+            "In17.Cu",
+            "In18.Cu",
+            "In19.Cu",
+            "In20.Cu",
+            "In21.Cu",
+            "In22.Cu",
+            "In23.Cu",
+            "In24.Cu",
+            "In25.Cu",
+            "In26.Cu",
+            "In27.Cu",
+            "In28.Cu",
+            "In29.Cu",
+            "In30.Cu",
+            "B.Cu"
+          ]
+        },
+        "maxItems": 32,
+        "uniqueItems": true
       }
     },
     "required": [

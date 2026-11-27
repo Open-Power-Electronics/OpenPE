@@ -13,10 +13,32 @@ import { padPolygon } from './pcb-polygons';
 import { validateCustomPad } from './pcb-custom-pad';
 import { runPCBDesignRules } from './pcb-drc';
 import { padDrillLine } from './pcb-layout';
+import { validatePCBPadTrapezoid } from './pcb-geometry';
+import { pcbViaCopperLayers } from './pcb-native-via';
 
 export type FootprintDrawing = {
-  pads: (Omit<Pad, 'id' | 'netId' | 'locked' | 'unconnected' | 'heatsink'> & { id?: string })[];
-  graphics: (Omit<BoardLine, 'id' | 'locked'> & { id?: string })[];
+  pads: (Omit<
+    Pad,
+    | 'id'
+    | 'netId'
+    | 'locked'
+    | 'unconnected'
+    | 'heatsink'
+    | 'teardrops'
+    | 'nativeCustomPad'
+    | 'nativeConnect'
+    | 'fabricationProperty'
+    | 'keepEndLayers'
+    | 'zoneLayerConnections'
+    | 'postMachining'
+    | 'dieLength'
+    | 'dieDelay'
+  > & {
+    id?: string;
+  })[];
+  graphics: (Omit<BoardLine, 'id' | 'locked' | 'textBox' | 'roundedRectRadius' | 'polygonArcs'> & {
+    id?: string;
+  })[];
 };
 
 type Shape = { properties: Record<string, unknown>; required: string[] };
@@ -36,12 +58,26 @@ export function footprintDrawingSchema(schemas: { pad: Shape; graphic: Shape }) 
       pads: {
         type: 'array',
         maxItems: 2000,
-        items: editable(schemas.pad, ['netId', 'locked', 'unconnected', 'heatsink']),
+        items: editable(schemas.pad, [
+          'netId',
+          'locked',
+          'unconnected',
+          'heatsink',
+          'teardrops',
+          'nativeCustomPad',
+          'nativeConnect',
+          'fabricationProperty',
+          'keepEndLayers',
+          'zoneLayerConnections',
+          'postMachining',
+          'dieLength',
+          'dieDelay',
+        ]),
       },
       graphics: {
         type: 'array',
         maxItems: 10000,
-        items: editable(schemas.graphic, ['locked']),
+        items: editable(schemas.graphic, ['locked', 'textBox', 'roundedRectRadius', 'polygonArcs']),
       },
     },
     required: ['pads', 'graphics'],
@@ -53,9 +89,32 @@ export function footprintDrawingSchema(schemas: { pad: Shape; graphic: Shape }) 
 export function readFootprintDrawing(footprint: Footprint): FootprintDrawing {
   return structuredClone({
     pads: footprint.pads.map(
-      ({ netId: _net, locked: _lock, unconnected: _nc, heatsink: _heatsink, ...pad }) => pad,
+      ({
+        netId: _net,
+        locked: _lock,
+        unconnected: _nc,
+        heatsink: _heatsink,
+        teardrops: _teardrops,
+        nativeCustomPad: _nativeCustomPad,
+        nativeConnect: _nativeConnect,
+        fabricationProperty: _property,
+        keepEndLayers: _keepEndLayers,
+        zoneLayerConnections: _zoneLayerConnections,
+        postMachining: _postMachining,
+        dieLength: _dieLength,
+        dieDelay: _dieDelay,
+        ...pad
+      }) => pad,
     ),
-    graphics: footprint.graphics.map(({ locked: _lock, ...graphic }) => graphic),
+    graphics: footprint.graphics.map(
+      ({
+        locked: _lock,
+        textBox: _textBox,
+        roundedRectRadius: _radius,
+        polygonArcs: _arcs,
+        ...graphic
+      }) => graphic,
+    ),
   });
 }
 
@@ -78,9 +137,10 @@ const padCopperInput = (pad: Pad) => ({
   size: pad.size,
   type: pad.type,
   shape: pad.shape,
+  trapezoidDelta: pad.trapezoidDelta,
   outline: pad.outline,
   drill: pad.drill,
-  drillOffset: pad.drillOffset,
+  drillOffset: pad.type === 'smd' ? undefined : pad.drillOffset,
   drillSlot: pad.drillSlot,
   roundrectRatio: pad.roundrectRatio,
   chamferRatio: pad.chamferRatio,
@@ -102,15 +162,13 @@ function validatePad(pad: Pad) {
   if (![pad.size?.x, pad.size?.y].every((n) => Number.isFinite(n) && n >= minimumSize && n <= 1000))
     fail(`Pad sizes must be between ${minimumSize} and 1000 mm.`);
   if (!['smd', 'thru_hole', 'np_thru_hole'].includes(pad.type)) fail('Unsupported pad type.');
-  if (!['rect', 'circle', 'oval', 'roundrect', 'custom'].includes(pad.shape))
+  if (!['rect', 'circle', 'oval', 'roundrect', 'trapezoid', 'custom'].includes(pad.shape))
     fail('Unsupported pad shape.');
+  validatePCBPadTrapezoid(pad, fail);
   validateCustomPad(pad, fail);
   if (pad.shape === 'circle' && pad.size.x !== pad.size.y)
     fail('Circular pads require equal width and height.');
-  if (
-    pad.type === 'smd' &&
-    (pad.drill !== undefined || pad.drillOffset !== undefined || pad.drillSlot !== undefined)
-  )
+  if (pad.type === 'smd' && (pad.drill !== undefined || pad.drillSlot !== undefined))
     fail('SMD pads cannot have drills.');
   if (
     pad.type !== 'smd' &&
@@ -142,7 +200,11 @@ function hasRoutedContact(board: PCB, footprint: Footprint, pad: Pad, spend: () 
   }
   for (const via of board.vias) {
     spend();
-    if (via.netId !== pad.netId || !layers.length) continue;
+    if (
+      via.netId !== pad.netId ||
+      !pcbViaCopperLayers(board.layers, via).some((layer) => layers.includes(layer))
+    )
+      continue;
     if (insidePolygon(via, polygon, spend)) return true;
     for (let i = 0; i < polygon.outer.length; i++) {
       spend();
@@ -185,7 +247,15 @@ export function prepareFootprintDrawing(
   const preparedPads = input.drawing.pads.map((drawing): Pad => {
     if ('netId' in drawing || 'locked' in drawing || 'unconnected' in drawing)
       fail('Pad connectivity and locks are not drawing fields.');
-    if ('heatsink' in drawing) fail('Pad fabrication properties are preserved from native data.');
+    if ('heatsink' in drawing || 'fabricationProperty' in drawing)
+      fail('Pad fabrication properties are preserved from native data.');
+    if ('nativeCustomPad' in drawing || 'nativeConnect' in drawing)
+      fail('Native pad primitives and connector attributes belong to native Source.');
+    if ('nativeRoundDrillY' in drawing)
+      fail('The second native round drill dimension belongs to native Source.');
+    if (drawing.type === 'smd' && drawing.drillOffset !== undefined)
+      fail('SMD land offsets belong to native Source.');
+    if ('teardrops' in drawing) fail('Pad teardrop settings are preserved from native data.');
     const byId = drawing.id ? original?.pads.find((pad) => pad.id === drawing.id) : undefined;
     if (drawing.id && !byId) fail('A pad ID is not part of this package; omit IDs for new pads.');
     const electrical = padHasElectricalPin(drawing);
@@ -218,11 +288,16 @@ export function prepareFootprintDrawing(
     };
     if (next.shape !== 'custom' && drawing.outline === undefined) delete next.outline;
     if (next.shape !== 'custom' && drawing.customAnchor === undefined) delete next.customAnchor;
+    if (next.shape !== 'trapezoid' && drawing.trapezoidDelta === undefined)
+      delete next.trapezoidDelta;
     if (next.type === 'smd') {
       if (drawing.drill === undefined) delete next.drill;
-      if (drawing.drillOffset === undefined) delete next.drillOffset;
+      if (previous?.type !== 'smd' && drawing.drillOffset === undefined) delete next.drillOffset;
       if (drawing.drillSlot === undefined) delete next.drillSlot;
     }
+    if (previous?.type === 'smd' && next.type !== 'smd' && drawing.drillOffset === undefined)
+      delete next.drillOffset;
+    if (next.drill !== previous?.drill || next.drillSlot) delete next.nativeRoundDrillY;
     if (next.shape !== 'roundrect') {
       if (
         [drawing.roundrectRatio, drawing.chamferRatio, drawing.chamfer].some(
@@ -245,10 +320,17 @@ export function prepareFootprintDrawing(
       : preparedPads;
   const preparedGraphics = input.drawing.graphics.map((drawing): BoardLine => {
     if ('locked' in drawing) fail('Graphic locks are not drawing fields.');
+    if ('textBox' in drawing) fail('PCB text boxes are preserved from native Source.');
+    if ('roundedRectRadius' in drawing)
+      fail('PCB rounded rectangle radii are preserved from native Source.');
+    if ('polygonArcs' in drawing)
+      fail('PCB curved polygon contours are preserved from native Source.');
     if ((drawing.kind === 'arc') !== (drawing.mid !== undefined))
       fail('Arcs require exactly one middle point.');
-    if (drawing.points !== undefined && drawing.kind !== 'polygon')
-      fail('Only polygon graphics accept intermediate points.');
+    if (drawing.points !== undefined && drawing.kind !== 'polygon' && drawing.kind !== 'curve')
+      fail('Only polygon and Bézier graphics accept intermediate points.');
+    if (drawing.kind === 'curve' && drawing.points?.length !== 2)
+      fail('Bézier graphics require exactly two control points.');
     if (drawing.kind === 'polygon' && !drawing.points?.length)
       fail('Polygon graphics require at least three vertices.');
     if ((drawing.kind === 'text') !== (drawing.text !== undefined))
@@ -265,7 +347,7 @@ export function prepareFootprintDrawing(
       fail('Footprint dimensions are unsupported; use board dimensions.');
     if (previous && previous.kind !== next.kind) {
       if (next.kind !== 'arc') delete next.mid;
-      if (next.kind !== 'polygon') delete next.points;
+      if (next.kind !== 'polygon' && next.kind !== 'curve') delete next.points;
       if (next.kind !== 'text') delete next.text;
       if (next.kind !== 'circle' && next.kind !== 'polygon') delete next.fill;
     }

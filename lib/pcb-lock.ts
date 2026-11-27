@@ -27,6 +27,8 @@ export function setPCBLocked(board: PCB, targets: readonly PCBLockTarget[], lock
   if (!targets.length) throw new Error('Select an object to lock or unlock.');
   for (const target of targets) {
     if (!pcbLockObject(board, target)) throw new Error('The selected object no longer exists.');
+    if (!locked && board.groupLocks?.includes(target.id))
+      throw new Error('Unlock the native group in Source before editing its members.');
     if (
       target.kind === 'pad' &&
       board.footprints.some(
@@ -75,8 +77,61 @@ export function setPCBLocked(board: PCB, targets: readonly PCBLockTarget[], lock
   };
 }
 
+function groupLockObjects(board: PCB): Map<string, { id: string; locked?: true }> {
+  const targets = new Set(board.groupLocks);
+  const objects = new Map<string, { id: string; locked?: true }>();
+  const collect = (items: readonly { id: string; locked?: true }[]) => {
+    for (const item of items) if (targets.has(item.id)) objects.set(item.id, item);
+  };
+  collect(board.footprints);
+  collect(board.tracks);
+  collect(board.arcTracks ?? []);
+  collect(board.vias);
+  collect(board.graphics);
+  collect(board.zones);
+  for (const footprint of board.footprints) {
+    collect(footprint.graphics);
+    collect(footprint.pads);
+    collect(footprint.zones ?? []);
+  }
+  return objects;
+}
+
+export function validatePCBGroupLocks(board: PCB, fail: (message: string) => never): void {
+  if (!board.groupLocks?.length) return;
+  const objects = groupLockObjects(board);
+  if (
+    objects.size !== board.groupLocks.length ||
+    [...objects.values()].some((item) => !item.locked)
+  )
+    fail('PCB group locks require distinct existing locked members.');
+}
+
+export function assertPCBGroupLockEdits(before?: PCB | null, after?: PCB | null): void {
+  if (before === after || (!before?.groupLocks?.length && !after?.groupLocks?.length)) return;
+  const reject = () => {
+    throw new Error('Unlock the native group in Source before editing its members.');
+  };
+  if (
+    !before ||
+    !after ||
+    before.groupLocks?.length !== after.groupLocks?.length ||
+    before.groupLocks?.some((id, index) => id !== after.groupLocks?.[index])
+  )
+    return reject();
+  const beforeObjects = groupLockObjects(before);
+  const afterObjects = groupLockObjects(after);
+  const value = (item: unknown) =>
+    JSON.stringify(item, (key, data) => (key === 'filledPolygons' ? undefined : data));
+  for (const [id, item] of beforeObjects) {
+    const next = afterObjects.get(id);
+    if (item !== next && value(item) !== value(next)) return reject();
+  }
+}
+
 /** Fills may refresh, but locked objects cannot be changed or removed by an editor command. */
 export function assertPCBLockedEdits(before: PCB, after: PCB): void {
+  assertPCBGroupLockEdits(before, after);
   const value = (item: unknown) =>
     JSON.stringify(item, (key, value) =>
       key === 'filledPolygons' || key === 'locked' ? undefined : value,

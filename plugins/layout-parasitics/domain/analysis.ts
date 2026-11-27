@@ -1,5 +1,5 @@
 import type { Point } from '../../../lib/circuit';
-import type { PCB } from '../../../lib/pcb';
+import { requireSupportedPCBCopper, type PCB } from '../../../lib/pcb';
 import {
   insidePolygon,
   pointSegmentDistance,
@@ -334,6 +334,7 @@ export function analyzeLayoutParasitics(
   board: PCB,
   input: ParasiticsInput,
 ): LayoutParasiticsResult {
+  requireSupportedPCBCopper(board, 'PCB parasitics analysis');
   const { startId, endId } = input;
   const {
     copperThicknessMm = PARASITICS_DEFAULTS.copperThicknessMm,

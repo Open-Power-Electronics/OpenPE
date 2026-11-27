@@ -20,6 +20,7 @@ import {
   type RuleCheckResult,
 } from '../lib/design-rule-checks';
 import { readPCBDesignRuleSources } from '../lib/pcb-clearance-sources';
+import { createPCBRouter } from '../lib/pcb-routing';
 
 const rect = (a: number, b: number, c: number, d: number): Point[] => [
   { x: a, y: b },
@@ -102,6 +103,25 @@ const zone = (board: PCB, points = rect(2, 2, 8, 8)): BoardZone => ({
 });
 const issues = (board: PCB, rule: string) =>
   runPCBDesignRules(board).issues.filter((issue) => issue.ruleId === rule);
+
+test('DRC and checked routing use a footprint clearance unless the pad explicitly overrides it', () => {
+  const board = fixture();
+  const footprint = pad(board, 8, 8);
+  footprint.copperClearance = 0.75;
+  const route = track(board, { x: 5, y: 9.6 }, { x: 11, y: 9.6 }, 1);
+  board.tracks.push(route);
+  const settings = { scopes: ['clearance'] as const, clearance: 0.2, useKiCadClearance: true };
+  const checkedRoute = () =>
+    createPCBRouter(
+      { ...board, tracks: [] },
+      { layer: 'F.Cu', netId: route.netId, width: route.width, clearance: 0.2 },
+    ).validate([route.start, route.end]);
+  assert.match(runPCBDesignRules(board, settings).issues[0].message, /pad or footprint override/);
+  assert.ok(checkedRoute());
+  footprint.pads[0].copperClearance = 0;
+  assert.deepEqual(runPCBDesignRules(board, settings).issues, []);
+  assert.equal(checkedRoute(), '');
+});
 
 test('copper-to-hole checks retain nearby findings and order with thousands of distant pairs', () => {
   const board = fixture();
@@ -368,7 +388,48 @@ test('drill spacing uses actual round holes across nets and respects its indepen
     severities: { 'pcb.hole-spacing': 'ignore' },
   });
   assert.deepEqual(disabled.issues, []);
-  assert.deepEqual(disabled.checkedRules, ['pcb.copper-hole']);
+  assert.deepEqual(disabled.checkedRules, ['pcb.copper-hole', 'pcb.holes-co-located']);
+});
+
+test('co-located round drills use physical centres, common spans and independent severity', () => {
+  const board = fixture();
+  const part = pad(board, 5, 5);
+  const hole = part.pads[0];
+  Object.assign(hole, { type: 'np_thru_hole', drill: 0.8, drillOffset: { x: 0.25, y: 0 } });
+  const via = { id: uid(), x: 5.250499, y: 5, diameter: 0.6, drill: 0.4, netId: board.nets[1].id };
+  board.vias = [via];
+  const settings = {
+    scopes: ['holes'] as const,
+    severities: { 'pcb.copper-hole': 'ignore' as const },
+    holeToHole: 0,
+  };
+  const [coLocated] = runPCBDesignRules(board, settings).issues;
+  assert.equal(coLocated.ruleId, 'pcb.holes-co-located');
+  assert.equal(coLocated.severity, 'warning');
+  assert.deepEqual(coLocated.objectIds, [hole.id, via.id].sort());
+  assert.equal(runPCBDesignRules(board, { ...settings, holeToHole: 0.2 }).issues.length, 1);
+  assert.deepEqual(
+    runPCBDesignRules(board, {
+      ...settings,
+      holeToHole: 0.2,
+      severities: { ...settings.severities, 'pcb.holes-co-located': 'ignore' },
+    }).issues,
+    [],
+  );
+  via.x = 5.2505;
+  assert.deepEqual(runPCBDesignRules(board, settings).issues, []);
+  assert.equal(
+    runPCBDesignRules(board, { ...settings, holeToHole: 0.2 }).issues[0].ruleId,
+    'pcb.hole-spacing',
+  );
+
+  board.layers = ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'];
+  board.footprints = [];
+  board.vias = [
+    { ...via, span: { kind: 'blind', start: 'F.Cu', end: 'In1.Cu' } },
+    { ...via, id: uid(), span: { kind: 'blind', start: 'In2.Cu', end: 'B.Cu' } },
+  ];
+  assert.deepEqual(runPCBDesignRules(board, settings).issues, []);
 });
 
 test('hole clearance reaches the far end of a rotated, offset slot', () => {
@@ -452,6 +513,61 @@ test('silkscreen geometry and visible text dimensions run as separate configurab
     ],
   );
   assert.ok(!reconfigured.checkedRules.includes('pcb.silk-clearance'));
+});
+
+test('silkscreen checks clip at the outer edge and cutouts and honor the requested gap', () => {
+  const board = fixture();
+  outline(board, rect(10, 10, 12, 12));
+  const silk = (start: Point, end: Point) => ({
+    id: uid(),
+    layer: 'F.SilkS' as const,
+    start,
+    end,
+    width: 0.1,
+  });
+  const edgeStroke = silk({ x: -11, y: 2 }, { x: -9, y: 2 });
+  const outside = silk({ x: -10.15, y: 4 }, { x: -10.15, y: 6 });
+  const outsideOverlap = silk({ x: -10.03, y: 5 }, { x: -10.03, y: 6 });
+  const close = silk({ x: -9.85, y: 4 }, { x: -9.85, y: 6 });
+  const cutoutStroke = silk({ x: 9, y: 11 }, { x: 11, y: 11 });
+  board.graphics.push(edgeStroke, outside, outsideOverlap, close, cutoutStroke);
+  const settings = { scopes: ['silkscreen'] as const };
+  const edgeFindings = (config = {}) =>
+    runPCBDesignRules(board, { ...settings, ...config }).issues.filter(
+      ({ ruleId }) => ruleId === 'pcb.silk-edge',
+    );
+  assert.deepEqual(
+    edgeFindings().map(({ objectIds }) => objectIds),
+    [[edgeStroke.id], [outsideOverlap.id], [cutoutStroke.id]],
+  );
+  assert.deepEqual(
+    edgeFindings({ minSilkClearance: 0.15 }).map(({ objectIds }) => objectIds),
+    [[edgeStroke.id], [outsideOverlap.id], [close.id], [cutoutStroke.id]],
+  );
+  assert.equal(
+    edgeFindings().every(({ severity }) => severity === 'warning'),
+    true,
+  );
+  assert.deepEqual(edgeFindings({ severities: { 'pcb.silk-edge': 'ignore' } }), []);
+
+  const openEdge = {
+    ...edgeStroke,
+    id: uid(),
+    layer: 'Edge.Cuts' as const,
+    start: { x: -10, y: 0 },
+    end: { x: -10, y: 8 },
+  };
+  board.graphics = [openEdge, edgeStroke, outside];
+  const partial = runPCBDesignRules(board);
+  assert.equal(partial.complete, false);
+  assert.ok(partial.issues.some(({ ruleId }) => ruleId === 'pcb.outline'));
+  assert.deepEqual(
+    partial.issues
+      .filter(({ ruleId }) => ruleId === 'pcb.silk-edge')
+      .map(({ objectIds }) => objectIds),
+    [[edgeStroke.id]],
+  );
+  assert.ok(!partial.checkedRules.includes('pcb.copper-edge'));
 });
 
 test('circular pad/via contacts and minimum rings do not depend on polygon sample angles', () => {
@@ -577,6 +693,76 @@ test('copper-to-edge checks include cutouts, outside copper and trace widths', (
       (i) => i.ruleId === 'pcb.copper-edge',
     ).length,
     1,
+  );
+});
+
+test('native cubic outlines check edge clearance and report unresolved threshold distances', () => {
+  const board = fixture();
+  board.graphics = [];
+  const corners = rect(0, 0, 20, 20);
+  board.graphics.push({
+    id: uid(),
+    layer: 'Edge.Cuts',
+    kind: 'curve',
+    start: corners[0],
+    points: [
+      { x: 0, y: -8 },
+      { x: 20, y: -8 },
+    ],
+    end: corners[1],
+    width: 0.05,
+  });
+  for (let i = 1; i < corners.length; i++)
+    board.graphics.push({
+      id: uid(),
+      layer: 'Edge.Cuts',
+      start: corners[i],
+      end: corners[(i + 1) % corners.length],
+      width: 0.05,
+    });
+  // At t = 0.5 the curve is (10, -6) with a horizontal tangent.
+  const close = track(board, { x: 10, y: -5.7 }, { x: 10, y: -5.5 }, 0, 'F.Cu', 0.2);
+  const safe = track(board, { x: 10, y: -5.5 }, { x: 10, y: -5.3 }, 0, 'F.Cu', 0.2);
+  const outside = track(board, { x: 10, y: -6.5 }, { x: 10, y: -6.4 }, 0, 'F.Cu', 0.2);
+  board.tracks = [close, safe, outside];
+  const report = runPCBDesignRules(board);
+  assert.equal(report.complete, true);
+  assert.deepEqual(
+    report.issues
+      .filter((issue) => issue.ruleId === 'pcb.copper-edge')
+      .map((issue) => issue.objectIds),
+    [[close.id], [outside.id]],
+  );
+
+  const threshold = track(board, { x: 10, y: -5.6498 }, { x: 10, y: -5.4 }, 0, 'F.Cu', 0.2);
+  board.tracks = [threshold];
+  const partial = runPCBDesignRules(board);
+  assert.equal(partial.complete, false);
+  assert.deepEqual(
+    partial.issues.map((issue) => [issue.ruleId, issue.objectIds]),
+    [['pcb.geometry-limit', [threshold.id]]],
+  );
+});
+
+test('saved Edge.Cuts zones are technical artwork and cannot define physical board material', () => {
+  const board = fixture();
+  const artwork = zone(board, rect(2, 2, 8, 8));
+  artwork.layer = 'Edge.Cuts';
+  artwork.netId = null;
+  artwork.fillEnabled = true;
+  artwork.filledPolygons = [{ points: artwork.outline }];
+  board.zones = [artwork];
+  board.tracks = [track(board, { x: 4.5, y: 5 }, { x: 5.5, y: 5 }, 1, 'F.Cu', 0.2)];
+  const report = runPCBDesignRules(board);
+  assert.equal(report.complete, true);
+  assert.deepEqual(report.issues, []);
+
+  board.graphics = [];
+  const missing = runPCBDesignRules(board);
+  assert.equal(missing.complete, false);
+  assert.deepEqual(
+    missing.issues.map((issue) => issue.ruleId),
+    ['pcb.outline'],
   );
 });
 
@@ -733,6 +919,87 @@ test('footprint-owned saved fills and keepouts use world transforms and per-laye
   assert.equal(issues(board, 'pcb.keepout').length, 1);
   board.tracks[0].layer = 'B.Cu';
   assert.equal(issues(board, 'pcb.keepout').length, 0);
+});
+
+test('native circular rule areas use the full circle for track contact and saved-pour clearance', () => {
+  const board = fixture();
+  const keepout = zone(board, [
+    { x: 4, y: 6 },
+    { x: 8, y: 6 },
+  ]);
+  keepout.netId = null;
+  keepout.nativeCircularOutline = true;
+  keepout.clearance = 0.4;
+  keepout.keepout = { tracks: true, vias: false, pads: false, copperpour: true, footprints: false };
+  const inside = track(board, { x: 5.8, y: 7.9 }, { x: 6.2, y: 7.9 }, 0, 'F.Cu', 0.2);
+  const outside = track(board, { x: 5.8, y: 8.11 }, { x: 6.2, y: 8.11 }, 0, 'F.Cu', 0.2);
+  const otherLayer = { ...inside, id: uid(), layer: 'B.Cu' as const };
+  const pour = zone(board);
+  pour.filledPolygons = [{ points: rect(5.97, 8.25, 6.03, 8.35) }];
+  board.tracks = [inside, outside, otherLayer];
+  board.zones = [keepout, pour];
+
+  const before = structuredClone(board);
+  const checked = runPCBDesignRules(board);
+  assert.equal(checked.complete, true);
+  assert.deepEqual(
+    checked.issues.map((issue) => [issue.ruleId, issue.objectIds]),
+    [
+      ['pcb.keepout', [inside.id, keepout.id]],
+      ['pcb.keepout', [pour.id, keepout.id]],
+    ],
+  );
+  assert.deepEqual(board, before);
+
+  pour.filledPolygons = [{ points: rect(5.97, 8.45, 6.03, 8.55) }];
+  assert.deepEqual(
+    issues(board, 'pcb.keepout').map((issue) => issue.objectIds),
+    [[inside.id, keepout.id]],
+  );
+  pour.filledPolygons = [{ points: rect(5.97, 8.3997, 6.03, 8.49) }];
+  const partial = runPCBDesignRules(board);
+  assert.equal(partial.complete, false);
+  assert.ok(
+    partial.issues.some(
+      (issue) => issue.ruleId === 'pcb.geometry-limit' && issue.objectIds[0] === pour.id,
+    ),
+  );
+});
+
+test('rotated footprint rule areas retain native arc bulges and flag unresolved contact', () => {
+  const board = fixture();
+  const footprint = pad(board, 10, 10);
+  footprint.pads = [];
+  footprint.rotation = 90;
+  const keepout = zone(board, rect(4, 4, 8, 6));
+  keepout.netId = null;
+  keepout.nativeOutlineArcs = [{ vertex: 2, mid: { x: 6, y: 8 } }];
+  keepout.keepout = {
+    tracks: true,
+    vias: false,
+    pads: false,
+    copperpour: false,
+    footprints: false,
+  };
+  footprint.zones = [keepout];
+  const inside = track(board, { x: 17.8, y: 3.8 }, { x: 17.8, y: 4.2 }, 0, 'F.Cu', 0.2);
+  const outside = track(board, { x: 18.2, y: 3.8 }, { x: 18.2, y: 4.2 }, 0, 'F.Cu', 0.2);
+  board.tracks = [inside, outside];
+  const checked = runPCBDesignRules(board);
+  assert.equal(checked.complete, true);
+  assert.deepEqual(
+    checked.issues.map((issue) => [issue.ruleId, issue.objectIds]),
+    [['pcb.keepout', [inside.id, keepout.id]]],
+  );
+
+  const threshold = track(board, { x: 18.1003, y: 4 }, { x: 18.1003, y: 4.2 }, 0, 'F.Cu', 0.2);
+  board.tracks = [threshold];
+  const partial = runPCBDesignRules(board);
+  assert.equal(partial.complete, false);
+  assert.deepEqual(
+    partial.issues.map((issue) => [issue.ruleId, issue.objectIds]),
+    [['pcb.geometry-limit', [threshold.id, keepout.id]]],
+  );
 });
 
 test('unrouted results use physical connectivity across track layers and plated vias', () => {
@@ -1065,6 +1332,7 @@ test('issue and geometry budgets return partial reports instead of claiming a cl
   assert.equal(report.issues.length, 1000);
   assert.equal(report.truncated, true);
   assert.equal(report.complete, false);
+  assert.ok(report.notes.every((note) => !note.includes('1000-issue report limit')));
   board.tracks = Array.from({ length: 2100 }, () => track(board, { x: 0, y: 0 }, { x: 1, y: 0 }));
   report = runPCBDesignRules(board);
   assert.equal(report.complete, false);

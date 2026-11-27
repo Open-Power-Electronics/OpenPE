@@ -1,6 +1,7 @@
 import type { Point } from './circuit';
 import type { BoardLine, BoardText, PCB } from './pcb';
 import { isOwnedProjectNode } from './immutable-project';
+import { pcbCenterMarkStrokes } from './pcb-geometry';
 
 /** The three strokes used by OpenPE's bounded dimension representation.
  * Derive local strokes before transforming footprint artwork into board space.
@@ -8,6 +9,10 @@ import { isOwnedProjectNode } from './immutable-project';
  */
 export function pcbDimensionStrokes(g: BoardLine): BoardLine[] {
   if (g.kind !== 'dimension' || !g.dimension) return [];
+  if (g.dimension.type === 'center')
+    return pcbCenterMarkStrokes(g).map(([start, end]) => ({
+      id: g.id, start, end, width: g.width, layer: g.layer,
+    }));
   const dx = g.end.x - g.start.x,
     dy = g.end.y - g.start.y,
     length = Math.hypot(dx, dy) || 1,
@@ -50,7 +55,10 @@ function artwork(graphics: BoardLine[]): BoardLine[] {
     if (!g.layer.endsWith('.Cu')) return [g];
     if (g.kind === 'text' && g.text) return textEnvelope(g, g.text, g.start);
     if (g.kind !== 'dimension' || !g.dimension) return [g];
-    return pcbDimensionStrokes(g).concat(textEnvelope(g, g.dimension.caption, g.dimension.caption));
+    const strokes = pcbDimensionStrokes(g);
+    return g.dimension.caption
+      ? strokes.concat(textEnvelope(g, g.dimension.caption, g.dimension.caption))
+      : strokes;
   });
 }
 export function preparePCBArtworkObstacles(board: PCB): PCB {

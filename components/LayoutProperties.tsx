@@ -4,7 +4,15 @@ import PropertiesEmptyState from './PropertiesEmptyState';
 import type { ReactNode } from 'react';
 import type { Circuit } from '@/lib/circuit';
 import { isOwnedProjectNode } from '@/lib/immutable-project';
-import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
+import {
+  isNativePCBEdgeCutFill,
+  isUnassignedSavedCopperZone,
+  type PCB,
+  type Pad,
+  type Footprint,
+  type BoardLayer,
+} from '@/lib/pcb';
+import { defaultPCBIslandAreaMin, maxPCBZonePriority } from '@/lib/pcb-zone-settings';
 import { replacePCBGraphic, type PCBBounds } from '@/lib/pcb-layout';
 import { pcbPadShapeLabel, pcbPadTypeLabel } from '@/lib/pcb-display';
 import { padApertureLayers } from '@/lib/pcb-pad-role';
@@ -16,6 +24,7 @@ import {
 } from '@/lib/pcb-properties';
 import { setPCBRectangleWidth, type PCBRectangle } from '@/lib/pcb-outline-resize';
 import { pcbLockObject, type PCBLockTarget } from '@/lib/pcb-lock';
+import { pcbViaCopperLayers, pcbViaHasTreatment } from '@/lib/pcb-native-via';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { FootprintDetail } from './LibraryChooser';
 import ComponentProperties from './ComponentProperties';
@@ -153,6 +162,16 @@ export default function LayoutProperties({
   const padChange = (changes: Parameters<typeof setPCBPadProperties>[2]) =>
     pad ? attempt(() => setPCBPadProperties(board, pad.id, changes)) : false;
   const circularPadSize = pad?.shape === 'circle' || pad?.customAnchor === 'circle';
+  const fixedVia = Boolean(
+    via &&
+    (via.span ||
+      via.backdrills ||
+      via.padstack ||
+      via.removeUnusedLayers ||
+      via.startEndOnly ||
+      !via.netId ||
+      pcbViaHasTreatment(via.treatment)),
+  );
   const viaChange = (changes: Partial<PCB['vias'][number]>) =>
     via ? onCommit(setPCBViaProperties(board, via.id, changes)) : false;
   const endpoint = (end: 'start' | 'end', axis: 'x' | 'y', value: number) =>
@@ -339,7 +358,7 @@ export default function LayoutProperties({
                   value={pad.shape}
                   options={(pad.outline
                     ? (['custom'] as const)
-                    : (['rect', 'circle', 'oval', 'roundrect'] as const)
+                    : (['rect', 'circle', 'oval', 'roundrect', 'trapezoid'] as const)
                   ).map((value) => ({
                     value,
                     label: pcbPadShapeLabel(value),
@@ -432,6 +451,26 @@ export default function LayoutProperties({
                     />
                   )}
                 </PropertyGrid>
+                {pad.shape === 'trapezoid' && (
+                  <PropertyGrid columns={2}>
+                    <NumberField
+                      {...field}
+                      label="Delta X (mm)"
+                      value={pad.trapezoidDelta?.x ?? 0}
+                      onCommit={(x) =>
+                        padChange({ trapezoidDelta: { x, y: pad.trapezoidDelta?.y ?? 0 } })
+                      }
+                    />
+                    <NumberField
+                      {...field}
+                      label="Delta Y (mm)"
+                      value={pad.trapezoidDelta?.y ?? 0}
+                      onCommit={(y) =>
+                        padChange({ trapezoidDelta: { x: pad.trapezoidDelta?.x ?? 0, y } })
+                      }
+                    />
+                  </PropertyGrid>
+                )}
                 {pad.drillSlot && (
                   <Select
                     active={active}
@@ -520,6 +559,17 @@ export default function LayoutProperties({
               <PropertyTabs locked={locked} action={actions}>
                 <PropertyTab label="General" icon={SlidersHorizontal}>
                   <PropertySection title="Track" showTitle={false}>
+                    {track.maskLayer && (
+                      <PropertyRow
+                        label="Mask opening"
+                        value={track.maskLayer}
+                        description={
+                          track.solderMaskMargin === undefined
+                            ? 'Margin follows KiCad board settings.'
+                            : `Local margin ${track.solderMaskMargin} mm`
+                        }
+                      />
+                    )}
                     <Select
                       active={active}
                       label="Track net"
@@ -572,21 +622,54 @@ export default function LayoutProperties({
               <PropertyTabs locked={locked} action={actions}>
                 <PropertyTab label="General" icon={SlidersHorizontal}>
                   <PropertySection title="Via" showTitle={false}>
-                    <PropertyRow label="Copper layers" value={board.layers.join(', ')} />
-                    <Select
-                      active={active}
-                      label="Via net"
-                      displayLabel="Net"
-                      value={via.netId}
-                      options={netOptions}
-                      onChange={(netId) => viaChange({ netId })}
+                    {via.span && (
+                      <PropertyRow
+                        label="Type"
+                        value={`${via.span.kind[0].toUpperCase()}${via.span.kind.slice(1)}`}
+                      />
+                    )}
+                    <PropertyRow
+                      label="Copper layers"
+                      value={pcbViaCopperLayers(board.layers, via).join(', ')}
                     />
+                    {via.backdrills &&
+                      Object.entries(via.backdrills).map(([slot, drill]) => (
+                        <PropertyRow
+                          key={slot}
+                          label={slot === 'secondary' ? 'Backdrill' : 'Tertiary drill'}
+                          value={`${drill.start} → ${drill.end} · ${drill.diameter} mm`}
+                        />
+                      ))}
+                    {via.treatment?.filling && <PropertyRow label="Filling" value="Filled" />}
+                    {via.startEndOnly && (
+                      <PropertyRow label="Copper rings" value="Start and end layers only" />
+                    )}
+                    {via.removeUnusedLayers && (
+                      <PropertyRow
+                        label="Unused copper rings"
+                        value="Removed"
+                        description="Layout displays the native end rings and saved zone connections."
+                      />
+                    )}
+                    {fixedVia ? (
+                      <PropertyRow label="Net" value={netName(via.netId)} />
+                    ) : (
+                      <Select
+                        active={active}
+                        label="Via net"
+                        displayLabel="Net"
+                        value={via.netId}
+                        options={netOptions}
+                        onChange={(netId) => viaChange({ netId })}
+                      />
+                    )}
                   </PropertySection>
                   <PropertySection title="Geometry" showTitle={false}>
                     <PropertyGrid>
                       <NumberField
                         {...field}
                         label="X (mm)"
+                        disabled={fixedVia}
                         value={via.x}
                         normalize={snap}
                         onCommit={(x) => viaChange({ x })}
@@ -594,6 +677,7 @@ export default function LayoutProperties({
                       <NumberField
                         {...field}
                         label="Y (mm)"
+                        disabled={fixedVia}
                         value={via.y}
                         normalize={snap}
                         onCommit={(y) => viaChange({ y })}
@@ -603,6 +687,7 @@ export default function LayoutProperties({
                       <NumberField
                         {...field}
                         label="Diameter (mm)"
+                        disabled={fixedVia}
                         value={via.diameter}
                         min={via.drill + 0.0001}
                         max={1000}
@@ -611,6 +696,7 @@ export default function LayoutProperties({
                       <NumberField
                         {...field}
                         label="Drill (mm)"
+                        disabled={fixedVia}
                         value={via.drill}
                         min={0.0001}
                         max={via.diameter - 0.0001}
@@ -621,13 +707,37 @@ export default function LayoutProperties({
                 </PropertyTab>
               </PropertyTabs>
             )}
-            {zone && (
+            {zone && isNativePCBEdgeCutFill(zone) && (
+              <PropertyTabs locked={locked}>
+                <PropertyTab label="General" icon={SlidersHorizontal}>
+                  <PropertyRow
+                    label="Zone layer"
+                    value={zone.layer}
+                    description="Edit the saved outline and fill in Source."
+                  />
+                </PropertyTab>
+              </PropertyTabs>
+            )}
+            {zone && !isNativePCBEdgeCutFill(zone) && (
               <PropertyTabs locked={locked} action={actions}>
                 <PropertyTab label="General" icon={SlidersHorizontal}>
                   <PropertySection
                     title={zone.keepout ? 'Rule area' : 'Copper zone'}
                     showTitle={false}
                   >
+                    {zone.nativePlacement && (
+                      <PropertyRow
+                        label={
+                          zone.nativePlacement.sourceKind === 'sheetname'
+                            ? 'Placement sheet'
+                            : zone.nativePlacement.sourceKind === 'component_class'
+                              ? 'Placement component class'
+                              : 'Placement group'
+                        }
+                        value={zone.nativePlacement.sourceName}
+                        description="Edit this placement source in Source and repeat the layout in KiCad."
+                      />
+                    )}
                     {!zone.keepout && (
                       <Select
                         active={active}
@@ -677,6 +787,20 @@ export default function LayoutProperties({
                 </PropertyTab>
                 {!zone.keepout && (
                   <PropertyTab label="Fill" icon={PaintBucket}>
+                    {isUnassignedSavedCopperZone(zone) && (
+                      <PropertyRow
+                        label="Saved copper"
+                        value="Unassigned"
+                        description="Layout shows the saved contours. Refill requires KiCad."
+                      />
+                    )}
+                    {zone.hatchFill && (
+                      <PropertyRow
+                        label="Fill pattern"
+                        value="Hatched"
+                        description="Native hatch settings and saved copper are retained. Refill requires KiCad."
+                      />
+                    )}
                     <PropertyGrid>
                       <NumberField
                         {...field}
@@ -715,7 +839,7 @@ export default function LayoutProperties({
                         label="Zone priority"
                         value={zone.priority ?? 0}
                         min={0}
-                        max={10000}
+                        max={maxPCBZonePriority}
                         step="1"
                         onCommit={(priority) => onZone({ ...zone, priority })}
                       />
@@ -756,6 +880,16 @@ export default function LayoutProperties({
                         ]}
                         onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
                       />
+                      {zone.islandRemovalMode === 2 && (
+                        <NumberField
+                          {...field}
+                          label="Minimum island area (mm²)"
+                          value={zone.islandAreaMin ?? defaultPCBIslandAreaMin}
+                          min={0}
+                          max={maxPCBZonePriority / 1_000_000}
+                          onCommit={(islandAreaMin) => onZone({ ...zone, islandAreaMin })}
+                        />
+                      )}
                     </PropertyGrid>
                   </PropertyTab>
                 )}

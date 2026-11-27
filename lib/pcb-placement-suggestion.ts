@@ -100,9 +100,12 @@ function placementGeometry(board: PCB, spacing: number) {
     return null;
   }
   const islands = polygons.map(region);
-  const keepouts = worldZones(board)
-    .filter(({ keepout }) => keepout?.footprints)
-    .map(({ outline, holes }) => region({ outer: outline, holes: holes ?? [] }));
+  const footprintKeepouts = worldZones(board).filter(({ keepout }) => keepout?.footprints);
+  if (footprintKeepouts.some((zone) => zone.nativeCircularOutline || zone.nativeOutlineArcs))
+    return null;
+  const keepouts = footprintKeepouts.map(({ outline, holes }) =>
+    region({ outer: outline, holes: holes ?? [] }),
+  );
   if (
     islands.length > 8 ||
     [...islands, ...keepouts].reduce((count, item) => count + item.edgeCount, 0) > 1024

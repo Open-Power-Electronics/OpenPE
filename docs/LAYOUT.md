@@ -2,9 +2,11 @@
 
 Layout and Model share the native PCB linked to the primary schematic. Opening a
 view does not create board data or dirty the project. New projects already contain
-an empty PCB and empty Model CAD in their initial native file set. Layout supports bounded
-manual editing of two-/four-layer boards, embedded footprints, straight tracks,
-through vias, polygon zones and saved fills. Loaded supported artwork, holes,
+an empty PCB and empty Model CAD in their initial native file set. Layout displays
+two to 32 ordered copper layers in supported KiCad 10 boards. Manual stack
+creation offers two or four layers. Bounded manual editing covers embedded
+footprints, straight tracks, through vias, polygon zones and saved fills.
+Loaded supported artwork, holes,
 pads, keepouts, dimensions and model transforms survive round trips. There is no
 general importer, autorouter or full KiCad manufacturing-rule implementation.
 Use the explicit [DRC report](DESIGN-RULES.md); structural acceptance, airwires,
@@ -28,6 +30,8 @@ all-copper layers with optional mask membership on either or both sides. Numbere
 non-plated holes retain their mask layers. Round mechanical holes that match
 their drill size may also carry KiCad's `F&B.Cu` or `*.Cu` marker and produce no
 copper flash.
+Pads with native silkscreen membership display their shape in each assigned
+silkscreen pass. Copper ownership and labels use the electrical pad pass.
 An oval opening must contain its non-plated slot, including any offset.
 Non-plated hole numbers remain mechanical identifiers through schematic
 synchronization, including when they match an electrical pad number. Blank copper
@@ -50,6 +54,30 @@ the native nanometre grid when their union forms one outline without holes. A na
 circular anchor can use a diameter down to 0.000001 mm.
 The board permits a combined sum of squared custom pad vertex counts of up to
 4,000,000.
+
+Compound native pads can retain multiple outlines, rounded strokes and the
+native anchor. Layout displays the saved primitives and Model uses a tessellated
+preview. Edit their copper geometry in native Source. The
+[DRC rules](DESIGN-RULES.md#layout-drc) and
+[manufacturing export](FORMAT.md#manufacturing-export) define supported checks
+and plotting limits.
+
+Native net-tie groups preserve the listed electrical pad numbers and copper.
+Edit these groups in native Source. [DRC](DESIGN-RULES.md#layout-drc) uses the
+declared pad groups and their physical copper on each layer.
+
+Layout paints matching cached outlines on board text using the saved geometry.
+Footprint labels use ordinary text presentation and keep their native font cache
+for Save. Named-font fabrication output stays in KiCad. PCB checks that rely
+on stroke geometry report unsupported text instead of drawing replacement ink.
+Layout displays board-level [PNG references](FORMAT.md) on their associated
+layers and includes visible references when fitting all items. Edit the
+reference records in native Source. The artwork does not affect copper,
+connectivity, physical board boundaries or manufacturing output.
+Board-level tables show native borders, separators and cell text on their
+associated layers. Use native Source to edit tables. Boards with tables on
+fabrication layers use native Source for copper edits and KiCad for artwork
+checks and Gerber plotting.
 Supported catalog cutouts retain footprint-local Edge.Cuts contours. The
 board outline, copper fills, Model and profile export use their placed
 coordinates. Filled catalog rectangles use four exact corners in the board's
@@ -62,6 +90,37 @@ independent.
 Catalog placement retains explicit footprint-level solder mask margin, solder
 paste margin and paste margin ratio independently of pad-level values.
 Pads retain KiCad's native `pad_prop_heatsink` fabrication property.
+
+### Imported routing
+
+Native board and footprint Bézier artwork uses its exact cubic path in Layout.
+Hit testing and board-surface previews use a bounded tessellation. OpenPE uses
+the stored curves for board-edge DRC, Gerber artwork and exact DXF splines.
+Bézier copper and Edge.Cuts geometry can be edited in native Source. Checked
+routing and refill retain their own bounded geometry coverage.
+
+Native arc tracks appear in Layout and round-trip as circular arcs. DRC uses
+their path for physical checks and connectivity. Gerber plots their analytical
+curves. Edit the arc records in native Source. Non-copper edits and ordinary Save
+retain the arc records. Copper-changing Workbench commands, routing previews,
+airwires, refill and PCB thermal, EMC and parasitics analysis require their own
+supported routing geometry.
+
+Native teardrop settings and their generated copper contours are preserved and
+shown with the saved copper. Active teardrops and generated teardrop zones keep
+their copper fixed during Workbench editing. Use KiCad to regenerate the
+teardrops after changing their routing or settings in native Source. Disabled
+settings alone do not restrict ordinary copper editing.
+
+Native length-tuning patterns retain supported settings and UUID references to
+their existing same-layer tracks. Their members keep accepted copper geometry.
+Change length tuning in native Source or KiCad.
+
+Layout shows imported via backdrills as rings at the saved diameters, using the
+entry and must-cut layer colours. Properties shows each drill record. Edit the
+records in native Source. DRC applies each cutter and its layer span to the bore
+and retained plated barrel. The [manufacturing export](FORMAT.md#manufacturing-export)
+uses the same native drill records for separate Excellon programs.
 
 ## Custom component drawings
 
@@ -753,7 +812,8 @@ filled enabled zones in the same undo edit; fill failure rejects the complete ed
 
 Zone completion by Enter/double-click/closed polygon commits once and
 restores canvas focus; rejection retains the draft/focus for retry. Properties
-edits net/layer, clearance, minimum width, thermals, priority and bounds.
+edits net/layer, clearance, minimum width, thermals, priority, island area and
+bounds.
 
 Enabling unfilled copper zones is explicit and undoable. Already-filled enabled
 zones refresh automatically on copper geometry, board boundary and effective
@@ -782,23 +842,23 @@ Curves use nominal 0.01 mm tessellation within caps. Copper avoidance uses
 finer round offsets and expands the exclusion polygons to cover chord and
 coordinate rounding. Circular pads and vias use enclosing polygons. Minimum-width
 pruning also removes short remnants before the surviving copper expands. For
-zones with an Always or Never island rule, a bounded same-net copper
+zones with an island rule, a bounded same-net copper
 partition finds pieces connected to pads through tracks, plated pads, vias and
 other pours. When a zone has a connected piece, Always drops its disconnected
-pieces and Never keeps them with native island markers. An omitted native
-island rule defaults to Always. A wholly disconnected
-zone retains its pieces. Area-based island pruning and exact KiCad contour
-generation are outside the editor's fill operation. Invalid, open or excessive
-geometry fails.
+pieces, Never keeps them with native island markers, and Below area limit keeps
+and marks islands at or above the threshold. Island area excludes holes. An
+omitted island rule defaults to Always, and the default area threshold is 10 mm².
+A wholly disconnected zone retains its pieces. Refill uses bounded contours.
+Invalid, open or excessive geometry fails.
 
 Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the Fill action above the fields. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero uses the 0.25 mm default on recalculated layers. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It solves previously filled same-layer neighbours with the selected zone so new copper cannot intrude into their accepted clearances. Enabling a target or changing effective zone rules refreshes previously filled affected pours in the same transaction. Unfilled peers remain unfilled. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Viewing and Properties disclosure never calculate fills.
 
-Manual fill, automatic Core refresh and renderer Worker previews share native board copper/edge/hole minima and the supported net-class/custom clearance sources described in [Design rules](DESIGN-RULES.md#layout-drc). Each foreign-net pair uses the last matching conditional clearance in either operand order, otherwise the larger participating net-class clearance, with board and requested zone minima as floors. Pair limits affect generated contours without replacing the native zone's own clearance setting. Rule-text, net-name and relevant courtyard-reference changes invalidate prepared fills; unrelated project metadata does not. The bounded fill rejects unsupported rule sources and courtyard predicates evaluated on Zone operands before publication. Courtyard predicates on pad, track and via operands use their current geometry. Check-only source overrides and disabled checks do not alter native fill constraints.
+Manual fill, automatic Core refresh and renderer Worker previews share native board copper/edge/hole minima and the supported clearance sources in [Design rules](DESIGN-RULES.md#layout-drc). A pad inherits copper clearance and connection mode from its footprint unless it has an explicit override. A positive local clearance takes precedence over the supported conditional and net-class values, with board and requested zone minima as floors. A pad's explicit zero skips the footprint override and falls through to the rules. Pad thermal gap and spoke width can override the zone's values. Rule-text, net-name and relevant courtyard-reference changes invalidate prepared fills. The bounded fill rejects unsupported rule sources and courtyard predicates evaluated on Zone operands before publication. Courtyard predicates on pad, track and via operands use their current geometry. Check-only source overrides and disabled checks leave native fill constraints intact.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
 bridges. Viewing/saving/display never recomputes fills. Copper/rule edits replace
-stale contours with refreshed fills in the same transaction. Refill/check in KiCad before manufacturing.
+stale contours with refreshed fills in the same transaction.
 Dense refreshed contours can exceed the separate airwire-analysis operation limit;
 Layout retains their copper and reports unavailable connectivity without clearing fills.
 
@@ -880,7 +940,7 @@ transformed geometry, opposite-side bodies, fine-tessellated leads, ambiguous/es
 ### Scene lifetime and rendering
 
 Model uses bounded STEP parsing/Three.js without installed KiCad. It renders
-board thickness, closed edges/cutouts, drills, two-/four-layer copper, pads, silk and
+board thickness, closed edges/cutouts, through drills, ordered copper layers, pads, silk and
 available packages in mm. Clicking visible laminate, copper, mask or silk selects the board in Model and exposes its thickness field; Layout empty Properties has no thickness setting. Component/CAD occlusion and the body filter govern board picking. The field uses the existing validated PCB replacement transaction with the exact current board and Source/close guards, retaining its draft while hidden. Native thickness, 3D geometry and whole-project undo stay in agreement. Neutral fallback bodies are estimates; late real
 models replace them without camera movement. Filled silk and mask artwork retain
 their native stroke as well as their interior; closed strokes keep their inner
@@ -1541,7 +1601,7 @@ Passing the bundled PCB directly compares against its saved contours.
 | `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                                  | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                               | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                                                          |
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                         | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                                                      |
-| `tests/pcb-placement-suggestion.test.ts`, `node scripts/check-layout-placement-suggestion-ui.mjs` | Shadow settings persistence, marquee preview, exact Tab placement, keyboard and lifecycle guards, native geometry and one-step undo |
+| `tests/pcb-placement-suggestion.test.ts`, `node scripts/check-layout-placement-suggestion-ui.mjs`                                                                                                                                | Shadow settings persistence, marquee preview, exact Tab placement, keyboard and lifecycle guards, native geometry and one-step undo                                                                                                               |
 | `tests/layout-parasitics.test.ts`, `tests/layout-parasitics-study.test.ts`                                                                                                                                                       | Analytical DC networks and via spans; same-schematic additions, endpoint identity and native-property preservation, precision, one-step undo and rejected inputs                                                                                  |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-study`                                                                                                                                                                 | Real Workbench terminal picks and endpoint-labelled study, hidden native endpoint fields, unchanged PCB/other native files and one GUI undo; mocked host services, no Electron or solver                                                          |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-contact`                                                                                                                                                               | Actual LM25017 D1.2/C8.1 /VOUT1 pad picks, finite contact measurement, thickness reactivity, Add availability and unchanged native files; mocked host services, no Electron or solver                                                             |

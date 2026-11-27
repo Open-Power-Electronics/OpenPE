@@ -10,9 +10,7 @@ type Component = NonNullable<Sheet['components']>[number];
 type Ordered<T> = T & { order: number };
 type Model = Omit<FootprintModel, 'offset' | 'scale' | 'rotation'> &
   Partial<Pick<FootprintModel, 'offset' | 'scale' | 'rotation'>>;
-type ObjectFootprint = Ordered<
-  Omit<Footprint, 'symbolId' | 'models'> & { models?: Model[] }
->;
+type ObjectFootprint = Ordered<Omit<Footprint, 'symbolId' | 'models'> & { models?: Model[] }>;
 type ObjectSimulation = Partial<Record<keyof typeof simulationFieldNames, string>> & {
   valueFormat?: string;
   excluded?: boolean;
@@ -64,6 +62,7 @@ type ObjectNet = {
   pcb?: {
     order: number;
     tracks?: Ordered<Omit<PCB['tracks'][number], 'netId'>>[];
+    arcTracks?: Ordered<Omit<NonNullable<PCB['arcTracks']>[number], 'netId'>>[];
     vias?: Ordered<Omit<PCB['vias'][number], 'netId'>>[];
     zones?: Ordered<Omit<BoardZone, 'netId'>>[];
   };
@@ -76,6 +75,15 @@ type ObjectBoard = Pick<PCB, 'id' | 'thickness' | 'layers'> & {
   /** Only unlinked mechanical packages remain at board level. */
   footprints?: ObjectFootprint[];
   graphics?: PCB['graphics'];
+  tuningPatterns?: PCB['tuningPatterns'];
+  referenceImages?: PCB['referenceImages'];
+  barcodes?: PCB['barcodes'];
+  nativeTables?: PCB['nativeTables'];
+  groupLocks?: PCB['groupLocks'];
+  tracks?: Ordered<Omit<PCB['tracks'][number], 'netId'>>[];
+  arcTracks?: Ordered<Omit<NonNullable<PCB['arcTracks']>[number], 'netId'>>[];
+  /** Unassigned plated holes have no schematic network owner. */
+  vias?: Ordered<Omit<PCB['vias'][number], 'netId'>>[];
   /** Netless keepouts and drawing zones. Electrical zones belong to their net. */
   zones?: Ordered<Omit<BoardZone, 'netId'>>[];
 };
@@ -183,7 +191,7 @@ function retainNetPacket(
   const cached = ownedNetPackets.get(net);
   if (
     cached?.order === packet.order &&
-    (['tracks', 'vias', 'zones'] as const).every((key) => {
+    (['tracks', 'arcTracks', 'vias', 'zones'] as const).every((key) => {
       const previous = cached[key] ?? [],
         next = packet[key] ?? [];
       return (
@@ -376,8 +384,8 @@ export function groupProjectDocument(
     }
     if (board) {
       if (!cachedNetworks)
-        for (const key of ['tracks', 'vias', 'zones'] as const)
-          board[key].forEach((item, order) => {
+        for (const key of ['tracks', 'arcTracks', 'vias', 'zones'] as const)
+          board[key]?.forEach((item, order) => {
             if (!item.netId) return;
             const net = byId.get(item.netId)!;
             let packet: object;
@@ -438,9 +446,35 @@ export function groupProjectDocument(
       const zones = pcb.zones.flatMap(({ netId, ...zone }, order) =>
         netId ? [] : [{ ...zone, order }],
       );
+      const vias = pcb.vias.flatMap(({ netId, ...via }, order) =>
+        netId ? [] : [{ ...via, order }],
+      );
+      const tracks = pcb.tracks.flatMap(({ netId, ...track }, order) =>
+        netId ? [] : [{ ...track, order }],
+      );
+      if (tracks.length) board.tracks = tracks;
+      const arcTracks = pcb.arcTracks?.flatMap(({ netId, ...track }, order) =>
+        netId ? [] : [{ ...track, order }],
+      );
+      if (arcTracks?.length) board.arcTracks = arcTracks;
+      if (vias.length) board.vias = vias;
       if (footprints.length) board.footprints = footprints;
       if (pcb.graphics.length)
         board.graphics = shareGeometry ? pcb.graphics : structuredClone(pcb.graphics);
+      if (pcb.tuningPatterns?.length)
+        board.tuningPatterns = shareGeometry
+          ? pcb.tuningPatterns
+          : structuredClone(pcb.tuningPatterns);
+      if (pcb.referenceImages?.length)
+        board.referenceImages = shareGeometry
+          ? pcb.referenceImages
+          : structuredClone(pcb.referenceImages);
+      if (pcb.barcodes?.length)
+        board.barcodes = shareGeometry ? pcb.barcodes : structuredClone(pcb.barcodes);
+      if (pcb.nativeTables?.length)
+        board.nativeTables = shareGeometry ? pcb.nativeTables : structuredClone(pcb.nativeTables);
+      if (pcb.groupLocks?.length)
+        board.groupLocks = shareGeometry ? pcb.groupLocks : [...pcb.groupLocks];
       if (zones.length) board.zones = shareGeometry ? zones : structuredClone(zones);
       if (shareGeometry) {
         board = ownProjectData(board);
@@ -541,13 +575,25 @@ export function ungroupProjectDocument(document: ProjectDocument): EditorDocumen
       nets,
       footprints: ordered(footprints, 'footprint'),
       graphics: structuredClone(pcb.graphics ?? []),
+      ...(pcb.tuningPatterns?.length
+        ? { tuningPatterns: structuredClone(pcb.tuningPatterns) }
+        : {}),
+      ...(pcb.referenceImages?.length
+        ? { referenceImages: structuredClone(pcb.referenceImages) }
+        : {}),
+      ...(pcb.barcodes?.length ? { barcodes: structuredClone(pcb.barcodes) } : {}),
+      ...(pcb.nativeTables?.length ? { nativeTables: structuredClone(pcb.nativeTables) } : {}),
+      ...(pcb.groupLocks?.length ? { groupLocks: [...pcb.groupLocks] } : {}),
       tracks: [],
       vias: [],
       zones: [],
     };
-    for (const key of ['tracks', 'vias', 'zones'] as const) {
+    for (const key of ['tracks', 'arcTracks', 'vias', 'zones'] as const) {
       const items: (
-        Ordered<PCB['tracks'][number]> | Ordered<PCB['vias'][number]> | Ordered<BoardZone>
+        | Ordered<PCB['tracks'][number]>
+        | Ordered<NonNullable<PCB['arcTracks']>[number]>
+        | Ordered<PCB['vias'][number]>
+        | Ordered<BoardZone>
       )[] = boardNets.flatMap((net) =>
         (net.pcb![key] ?? []).map((item) => ({ ...structuredClone(item), netId: net.id })),
       );
@@ -558,7 +604,12 @@ export function ungroupProjectDocument(document: ProjectDocument): EditorDocumen
             netId: null,
           })),
         );
-      (board[key] as unknown[]) = ordered(items, `PCB ${key}`);
+      if (key === 'vias')
+        items.push(...(pcb.vias ?? []).map((via) => ({ ...structuredClone(via), netId: '' })));
+      if (key === 'tracks' || key === 'arcTracks')
+        items.push(...(pcb[key] ?? []).map((track) => ({ ...structuredClone(track), netId: '' })));
+      if (key !== 'arcTracks' || items.length)
+        (board[key] as unknown[]) = ordered(items, `PCB ${key}`);
     }
   }
   return {

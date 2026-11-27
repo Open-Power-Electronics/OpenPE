@@ -4,6 +4,7 @@ import type { PCBDisplay } from './pcb-display';
 import type { PCBSelectionFilters } from './pcb-selection';
 import type { PCBSelection } from './pcb-layout';
 import { padCopperLayers } from './pcb-connectivity';
+import { pcbViaCopperLayers } from './pcb-native-via';
 import {
   circlePolygon,
   padDrillPolygon,
@@ -131,13 +132,15 @@ export function expandPCBTrackSelection(
         ),
       );
   for (const via of vias)
-    if (nets.has(via.netId)) {
+    if (via.netId && nets.has(via.netId)) {
+      const viaLayers = pcbViaCopperLayers(board.layers, via).filter((layer) => layers[layer]);
+      if (!viaLayers.length) continue;
       const polygon = {
         outer: circlePolygon(via, via.diameter / 2),
         holes: [circlePolygon(via, via.drill / 2)],
       };
       add(
-        makeBody('via', via.netId, polygon.outer, 0, visibleCopper, polygon, {
+        makeBody('via', via.netId, polygon.outer, 0, viaLayers, polygon, {
           kind: 'via',
           id: via.id,
         }),

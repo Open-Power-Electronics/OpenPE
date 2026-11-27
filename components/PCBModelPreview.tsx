@@ -38,7 +38,10 @@ import {
 } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { PCB } from '@/lib/pcb';
+import { hasNativePCBPadMachining, hasPCBGraphicMask, hasPCBTrackMask, type PCB } from '@/lib/pcb';
+import { pcbViaCopperLayers, pcbViaHasTreatment } from '@/lib/pcb-native-via';
+import { pcbPadOnLayer, pcbViaDiameter } from '@/lib/pcb-padstack';
+import { pcbTextLineAdvance } from '@/lib/pcb-text';
 import type { Circuit } from '@/lib/circuit';
 import type { CapabilityHost } from '@/api/capabilities';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
@@ -88,16 +91,15 @@ import { useDrawingImageExport } from './useDrawingImageExport';
 import { previewFootprint, previewModel, type PreviewFootprint } from '@/lib/pcb-preview-cache';
 import { modelPlacement, resolveFootprintModels } from '@/lib/pcb-models';
 import { pcbBounds, footprintPoint, createEmptyPCB } from '@/lib/pcb-layout';
-import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { padHasElectricalPin } from '@/lib/pcb-pad-role';
-import { copperFillOpacity } from '@/lib/pcb-display';
+import { copperFillOpacity, pcbPadDisplayLayers } from '@/lib/pcb-display';
 import {
   modelBoardPolygons,
   circlePolygon,
   padDrillPolygon,
   filledCopperPolygons,
   graphicPolygons,
-  padPolygon,
+  displayPadPolygons,
   strokePolygon,
   subtractPolygons,
   intersectPolygons,
@@ -1057,7 +1059,7 @@ function PCBModelPreview({
       if (
         board.footprints.length > 256 ||
         board.footprints.reduce((n, f) => n + f.pads.length, 0) > 3000 ||
-        board.tracks.length + board.vias.length > 12000
+        board.tracks.length + (board.arcTracks?.length ?? 0) + board.vias.length > 12000
       )
         throw new Error('The board exceeds the 3D preview geometry limit.');
       const boundary = modelBoardPolygons(board);
@@ -1074,11 +1076,28 @@ function PCBModelPreview({
             new THREE.Vector3(boardFrame.min.x, -boardFrame.max.y, 0),
             new THREE.Vector3(boardFrame.max.x, -boardFrame.min.y, 0),
           );
-      const holes: Polygon[] = board.footprints.flatMap((f) =>
+      const padHoles: Polygon[] = board.footprints.flatMap((f) =>
         f.pads.filter((p) => p.drill).map((p) => ({ outer: padDrillPolygon(f, p), holes: [] })),
       );
-      holes.push(...board.vias.map((v) => ({ outer: circlePolygon(v, v.drill / 2), holes: [] })));
-      const body = subtractPolygons(boundary, holes);
+      const viaGeometry = board.vias.map((via) => ({
+        via,
+        layers: pcbViaCopperLayers(board.layers, via),
+        hole: { outer: circlePolygon(via, via.drill / 2), holes: [] } satisfies Polygon,
+      }));
+      const throughHoles = padHoles.concat(
+        viaGeometry
+          .filter(({ layers }) => layers.length === board.layers.length)
+          .map(({ hole }) => hole),
+      );
+      const layerHoles = new Map<string, Polygon[]>(
+        board.layers.map((layer) => [
+          layer,
+          padHoles.concat(
+            viaGeometry.filter(({ layers }) => layers.includes(layer)).map(({ hole }) => hole),
+          ),
+        ]),
+      );
+      const body = subtractPolygons(boundary, throughHoles);
       await yieldBuild();
       if (body.length) {
         const laminate = new THREE.Mesh(
@@ -1108,7 +1127,11 @@ function PCBModelPreview({
         await yieldBuild();
         const inside = intersectPolygons(polygons, boundary);
         await yieldBuild();
-        const clipped = subtractPolygons(inside, holes);
+        const physicalHoles =
+          layerHoles.get(physicalLayer) ??
+          layerHoles.get(physicalLayer.startsWith('B.') ? 'B.Cu' : 'F.Cu') ??
+          throughHoles;
+        const clipped = subtractPolygons(inside, physicalHoles);
         await yieldBuild();
         const mesh = new THREE.Mesh(
           new THREE.ShapeGeometry(clipped.map(shape)),
@@ -1127,6 +1150,36 @@ function PCBModelPreview({
         await yieldBuild();
       };
       const issues: ModelCheckIssue[] = [];
+      if (hasPCBTrackMask(board))
+        issues.push({
+          message:
+            'Model omits native track mask openings. Layout shows openings from explicit margins.',
+          severity: 'warning',
+        });
+      if (hasPCBGraphicMask(board))
+        issues.push({
+          message:
+            'Model omits native copper graphic mask openings. Source retains these openings.',
+          severity: 'warning',
+        });
+      if (hasNativePCBPadMachining(board))
+        issues.push({
+          message:
+            'Model shows the primary drill geometry for pads with machining or press-fit settings. Open the native board in KiCad for depth cuts.',
+          severity: 'warning',
+        });
+      if (board.vias.some((via) => via.span || via.backdrills || pcbViaHasTreatment(via.treatment)))
+        issues.push({
+          message:
+            'Model shows via rings on their native copper layers. It omits partial-depth bores and via treatments from the substrate.',
+          severity: 'warning',
+        });
+      if (board.vias.some((via) => via.removeUnusedLayers))
+        issues.push({
+          message:
+            'Model shows retained end and saved zone rings on vias with unused-layer removal. Verify additional connected rings in KiCad.',
+          severity: 'warning',
+        });
       let fills = new Map<string, Polygon[]>();
       try {
         fills = filledCopperPolygons(board);
@@ -1143,16 +1196,26 @@ function PCBModelPreview({
           : board.thickness / 2 - (board.thickness * layerIndex) / (board.layers.length - 1);
         await surface(
           boardGroups.copper,
-          board.tracks
-            .filter((t) => t.layer === layer)
-            .flatMap((t) => strokePolygon([t.start, t.end], t.width)),
+          [
+            ...board.tracks
+              .filter((t) => t.layer === layer)
+              .flatMap((t) => strokePolygon([t.start, t.end], t.width)),
+            ...(board.arcTracks ?? [])
+              .filter((t) => t.layer === layer)
+              .flatMap((t) => graphicPolygons({ ...t, kind: 'arc' })),
+          ],
           z,
           modelBoardDisplayColors.copper,
           layer,
         );
         await surface(
           boardGroups.copper,
-          board.vias.map((v) => ({ outer: circlePolygon(v, v.diameter / 2), holes: [] })),
+          viaGeometry.flatMap(({ via, layers }) => {
+            const diameter = pcbViaDiameter(via, layer);
+            return diameter > 0 && layers.includes(layer)
+              ? [{ outer: circlePolygon(via, diameter / 2), holes: [] }]
+              : [];
+          }),
           z,
           modelBoardDisplayColors.copper,
           layer,
@@ -1161,8 +1224,8 @@ function PCBModelPreview({
           boardGroups.copper,
           board.footprints.flatMap((f) =>
             f.pads
-              .filter((p) => padCopperLayers(board, f, p).includes(layer))
-              .map((p) => padPolygon(f, p)),
+              .filter((p) => pcbPadDisplayLayers(board, f, p).includes(layer))
+              .flatMap((p) => displayPadPolygons(f, pcbPadOnLayer(p, layer))),
           ),
           z,
           modelBoardDisplayColors.copper,
@@ -1214,7 +1277,11 @@ function PCBModelPreview({
         for (const graphic of silk) {
           const text = graphic.text;
           if (!text || text.hidden) continue;
-          if (remainingSegments > 0 && text.value.length <= remainingCharacters) {
+          if (
+            !graphic.textBox &&
+            remainingSegments > 0 &&
+            text.value.length <= remainingCharacters
+          ) {
             remainingCharacters -= text.value.length;
             const ink = pcbStrokeText(text, graphic.start);
             if ('paths' in ink) {
@@ -1291,7 +1358,7 @@ function PCBModelPreview({
                   : 'middle';
               text.value
                 .split('\n')
-                .forEach((line, i) => ctx.fillText(line, 0, i * text.size.y * 1.25));
+                .forEach((line, i) => ctx.fillText(line, 0, i * pcbTextLineAdvance(text)));
               ctx.restore();
             }
             const texture = new THREE.CanvasTexture(canvas);

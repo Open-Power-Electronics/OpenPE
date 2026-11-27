@@ -3,6 +3,7 @@ import type { PCB } from './pcb';
 import type { ModelCAD } from './model-cad';
 import { isOwnedPCB } from './immutable-project';
 import { footprintPoint, padPosition, padRotation } from './pcb-layout';
+import { pcbViaCopperLayers } from './pcb-native-via';
 import {
   maxAnnotationElements,
   validateAnnotationMarkup,
@@ -193,7 +194,8 @@ export function capturePCBAnnotationSelection(
           'Y (mm)': String(via.y),
           'Diameter (mm)': String(via.diameter),
           'Drill (mm)': String(via.drill),
-          Layers: board.layers.join(', '),
+          Type: via.span?.kind ?? 'through',
+          Layers: pcbViaCopperLayers(board.layers, via).join(', '),
         },
       };
     const graphic = board.graphics.find((item) => item.id === id);

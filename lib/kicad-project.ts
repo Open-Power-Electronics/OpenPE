@@ -1,8 +1,20 @@
 import { isPluginProjectData } from '../plugins/runtime/project-data.mjs';
 import { emptyCircuit, parseCircuitTree, type Circuit } from './circuit';
-import { parseKiCadPCB, expandNativeBoardZones } from './kicad-pcb';
-import { nativeIdentity } from './kicad-project-identity';
-import { footprintTextPlacement } from './pcb-text';
+import {
+  parseKiCadPCB,
+  expandNativeBoardZones,
+  parseNativePCBSource,
+  type NativePCBPlacementLayer,
+} from './kicad-pcb';
+import { nativeIdentity, normalizeNativePCBIdentifiers } from './kicad-project-identity';
+import { nativePCBGroupLocks, retainNativeBoardGroups } from './kicad-pcb-metadata';
+import { nativePCBPadRoundRectRatio } from './pcb-geometry';
+import {
+  footprintTextPlacement,
+  isExplicitlyHiddenFootprintCaption,
+  nativeFootprintCaptionDefaultSize,
+} from './pcb-text';
+import { MAX_NATIVE_PCB_BYTES, MAX_NATIVE_PCB_NODES } from './project-size-limits';
 import {
   loadKiCadPCBDesignRuleLimits,
   pcbDesignRuleLimitKeys,
@@ -46,7 +58,6 @@ import {
 import {
   child,
   children,
-  parseOwnedSExpr,
   parseSExpr,
   quote,
   val,
@@ -166,7 +177,8 @@ export function validateKiCadProjectFiles(input: unknown): asserts input is KiCa
       fail('Private JSON snapshots are not native KiCad project files.');
     const size =
       cachedSize ?? (file.encoding === 'latin1' ? file.source.length : utf8Size(file.source));
-    if (size > MAX_PROJECT_BYTES) fail(`${file.name} exceeds 8 MB.`);
+    const fileLimit = ext(file.name, '.kicad_pcb') ? MAX_NATIVE_PCB_BYTES : MAX_PROJECT_BYTES;
+    if (size > fileLimit) fail(`${file.name} exceeds ${fileLimit / 1_000_000} MB.`);
     total += size;
     if (owned && cachedSize === undefined) checked.push({ file, size });
   }
@@ -387,7 +399,16 @@ function parseFiles(bundle: KiCadProjectFiles, owner?: Project): ParsedNative {
 
 /** Validate retained native sources without entering project model validation again. */
 export function validateNativeSourceFiles(bundle: KiCadProjectFiles, owner?: Project): void {
-  parseFiles(bundle, owner);
+  const parsed = parseFiles(bundle, owner);
+  if (owner?.pcb) {
+    const sourceLocks = parsed.board?.groupLocks ?? [];
+    const boardLocks = owner.pcb.groupLocks ?? [];
+    if (
+      sourceLocks.length !== boardLocks.length ||
+      sourceLocks.some((id, index) => id !== boardLocks[index])
+    )
+      fail('native PCB group locks must be changed through Source.');
+  }
 }
 
 export function projectFromNativeFiles(bundle: KiCadProjectFiles): Project {
@@ -554,7 +575,11 @@ function seedCleanSchematicSource(
 }
 
 /** Retain native board setup and non-geometrical footprint metadata when editing geometry. */
-const ownedBoardSourceTrees = new WeakMap<KiCadProjectFile, SExpr>();
+type NativePCBPlacementLayers = ReadonlyMap<string, readonly NativePCBPlacementLayer[]>;
+const ownedBoardSourceTrees = new WeakMap<
+  KiCadProjectFile,
+  { schematicId: string; tree: SExpr; placements: NativePCBPlacementLayers }
+>();
 const ownedMergedBoardNodes = new WeakMap<
   object,
   { original: KiCadProjectFile; context: string; tree: SExpr }
@@ -574,6 +599,52 @@ const boardMergeContext = (
     board.nets,
     schematic.parts.map((part) => [part.id, part.ref, part.value]),
   ]);
+
+/** A multi-layer placement area must stay one native channel. The editor's
+ * per-layer objects may be merged only with their original layers and identity. */
+function retainNativePlacementLayers(container: SExpr, placements: NativePCBPlacementLayers) {
+  if (!placements.size) return;
+  const zones = new Map(children(container, 'zone').map((zone) => [val(child(zone, 'uuid')), zone]));
+  const replacements = new Map<SExpr, SExpr | null>();
+  const shared = (zone: SExpr) =>
+    JSON.stringify(
+      zone.filter(
+        (field) => !Array.isArray(field) || !['layer', 'uuid', 'property'].includes(String(field[0])),
+      ),
+    );
+  for (const [id, zone] of zones) {
+    const layers = placements.get(id);
+    if (!layers || replacements.has(zone)) continue;
+    const parts = layers.map((layer) => {
+      const part = zones.get(layer.id);
+      if (!part || val(child(part, 'layer')) !== layer.layer)
+        return fail('Edit multi-layer placement membership in Source.');
+      return part;
+    });
+    const primary = parts[0];
+    const signature = shared(primary);
+    const combined: SExpr = primary.flatMap((field): SExpr => {
+      if (Array.isArray(field) && field[0] === 'property') return [];
+      if (Array.isArray(field) && field[0] === 'layer')
+        return [['layers', ...layers.map(({ layer }) => quote(layer))]];
+      return [field];
+    });
+    for (const part of parts) {
+      if (part !== primary && shared(part) !== signature)
+        return fail('Edit differing layers of a native placement area in Source.');
+      combined.push(...children(part, 'property'));
+      replacements.set(part, part === primary ? combined : null);
+    }
+  }
+  if (!replacements.size) return;
+  let write = 0;
+  for (const field of container) {
+    const next = Array.isArray(field) && replacements.has(field) ? replacements.get(field) : field;
+    if (next !== null && next !== undefined) container[write++] = next;
+  }
+  container.length = write;
+}
+
 function mergeBoardSource(
   original: KiCadProjectFile,
   generated: string,
@@ -584,32 +655,57 @@ function mergeBoardSource(
   captureJson?: (encode: () => string) => void,
 ): string {
   const owned = isOwnedProjectNode(original);
-  let before = owned ? ownedBoardSourceTrees.get(original) : undefined;
-  if (!before) {
+  const cachedSource = owned ? ownedBoardSourceTrees.get(original) : undefined;
+  let retainedSource = cachedSource?.schematicId === schematicId ? cachedSource : undefined;
+  if (!retainedSource) {
+    const placements = new Map<string, readonly NativePCBPlacementLayer[]>();
     const expanded = expandNativeBoardZones(
-      owned ? parseOwnedSExpr(original.source) : parseSExpr(original.source),
+      normalizeNativePCBIdentifiers(parseNativePCBSource(original.source, owned)),
+      schematicId,
+      (layers) => {
+        for (const { id } of layers) placements.set(id, layers);
+      },
     );
-    before = owned ? ownProjectData(expanded) : expanded;
+    retainedSource = {
+      schematicId,
+      tree: owned ? ownProjectData(expanded, undefined, MAX_NATIVE_PCB_NODES) : expanded,
+      placements,
+    };
     if (owned) {
-      ownedBoardSourceTrees.set(original, before);
+      ownedBoardSourceTrees.set(original, retainedSource);
     }
   }
+  const { tree: before, placements } = retainedSource;
   const after = isOwnedProjectNode(board)
     ? [...materializedPCBTree(board, schematic)]
-    : parseSExpr(generated);
+    : parseNativePCBSource(generated);
   const reusable = owned && isOwnedProjectNode(board);
   const context = reusable ? boardMergeContext(keepLayers, schematicId, schematic, board) : '';
   const objects = reusable
-    ? new Map<string, PCB['footprints' | 'tracks' | 'vias' | 'graphics' | 'zones'][number]>()
+    ? new Map<
+        string,
+        NonNullable<
+          PCB['footprints' | 'tracks' | 'arcTracks' | 'vias' | 'graphics' | 'zones']
+        >[number]
+      >()
     : undefined;
   if (objects) {
     for (const item of board.footprints) objects.set(item.id, item);
     for (const item of board.tracks) objects.set(item.id, item);
+    for (const item of board.arcTracks ?? []) objects.set(item.id, item);
     for (const item of board.vias) objects.set(item.id, item);
     for (const item of board.graphics) objects.set(item.id, item);
     for (const item of board.zones) objects.set(item.id, item);
   }
-  const retained = ['setup', 'paper', 'title_block', 'embedded_fonts'];
+  const retained = [
+    'setup',
+    'paper',
+    'title_block',
+    'embedded_fonts',
+    'embedded_files',
+    'property',
+    'variants',
+  ];
   if (keepLayers) retained.push('layers');
   for (const key of retained) {
     const source = children(before, key);
@@ -627,6 +723,7 @@ function mergeBoardSource(
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== 'thickness'));
   const nativeLock = (node: SExpr) =>
     node.includes('locked') || val(child(node, 'locked')) === 'yes';
+  const inheritedGroupLocks = board.groupLocks?.length ? nativePCBGroupLocks(before) : undefined;
   const retain = (
     old: SExpr,
     node: SExpr,
@@ -689,7 +786,12 @@ function mergeBoardSource(
         ]),
       );
       const previous = originals.get(uuid);
-      if (previous) apply(previous.node, node, previous.index);
+      if (previous) {
+        // An inherited lock remains on the group record.
+        if (inheritedGroupLocks?.has(uuid.toLowerCase()) && !nativeLock(previous.node))
+          for (const flag of children(node, 'locked')) node.splice(node.indexOf(flag), 1);
+        apply(previous.node, node, previous.index);
+      }
       if (item) {
         // All geometry is keyed by the exact owned record. Caption/net changes
         // and a different retained native file invalidate the derived packet.
@@ -705,20 +807,43 @@ function mergeBoardSource(
       (node): node is SExpr =>
         Array.isArray(node) &&
         (footprint
-          ? [
+          ? !(node[0] === 'property' && !child(node, 'at') && !child(node, 'effects')) &&
+            [
               'fp_line',
               'fp_rect',
               'fp_arc',
+              'fp_curve',
               'fp_circle',
               'fp_poly',
               'fp_text',
+              'fp_text_box',
               'property',
             ].includes(String(node[0]))
-          : String(node[0]).startsWith('gr_') || node[0] === 'dimension'),
+          : String(node[0]).startsWith('gr_') || node[0] === 'dimension' || node[0] === 'point'),
     );
   const retainGraphic = (old: SExpr, node: SExpr) => {
     retain(old, node, []);
     if (old[0] !== 'fp_text' && old[0] !== 'property') return;
+    if (
+      isExplicitlyHiddenFootprintCaption(old) &&
+      !child(old, 'effects') &&
+      isExplicitlyHiddenFootprintCaption(node) &&
+      !child(node, 'render_cache') &&
+      !child(node, 'layer')?.includes('knockout')
+    ) {
+      const effects = child(node, 'effects');
+      const font = effects && child(effects, 'font');
+      const size = font && child(font, 'size');
+      const thickness = font && child(font, 'thickness');
+      if (
+        effects?.length === 2 &&
+        font?.length === 3 &&
+        Number(val(size)) === nativeFootprintCaptionDefaultSize &&
+        Number(val(size, 2)) === nativeFootprintCaptionDefaultSize &&
+        val(thickness) === '0'
+      )
+        node.splice(node.indexOf(effects), 1);
+    }
     const original = footprintTextPlacement(old, fail);
     const generated = footprintTextPlacement(node, fail);
     if (original.unlocked !== generated.unlocked) return;
@@ -728,7 +853,8 @@ function mergeBoardSource(
     if (original.inPosition && generated.at)
       node[node.indexOf(generated.at)] = [...generated.at, 'unlocked'];
   };
-  const retainZone = (old: SExpr, node: SExpr) => retain(old, node, ['hatch', 'placement', 'name']);
+  const retainZone = (old: SExpr, node: SExpr) =>
+    retain(old, node, ['hatch', 'placement', 'name', 'filled_areas_thickness']);
   matched(
     children(before, 'segment'),
     children(after, 'segment'),
@@ -744,7 +870,22 @@ function mergeBoardSource(
     children(before, 'via'),
     children(after, 'via'),
     (i) => `via:${i}`,
-    (old, node) => retain(old, node, ['free', 'remove_unused_layers']),
+    (old, node) =>
+      retain(old, node, [
+        'free',
+        'remove_unused_layers',
+        'capping',
+        'covering',
+        'plugging',
+        'filling',
+      ]),
+    after,
+  );
+  matched(
+    children(before, 'arc'),
+    children(after, 'arc'),
+    (i) => `arcTrack:${i}`,
+    (old, node) => retain(old, node, []),
     after,
   );
   matched(children(before, 'zone'), children(after, 'zone'), (i) => `zone:${i}`, retainZone, after);
@@ -754,14 +895,27 @@ function mergeBoardSource(
     children(after, 'footprint'),
     (i) => `footprint:${i}`,
     (old, node, fi) => {
+      node.splice(
+        2,
+        0,
+        ...old.filter(
+          (record) =>
+            Array.isArray(record) &&
+            ['version', 'generator', 'generator_version'].includes(String(record[0])),
+        ),
+      );
       retain(old, node, [
         'attr',
+        'placed',
         'descr',
         'tags',
+        'variant',
         'sheetname',
         'sheetfile',
         'duplicate_pad_numbers_are_jumpers',
         'embedded_fonts',
+        'embedded_files',
+        'stackup',
         'units',
       ]);
       if (!child(node, 'path') && child(old, 'path')) node.push(child(old, 'path')!);
@@ -774,7 +928,28 @@ function mergeBoardSource(
         children(old, 'pad'),
         children(node, 'pad'),
         (pi) => `fp:${fi}:pad:${pi}`,
-        (oldPad, pad) => retain(oldPad, pad, ['pinfunction', 'pintype']),
+        (oldPad, pad) => {
+          retain(oldPad, pad, ['pinfunction', 'pintype']);
+          const cornerRatio = child(pad, 'roundrect_rratio');
+          if (
+            oldPad[3] === 'roundrect' &&
+            pad[3] === 'roundrect' &&
+            !child(oldPad, 'roundrect_rratio') &&
+            cornerRatio &&
+            Number(val(cornerRatio)) === nativePCBPadRoundRectRatio
+          )
+            pad.splice(pad.indexOf(cornerRatio), 1);
+          if (oldPad[3] !== 'circle' || pad[3] !== 'circle') return;
+          const oldSize = child(oldPad, 'size');
+          const size = child(pad, 'size');
+          if (
+            oldSize &&
+            size &&
+            Number(val(oldSize)) === Number(val(size)) &&
+            Number(val(oldSize, 2)) !== Number(val(size, 2))
+          )
+            pad[pad.indexOf(size)] = oldSize;
+        },
         node,
       );
       matched(
@@ -791,9 +966,13 @@ function mergeBoardSource(
         retainGraphic,
         node,
       );
+      retainNativePlacementLayers(node, placements);
+      retainNativeBoardGroups(old, node);
     },
     after,
   );
+  retainNativePlacementLayers(after, placements);
+  retainNativeBoardGroups(before, after);
   const source = writeSExpr(after) + '\n';
   if (reusable) {
     if (captureJson) captureJson(() => '"' + writeSExprJsonPayload(after) + '\\n"');

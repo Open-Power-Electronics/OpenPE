@@ -403,7 +403,11 @@ export function updatePCBFromSchematic(
       targets.get(p.netId)!.add(target);
     }),
   );
-  const copperNets = new Set([...board.tracks, ...board.vias, ...board.zones].map((c) => c.netId));
+  const copperNets = new Set(
+    [...board.tracks, ...(board.arcTracks ?? []), ...board.vias, ...board.zones].map(
+      (c) => c.netId,
+    ),
+  );
   const safe = (id: string, i: number) =>
     !targets.has(id) || (targets.get(id)!.size === 1 && targets.get(id)!.has(i));
   const used = new Set<string>(),
@@ -470,6 +474,7 @@ export function updatePCBFromSchematic(
   nets.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
   const nextNets = retainArray(board.nets, nets),
     tracks = copper(board.tracks),
+    arcTracks = board.arcTracks && copper(board.arcTracks),
     vias = copper(board.vias),
     zones = copper(board.zones);
   // The updater only changes these collections. When each one retains its
@@ -478,6 +483,7 @@ export function updatePCBFromSchematic(
     nextNets === board.nets &&
     updated === board.footprints &&
     tracks === board.tracks &&
+    arcTracks === board.arcTracks &&
     vias === board.vias &&
     zones === board.zones
   )
@@ -487,6 +493,7 @@ export function updatePCBFromSchematic(
     nets: nextNets,
     footprints: updated,
     tracks,
+    ...(arcTracks?.length ? { arcTracks } : {}),
     vias,
     zones,
   });

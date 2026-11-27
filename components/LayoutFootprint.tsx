@@ -9,28 +9,28 @@ import {
   type BoardLine,
 } from '@/lib/pcb';
 import { padHasElectricalPin } from '@/lib/pcb-pad-role';
+import { pcbPadOnLayer } from '@/lib/pcb-padstack';
+import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { padPosition, padRotation } from '@/lib/pcb-layout';
 import {
   pcbLayerColor,
   boardOutlineMinWidth,
-  pcbPadDisplayLayers,
+  pcbPadBodyLayers,
   pcbPadLabels,
   pcbPadPaintLayer,
+  pcbPadSilkscreenDisplayLayers,
   pcbPadTypeLabel,
   type PCBDisplay,
 } from '@/lib/pcb-display';
 import { pcbPadPath } from '@/lib/pcb-geometry';
+import { nativeCustomPadGraphics } from '@/lib/pcb-native-custom-pad';
+import { pcbZoneOutlineDisplayPath } from '@/lib/pcb-polygons';
 import PCBGraphic from './PCBGraphic';
 import PCBSelectionPaint from './PCBSelectionPaint';
 import { useLayoutSelection, type LayoutSelection } from './LayoutSelection';
 
 const zoneOutlineWidth = 0.08;
 const layerColor = pcbLayerColor;
-const zonePath = (zone: PCB['zones'][number]) =>
-  [zone.outline, ...(zone.holes ?? [])]
-    .map((points) => `M ${points.map((point) => `${point.x} ${point.y}`).join(' L ')} Z`)
-    .join(' ');
-
 type CaptionProps = {
   footprint: Footprint;
   reference: string | undefined;
@@ -99,6 +99,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
   deferDrills = false,
 }: GraphicProps) {
   const selected = useLayoutSelection(selection, f.id);
+  if (!layers.footprints) return null;
   const pcb = { layers: copperLayers };
   const visibleLayer = (name: string) =>
     Boolean(layers[name as BoardLayer]) &&
@@ -107,20 +108,37 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
   const netOpacity = (netId: string | null, picked = false) =>
     !picked && highlightNets.size && (!netId || !highlightNets.has(netId)) ? 0.2 : 1;
   const graphics = f.graphics.filter((g) => visibleLayer(g.layer) && g.kind !== 'text');
-  const zones = layers.zoneOutlines ? f.zones?.filter((z) => visibleLayer(z.layer)) : [];
-  const pads = f.pads.filter((pad) => {
-    const padLayers = pcbPadDisplayLayers(pcb, f, pad);
-    if (onlyLayer && padLayerOrder)
-      return (
-        pcbPadPaintLayer(padLayers, layers, padLayerOrder) === onlyLayer && visibleLayer(onlyLayer)
-      );
+  const points = (f.referencePoints ?? []).filter((point) => visibleLayer(point.layer));
+  const zones = layers.zoneOutlines
+    ? f.zones?.filter((z) => z.outline.length && visibleLayer(z.layer))
+    : [];
+  const pads = [];
+  for (const pad of f.pads) {
+    for (const silkLayer of pcbPadSilkscreenDisplayLayers(pad))
+      if (visibleLayer(silkLayer))
+        pads.push({
+          pad: pcbPadOnLayer(pad, silkLayer),
+          displayedLayer: silkLayer,
+          silkscreen: true,
+        });
+    const padLayers = pcbPadBodyLayers(pcb, f, pad);
     // A through pad spans several copper layers but paints only once, in the
     // active pass when it belongs there, otherwise in the ordinary pass.
-    if (onlyLayer) return padLayers.includes(onlyLayer) && visibleLayer(onlyLayer);
-    if (excludedLayer && layers[excludedLayer] && padLayers.includes(excludedLayer)) return false;
-    return padLayers.some(visibleLayer);
-  });
-  if (!layers.footprints || (!graphics.length && !zones?.length && !pads.length)) return null;
+    if (
+      onlyLayer &&
+      padLayerOrder &&
+      pcbPadPaintLayer(padLayers, layers, padLayerOrder) !== onlyLayer
+    )
+      continue;
+    if (!onlyLayer && excludedLayer && layers[excludedLayer] && padLayers.includes(excludedLayer))
+      continue;
+    const displayedLayer =
+      padLayers.find((name) => name === layer && visibleLayer(name)) ??
+      padLayers.find(visibleLayer);
+    if (displayedLayer)
+      pads.push({ pad: pcbPadOnLayer(pad, displayedLayer), displayedLayer, silkscreen: false });
+  }
+  if (!graphics.length && !points.length && !zones?.length && !pads.length) return null;
   return (
     <g
       key={f.id}
@@ -128,6 +146,20 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
       className={`layout-footprint${selected ? ' selected' : ''}${placement ? ' is-placement' : ''}`}
     >
       <g transform={`translate(${f.x} ${f.y}) rotate(${-f.rotation})`}>
+        {points.map((point) => (
+          <PCBGraphic
+            key={point.id}
+            graphic={{
+              id: point.id,
+              kind: 'point',
+              start: point,
+              end: point,
+              width: point.size,
+              layer: point.layer,
+            }}
+            color={layerColor(point.layer)}
+          />
+        ))}
         {graphics.map((g) => (
           <PCBSelectionPaint
             key={g.id}
@@ -162,7 +194,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
             {(color) => (
               <path
                 data-pcb-zone-id={z.id}
-                d={zonePath(z)}
+                d={pcbZoneOutlineDisplayPath(z)}
                 fill="none"
                 fillRule="evenodd"
                 stroke={color}
@@ -173,33 +205,33 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
           </PCBSelectionPaint>
         ))}
       </g>
-      {pads.map((pad) => {
+      {pads.map(({ pad, displayedLayer, silkscreen }) => {
         const p = padPosition(f, pad);
-        const padLayers = pcbPadDisplayLayers(pcb, f, pad);
-        const displayedLayer =
-          padLayers.find((name) => name === layer && visibleLayer(name)) ??
-          padLayers.find(visibleLayer);
         const padSelected =
           selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
-        const fill =
-          pad.type === 'np_thru_hole'
+        const fill = silkscreen
+          ? layerColor(displayedLayer)
+          : pad.type === 'np_thru_hole'
             ? 'var(--canvas)'
             : pad.type === 'thru_hole'
               ? 'var(--pcb-through)'
-              : layerColor(displayedLayer ?? (f.side === 'front' ? 'F.Cu' : 'B.Cu'));
-        const labels = pcbPadLabels(
-          pad,
-          padRotation(f, pad),
-          pad.netId ? netNames.get(pad.netId) : undefined,
-          layers,
-        );
+              : layerColor(displayedLayer);
+        const labels = silkscreen
+          ? undefined
+          : pcbPadLabels(
+              pad,
+              padRotation(f, pad),
+              pad.netId ? netNames.get(pad.netId) : undefined,
+              layers,
+            );
         const pinLabel = padHasElectricalPin(pad)
           ? ` · ${netNames.get(pad.netId ?? '') ?? 'Unassigned'}`
           : '';
         return (
           <g
-            key={pad.id}
+            key={`${pad.id}:${displayedLayer}`}
             data-pad-id={pad.id}
+            data-pad-silkscreen={silkscreen ? displayedLayer : undefined}
             aria-label={`${reference ?? f.reference ?? f.libraryId} · ${pcbPadTypeLabel(pad)}${pad.number ? ` ${pad.number}` : ''}${pinLabel}`}
             data-pad-type={pad.type}
             opacity={netOpacity(pad.netId, padSelected)}
@@ -213,9 +245,29 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
               locked={pad.type !== 'np_thru_hole' && (f.locked || pad.locked)}
             >
               {(color) =>
-                pad.shape === 'circle' ? (
+                pad.nativeCustomPad ? (
+                  <g>
+                    {pad.customAnchor === 'circle' ? (
+                      <circle
+                        r={Math.floor(Math.round(pad.size.x * 1_000_000) / 2) / 1_000_000}
+                        fill={color}
+                      />
+                    ) : (
+                      <rect
+                        x={-pad.size.x / 2}
+                        y={-pad.size.y / 2}
+                        width={pad.size.x}
+                        height={pad.size.y}
+                        fill={color}
+                      />
+                    )}
+                    {nativeCustomPadGraphics(pad).map((graphic) => (
+                      <PCBGraphic key={graphic.id} graphic={graphic} color={color} />
+                    ))}
+                  </g>
+                ) : pad.shape === 'circle' ? (
                   <circle r={pad.size.x / 2} fill={color} />
-                ) : pad.shape === 'roundrect' || pad.outline ? (
+                ) : pad.shape === 'roundrect' || pad.shape === 'trapezoid' || pad.outline ? (
                   <path d={pcbPadPath(pad)} fill={color} />
                 ) : (
                   <rect
@@ -229,7 +281,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
                 )
               }
             </PCBSelectionPaint>
-            {pad.drill && !deferDrills && (
+            {pad.drill && !deferDrills && !silkscreen && (
               <PCBSelectionPaint
                 color="var(--pcb-outline)"
                 selected={padSelected && pad.type === 'np_thru_hole'}
@@ -238,6 +290,13 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
                 {(color) => (
                   <PadDrillGraphic
                     pad={pad}
+                    surface={
+                      displayedLayer === 'F.Cu'
+                        ? 'front'
+                        : displayedLayer === 'B.Cu'
+                          ? 'back'
+                          : undefined
+                    }
                     fill="var(--pcb-hole)"
                     stroke={pad.type === 'np_thru_hole' ? color : undefined}
                     strokeWidth={0.08}
@@ -245,24 +304,26 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
                 )}
               </PCBSelectionPaint>
             )}
-            <g
-              className="layout-pad-labels"
-              transform={`rotate(${labels.rotation})`}
-              aria-hidden="true"
-            >
-              {labels.lines.map((line) => (
-                <text
-                  key={line.kind}
-                  data-pad-label={line.kind}
-                  y={line.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize={line.size}
-                >
-                  {line.text}
-                </text>
-              ))}
-            </g>
+            {labels && (
+              <g
+                className="layout-pad-labels"
+                transform={`translate(${labels.origin.x} ${labels.origin.y}) rotate(${labels.rotation})`}
+                aria-hidden="true"
+              >
+                {labels.lines.map((line) => (
+                  <text
+                    key={line.kind}
+                    data-pad-label={line.kind}
+                    y={line.y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={line.size}
+                  >
+                    {line.text}
+                  </text>
+                ))}
+              </g>
+            )}
           </g>
         );
       })}
@@ -274,6 +335,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
 export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   copperLayers,
   footprint: f,
+  layer,
   layers,
   selection,
   placement,
@@ -284,6 +346,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   GraphicProps,
   | 'copperLayers'
   | 'footprint'
+  | 'layer'
   | 'layers'
   | 'selection'
   | 'placement'
@@ -294,7 +357,11 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   const selected = useLayoutSelection(selection, f.id);
   const pcb = { layers: copperLayers };
   const pads = f.pads.filter(
-    (pad) => pad.drill && pcbPadDisplayLayers(pcb, f, pad).some((layer) => layers[layer]),
+    (pad) =>
+      pad.drill &&
+      (pad.removeUnusedLayers ? padCopperLayers(pcb, f, pad) : pcbPadBodyLayers(pcb, f, pad)).some(
+        (layer) => layers[layer],
+      ),
   );
   if (!layers.footprints || !pads.length) return null;
   const netOpacity = (netId: string | null, picked = false) =>
@@ -320,6 +387,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
               {(color, selection) => (
                 <PadDrillGraphic
                   pad={pad}
+                  surface={layer === 'F.Cu' ? 'front' : layer === 'B.Cu' ? 'back' : undefined}
                   data-pad-drill={selection ? undefined : pad.id}
 
                   fill="var(--pcb-hole)"

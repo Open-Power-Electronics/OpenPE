@@ -1,15 +1,18 @@
 import type { Point } from './circuit';
 import type { BoardText } from './pcb';
 import glyphs from './manufacturing-font.json';
+import { pcbTextDisplayValue, pcbTextLineAdvance } from './pcb-text';
 
 /** Lay out the bundled KiCad stroke glyphs in board millimetres. */
 export function pcbStrokeText(
   text: BoardText,
   origin: Point,
 ): { paths: Point[][]; width: number } | { unsupported: string } {
-  if (/\$\{|[~^_]\{/.test(text.value)) return { unsupported: 'unresolved or formatted text' };
+  if (text.fontFace || text.knockout) return { unsupported: 'native font faces or knockout text' };
+  const value = pcbTextDisplayValue(text);
+  if (/\$\{|[~^_]\{/.test(value)) return { unsupported: 'unresolved or formatted text' };
   const lines: string[][] = [];
-  for (const line of text.value.split('\n')) {
+  for (const line of value.split('\n')) {
     const encoded: string[] = [];
     for (const char of line) {
       const code = char.codePointAt(0)!;
@@ -24,7 +27,7 @@ export function pcbStrokeText(
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const mirror = text.justify?.includes('mirror') ? -1 : 1;
-  const spacing = 1.25 * text.size.y;
+  const spacing = pcbTextLineAdvance(text);
   const top = text.justify?.includes('top')
     ? text.size.y
     : text.justify?.includes('bottom')

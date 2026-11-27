@@ -1,4 +1,5 @@
 import { isOwnedProjectNode, recordOwnedProjectNode } from './immutable-project-ownership.mjs';
+import { MAX_NATIVE_PCB_BYTES, MAX_PROJECT_BYTES, MAX_PROJECT_NODES } from './project-size-limits';
 
 export type SExpr = (string | SExpr)[];
 // Quoted atoms retain their quotes so unknown fields can be written without loss.
@@ -21,36 +22,53 @@ export const child = (n: SExpr, name: string): SExpr | undefined =>
   n.find((value): value is SExpr => Array.isArray(value) && value[0] === name);
 export const val = (n: SExpr | undefined, i = 1) => (n ? atom(n[i]) : '');
 export const num = (n: SExpr | undefined, i = 1) => Number(val(n, i) || 0);
-export function parseSExpr(source: string, maxLength = 8_000_000): SExpr {
-  return parseSExprValue(source, maxLength, false);
+export function parseSExpr(
+  source: string,
+  maxLength = MAX_PROJECT_BYTES,
+  maxNodes?: number,
+): SExpr {
+  return parseSExprValue(source, maxLength, false, maxNodes);
 }
 /** Private derived syntax: every array is freshly allocated from primitive text.
  * Certify only those arrays while constructing them, without copying them a
  * second time. This establishes immutability, never semantic acceptance. */
-export function parseOwnedSExpr(source: string, maxLength = 8_000_000): SExpr {
+export function parseOwnedSExpr(
+  source: string,
+  maxLength = MAX_PROJECT_BYTES,
+  maxNodes = MAX_PROJECT_NODES,
+): SExpr {
   if (typeof source !== 'string') throw new Error('Expected primitive S-expression text.');
-  return parseSExprValue(source, maxLength, true);
+  return parseSExprValue(source, maxLength, true, maxNodes);
 }
-function parseSExprValue(source: string, maxLength: number, owned: boolean): SExpr {
+function parseSExprValue(
+  source: string,
+  maxLength: number,
+  owned: boolean,
+  maxNodes?: number,
+): SExpr {
   if (source.length > maxLength)
-    throw new Error('Files over 8 MB are not supported in this preview.');
+    throw new Error(
+      maxLength === MAX_NATIVE_PCB_BYTES
+        ? 'Native PCB files over 20 MB are not supported.'
+        : 'Files over 8 MB are not supported in this preview.',
+    );
   const tokens = source.match(/"(?:\\.|[^"\\])*"|[()]|[^\s()]+/g) || [];
   let i = 0,
     nodes = 0;
   const bounded = (depth: number) => {
-    if (depth > 80 || ++nodes > 300000)
+    if ((owned && depth > 80) || (maxNodes !== undefined && ++nodes > maxNodes))
       throw new Error(
         'Invalid OpenPE project: document nesting or object count exceeds the supported limit.',
       );
   };
   function read(depth: number): SExpr {
-    if (owned) bounded(depth);
+    bounded(depth);
     if (depth > 100 || tokens[i++] !== '(') throw new Error('Invalid S-expression structure.');
     const list: SExpr = [];
     while (i < tokens.length && tokens[i] !== ')') {
       if (tokens[i] === '(') list.push(read(depth + 1));
       else {
-        if (owned) bounded(depth + 1);
+        bounded(depth + 1);
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {

@@ -156,10 +156,10 @@ test('EMC clean native bytes and changed Core Source remain exact through chunk 
       serializeProject(
         ownProjectData({
           ...accepted.project!,
-          extensions: { oversized: 'x'.repeat(8_000_000) },
+          extensions: { oversized: 'x'.repeat(48_000_000) },
         }),
       ),
-    /8 MB/,
+    /48 MB/,
   );
   assert.equal(core.getSnapshot(), accepted);
   core.undo();

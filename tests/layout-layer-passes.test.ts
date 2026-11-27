@@ -104,6 +104,21 @@ test('two- and four-layer through pads have a single topmost visible owner', () 
   }
 });
 
+test('native pad silkscreen passes follow both sides independently of the copper owner', () => {
+  const part = footprint();
+  part.pads = [{ ...through(), layers: ['*.Cu', '*.SilkS', '*.Mask'] }];
+  const pcb = board(part);
+  const layers = pcbLayerPaintOrder(['F.SilkS', 'B.SilkS', ...pcb.layers]);
+  const display = defaultPCBDisplay();
+  const passes = (visible = display) =>
+    layoutFootprintLayerPasses(pcb, visible, layers).graphics.map((pass) => pass.layer);
+  assert.deepEqual(passes(), ['B.SilkS', 'F.Cu', 'F.SilkS']);
+  assert.deepEqual(passes({ ...display, 'F.Cu': false, 'B.Cu': false, 'B.SilkS': false }), [
+    'F.SilkS',
+  ]);
+  assert.deepEqual(passes({ ...display, 'F.SilkS': false, 'B.SilkS': false }), ['F.Cu']);
+});
+
 test('surface pads and non-plated holes retain their independent physical ownership', () => {
   const part = footprint();
   part.side = 'back';

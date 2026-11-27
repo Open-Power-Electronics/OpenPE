@@ -2,11 +2,15 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { parseProject, serializeProject } from './project-format.mjs';
+import {
+  MAX_NATIVE_PCB_SNAPSHOT_BYTES,
+  parseProject,
+  serializeProject,
+} from './project-format.mjs';
 
 const ref = 'refs/heads/main';
 const objectId = /^[0-9a-f]{40}$/;
-const maxSource = 8_000_000;
+const maxSource = MAX_NATIVE_PCB_SNAPSHOT_BYTES;
 const snapshotFile = 'project.openpe.json';
 
 function snapshotTreeEntry(blob) {
@@ -174,7 +178,9 @@ export class ProjectHistory {
 
   canonical(source) {
     if (typeof source !== 'string' || Buffer.byteLength(source) > maxSource)
-      throw new Error('Private project snapshots must be valid JSON within 8 MB.');
+      throw new Error(
+        'Private project snapshots must be valid JSON within the project size limit.',
+      );
     const result = serializeProject(parseProject(source));
     if (Buffer.byteLength(result) > maxSource) throw new Error('Project snapshot exceeds 8 MB.');
     return result;

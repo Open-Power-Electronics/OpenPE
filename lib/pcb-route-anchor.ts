@@ -1,5 +1,6 @@
 import type { Point } from './circuit';
 import type { CopperLayer, Footprint, Pad, PCB } from './pcb';
+import { requireSupportedPCBCopper } from './pcb';
 import { padCopperLayers } from './pcb-connectivity';
 import {
   insidePolygon,
@@ -101,6 +102,7 @@ export function createPCBRouteAnchorResolver(
   let preparationError = '',
     vertices = 0;
   try {
+    requireSupportedPCBCopper(board, 'Route anchor preview');
     if (
       board.tracks.length +
         board.vias.length +
