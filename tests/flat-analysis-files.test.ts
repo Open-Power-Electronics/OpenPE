@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   analysisFilename,
@@ -152,9 +152,14 @@ test('previous record identities are retained across preparation before any repl
   const name = 'buck.manifest.json';
   const target = path.join(directory, name);
   await writeFile(target, 'old verified manifest');
-  const identities = new Map([[name, await lstat(target)]]);
+  // A same-length rewrite can share a timestamp tick on Windows.
+  const earlier = new Date('2020-01-01T00:00:00Z');
+  await utimes(target, earlier, earlier);
+  const original = await lstat(target);
+  const identities = new Map([[name, original]]);
   await writeFile(path.join(staging, name), 'new manifest');
   await writeFile(target, 'changed user manifest');
+  assert.notEqual((await lstat(target)).mtimeMs, original.mtimeMs);
   await assert.rejects(
     publishAnalysisFiles({
       directory,
