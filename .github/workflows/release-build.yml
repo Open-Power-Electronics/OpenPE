@@ -169,7 +169,7 @@ jobs:
       - run: npm test
       - run: npm run package
       - name: Verify solver pins are unchanged
-        run: git diff --exit-code -- resources/ngspice-lock.json resources/thermal-lock.json
+        run: git -c safe.directory="$PWD" diff --exit-code HEAD -- resources/ngspice-lock.json resources/thermal-lock.json
       - name: Stage installers and checksums
         run: |
           node --input-type=module <<'NODE'

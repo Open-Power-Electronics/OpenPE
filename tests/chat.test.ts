@@ -1,5 +1,6 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter, once } from 'node:events';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -761,41 +762,44 @@ test('local SSE sends increments immediately, validates model/effort and aborts 
 test('session streams run independently, reject duplicates and all stop at shutdown', async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-sessions-'));
   const stopped = new Set<string>();
+  const lifecycle = new EventEmitter();
+  const firstRequest = new AbortController();
   const server = await startServer({
     dataDir: cwd,
     agentRunner: async (_provider, req, _cwd, emit, signal) => {
+      const aborted = once(signal, 'abort');
       emit({ type: 'text-delta', delta: req.sessionId });
-      await new Promise<void>((resolve) =>
-        signal.addEventListener(
-          'abort',
-          () => {
-            stopped.add(req.sessionId!);
-            resolve();
-          },
-          { once: true },
-        ),
-      );
+      lifecycle.emit('started', req.sessionId);
+      await aborted;
+      stopped.add(req.sessionId!);
+      lifecycle.emit('stopped', req.sessionId);
       return { outcome: 'cancelled' };
     },
   });
-  const send = (sessionId: string) =>
+  const send = (sessionId: string, signal?: AbortSignal) =>
     fetch(server.base + '/api/chat', {
       method: 'POST',
       headers: { 'X-OpenPE-Token': server.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, provider: 'codex', sessionId }),
+      signal,
     });
   const responses: Response[] = [];
   try {
     for (const id of ['one', 'two', 'three', 'four']) {
-      const response = await send(id);
+      const [[started], response] = await Promise.all([
+        once(lifecycle, 'started', { signal: AbortSignal.timeout(5000) }),
+        send(id, id === 'one' ? firstRequest.signal : undefined),
+      ]);
       assert.equal(response.status, 200);
+      assert.equal(started, id);
       responses.push(response);
     }
     assert.equal((await send('one')).status, 409);
     assert.equal((await send('five')).status, 429);
     assert.equal((await send('../invalid')).status, 400);
-    await responses[0].body!.cancel();
-    for (let i = 0; i < 100 && !stopped.has('one'); i++) await pause(10);
+    const cancelled = once(lifecycle, 'stopped', { signal: AbortSignal.timeout(5000) });
+    firstRequest.abort();
+    assert.deepEqual(await cancelled, ['one']);
     assert.deepEqual([...stopped], ['one'], 'Cancelling one session preserves the others.');
   } finally {
     server.close();
