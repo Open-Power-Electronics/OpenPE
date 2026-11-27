@@ -13,7 +13,7 @@
   <a href="https://github.com/Open-Power-Electronics/OpenPE/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Open-Power-Electronics/OpenPE/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
   <a href="https://github.com/Open-Power-Electronics/OpenPE/releases"><img src="https://img.shields.io/github/v/release/Open-Power-Electronics/OpenPE?include_prereleases&style=flat-square&label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0 license"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20macOS%20arm64-lightgrey?style=flat-square" alt="Windows x64 and macOS arm64 installers">
+  <img src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20macOS%20arm64%20%7C%20Linux%20x64-lightgrey?style=flat-square" alt="Windows x64、macOS arm64 和 Linux x64 安装包">
 </p>
 
 <p align="center">
@@ -95,13 +95,13 @@ OpenPE 连接你单独安装的 Agent 运行时。不同 Agent 的权限如下�
 | --- | --- | --- |
 | Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta，未签名 |
 | macOS arm64 | `OpenPE-0.1.1-arm64.dmg` | v0.1.1 Beta，本地临时签名，未经 Apple 公证 |
-| Linux x64 | 暂未发布 | 从源码运行，并在本地构建求解器 |
+| Linux x64 | `OpenPE-0.1.1.AppImage` 或 `openpe_0.1.1_amd64.deb` | v0.1.1 Beta，Debian 13 或配备 glibc 2.41 及以上版本的等效系统 |
 
-安装包可从 [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) 下载。首次启动和系统要求见[安装指南](docs/DEVELOPMENT.md#install-the-app)。Linux 用户请按 [Linux solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds) 操作。
+请从 [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases) 下载对应平台的安装包。所有安装包均内置 ngspice、Gmsh 和 Elmer。首次启动和系统要求见[安装指南](docs/DEVELOPMENT.md#install-the-app)。
 
 ### 从源码运行
 
-需要 Node.js 24 和 Git。
+需要 Node.js 24 和 Git。在 Linux x64 上，请在 `npm ci` 之后、`npm run dev` 之前完成[求解器构建步骤](docs/DEVELOPMENT.md#maintainer-solver-builds)。
 
 ```sh
 git clone https://github.com/Open-Power-Electronics/OpenPE.git

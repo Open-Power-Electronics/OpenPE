@@ -13,7 +13,7 @@
   <a href="https://github.com/Open-Power-Electronics/OpenPE/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Open-Power-Electronics/OpenPE/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
   <a href="https://github.com/Open-Power-Electronics/OpenPE/releases"><img src="https://img.shields.io/github/v/release/Open-Power-Electronics/OpenPE?include_prereleases&style=flat-square&label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache-2.0 license"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20macOS%20arm64-lightgrey?style=flat-square" alt="Windows x64 and macOS arm64 installers">
+  <img src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20macOS%20arm64%20%7C%20Linux%20x64-lightgrey?style=flat-square" alt="Windows x64, macOS arm64 and Linux x64 installers">
 </p>
 
 <p align="center">
@@ -93,13 +93,13 @@ You can also install a local JavaScript plugin with declared inputs and optional
 | --- | --- | --- |
 | Windows x64 | `OpenPE-0.1.1-x64.exe` | v0.1.1 Beta, unsigned |
 | macOS arm64 | `OpenPE-0.1.1-arm64.dmg` | v0.1.1 Beta, ad hoc signed, not notarized |
-| Linux x64 | None yet | Run from source and build solvers locally |
+| Linux x64 | `OpenPE-0.1.1.AppImage` or `openpe_0.1.1_amd64.deb` | v0.1.1 Beta, Debian 13 or equivalent with glibc 2.41+ |
 
-Download installers from [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases). The [installation guide](docs/DEVELOPMENT.md#install-the-app) covers first launch and host requirements. Linux users follow the [Linux solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds).
+Download the installer for your platform from [Releases](https://github.com/Open-Power-Electronics/OpenPE/releases). All installers include ngspice, Gmsh and Elmer. See the [installation guide](docs/DEVELOPMENT.md#install-the-app) for first launch and host requirements.
 
 ### Run from source
 
-Requires Node.js 24 and Git.
+Requires Node.js 24 and Git. On Linux x64, follow the [solver build steps](docs/DEVELOPMENT.md#maintainer-solver-builds) after `npm ci` and before `npm run dev`.
 
 ```sh
 git clone https://github.com/Open-Power-Electronics/OpenPE.git

@@ -4,7 +4,7 @@ OpenPE targets Windows x64, macOS arm64 and Linux x64 (glibc 2.41+, Debian 13 or
 
 ## Install the app
 
-Download the Windows x64 or macOS arm64 installer from [OpenPE v0.1.1 Beta](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.1). Both installers include solvers, libraries and examples. On Linux x64, [run from source](#run-from-source) and build solvers with the [Linux solver build steps](#maintainer-solver-builds).
+Download the Windows x64, macOS arm64 or Linux x64 installer from [OpenPE v0.1.1 Beta](https://github.com/Open-Power-Electronics/OpenPE/releases/tag/v0.1.1). Each includes ngspice, Gmsh, Elmer, libraries and examples.
 
 For complete offline component previews, [add the official KiCad STEP library](LIBRARIES.md#add-the-official-step-library).
 
@@ -18,6 +18,22 @@ the developer, confirm the download and its published SHA-256 before choosing
 **Open Anyway** in System Settings → Privacy & Security. If macOS reports that
 the app is damaged, stop and report the installer version and checksum.
 [Apple’s first-launch guidance](https://support.apple.com/102445)
+
+On Debian 13 amd64, run the following command from the download directory.
+Then launch **OpenPE** from the desktop menu or run `openpe` as your usual user.
+
+```sh
+sudo apt install ./openpe_0.1.1_amd64.deb
+```
+
+To use the AppImage on a compatible Linux x64 desktop, run:
+
+```sh
+chmod +x OpenPE-0.1.1.AppImage
+./OpenPE-0.1.1.AppImage
+```
+
+If FUSE is unavailable, launch with `./OpenPE-0.1.1.AppImage --appimage-extract-and-run`. Both Linux packages require glibc 2.41 or newer. See [Linux prerequisites](#linux-prerequisites) for desktop libraries and virtual-machine graphics.
 
 ## Run from source
 
@@ -93,7 +109,7 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 | macOS arm64 | `release/mac-arm64/OpenPE.app` and `release/OpenPE-<version>-arm64.dmg`                                       |
 | Linux x64   | `release/linux-unpacked/openpe`, `release/OpenPE-<version>.AppImage` and `release/openpe_<version>_amd64.deb` |
 
-Install a locally built Debian package with `sudo apt install ./<filename>.deb`, substituting the package filename. Without FUSE, pass `--appimage-extract-and-run` to a locally built AppImage.
+To try either Linux package, follow [Install the app](#install-the-app) using the filename from your build.
 
 `package.json` supplies the version and supported package targets.
 
@@ -160,8 +176,9 @@ directory under `.openpe/build/` on exit. If an interrupted build still occupies
 a reserved path, move your build directory aside before retrying. The builders
 reuse hash-verified source downloads in `.openpe/downloads/`.
 
-The current Linux x64 solver archives use revision `-3`. Build them locally
-until the release assets are published. For a new archive revision, generate
+Linux x64 source builds prepare the two revision `-3` solver archives locally
+with `npm run solvers:build-linux`. Desktop installers already contain both bundles.
+For a new archive revision, generate
 the pins with `npm run solvers:build-linux -- --update-lock`, review the diff,
 and verify a fresh build with `npm run solvers:build-linux` before preparing
 solvers and examples. Give changed archive bytes new archive names and release
